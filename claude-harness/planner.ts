@@ -8,13 +8,11 @@ import { harnessDir } from "../shared/files.ts";
 import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
 import { buildPlannerPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
-import type { Span } from "../shared/tracing.ts";
 import type { HarnessConfig } from "../shared/types.ts";
 import type { SDKResultFields, UsageTracker } from "../shared/usage.ts";
 
 export async function runPlanner(
   config: HarnessConfig,
-  span?: Span,
   reviseFeedback?: string,
   usage?: UsageTracker,
   skills?: AgentSkills,
@@ -115,7 +113,6 @@ export async function runPlanner(
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Planner", undefined, undefined, { model, startTime });
 
-  span?.logMessage("user", fullPrompt);
 
   let fullResponse = "";
   let completed = false;
@@ -133,13 +130,11 @@ export async function runPlanner(
         if (block.type === "text" && block.text) {
           fullResponse += block.text;
           convLog.logAssistantText(block.text);
-          span?.logMessage("assistant", block.text);
           if (shouldLog("verbose", logLevel)) {
             log("PLANNER", block.text.slice(0, 200));
           }
         } else if (block.type === "tool_use" && block.name) {
           convLog.logToolUse(block.name, block.input);
-          span?.logToolCall(block.name, block.input);
           if (shouldLog("normal", logLevel)) {
             log("PLANNER", `  Tool: ${block.name}`);
           }
@@ -156,7 +151,6 @@ export async function runPlanner(
         if (block.type === "tool_result" && block.tool_use_id) {
           logDebug("PLANNER", `Tool result for ${block.tool_use_id}: ${summarize(block.content ?? "")}`);
           convLog.logToolResult(block.content ?? "");
-          span?.logMessage("user", `tool_result: ${summarize(block.content ?? "")}`);
         }
       }
     } else if (msg.type === "tool_use_summary") {
@@ -179,7 +173,6 @@ export async function runPlanner(
 
   const duration = Date.now() - startTime.getTime();
   await convLog.finalize(duration);
-  span?.end({ result: completed ? "completed" : "incomplete" });
 
   if (!completed) {
     logError("PLANNER", "Planner query did not complete");

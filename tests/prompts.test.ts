@@ -72,6 +72,48 @@ describe("buildPlannerPrompt — directory conventions", () => {
   });
 });
 
+// --- WP2: Generator & Evaluator directory conventions ---
+
+describe("buildGeneratorPrompt — directory conventions", () => {
+  test("includes default src/tests directories for existing project", () => {
+    const prompt = buildGeneratorPrompt(baseCtx);
+    expect(prompt).toContain("`src/`");
+    expect(prompt).toContain("`tests/`");
+  });
+
+  test("uses custom sourceDir and testDir when provided", () => {
+    const prompt = buildGeneratorPrompt({ ...baseCtx, sourceDir: "lib", testDir: "spec" });
+    expect(prompt).toContain("`lib/`");
+    expect(prompt).toContain("`spec/`");
+    expect(prompt).not.toContain("`src/`");
+  });
+
+  test("does not include directory convention for greenfield", () => {
+    const prompt = buildGeneratorPrompt({ ...baseCtx, isGreenfield: true });
+    expect(prompt).not.toContain("no established directory convention");
+  });
+});
+
+describe("buildEvaluatorPrompt — directory conventions", () => {
+  test("includes default src/tests directories for existing project", () => {
+    const prompt = buildEvaluatorPrompt(baseCtx);
+    expect(prompt).toContain("`src/`");
+    expect(prompt).toContain("`tests/`");
+  });
+
+  test("uses custom sourceDir and testDir when provided", () => {
+    const prompt = buildEvaluatorPrompt({ ...baseCtx, sourceDir: "lib", testDir: "spec" });
+    expect(prompt).toContain("`lib/`");
+    expect(prompt).toContain("`spec/`");
+    expect(prompt).not.toContain("`src/`");
+  });
+
+  test("greenfield uses app/ directory", () => {
+    const prompt = buildEvaluatorPrompt({ ...baseCtx, isGreenfield: true });
+    expect(prompt).toContain("`app/`");
+  });
+});
+
 // --- Context-dependent prompts ---
 
 describe("buildPlannerPrompt — greenfield vs existing", () => {

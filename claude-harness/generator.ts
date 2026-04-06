@@ -6,7 +6,6 @@ import { harnessDir } from "../shared/files.ts";
 import { log, logDebug, shouldLog, summarize } from "../shared/logger.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
-import type { Span } from "../shared/tracing.ts";
 import type { CommitSource, EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 
@@ -18,10 +17,11 @@ export async function runGenerator(
   model: string,
   isGreenfield: boolean,
   logLevel?: LogLevel,
-  span?: Span,
   attempt: number = 0,
   noTdd?: boolean,
   skills?: AgentSkills,
+  sourceDir?: string,
+  testDir?: string,
 ): Promise<{ response: string; sessionId?: string; sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
@@ -30,7 +30,7 @@ export async function runGenerator(
     `Sprint ${sprint} (${previousFeedback ? "retry" : "initial"}) - Building: ${contract.features.join(", ")}`,
   );
 
-  const systemPrompt = buildGeneratorPrompt({ workDir, isGreenfield, noTdd, skills });
+  const systemPrompt = buildGeneratorPrompt({ workDir, isGreenfield, noTdd, skills, sourceDir, testDir });
   const hDir = harnessDir(workDir);
 
   const codeDir = isGreenfield ? `${workDir}/app/` : workDir;
@@ -61,7 +61,6 @@ export async function runGenerator(
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Generator", sprint, attempt, { model, startTime });
 
-  span?.logMessage("user", prompt);
 
   let fullResponse = "";
   let sessionId: string | undefined;
@@ -76,13 +75,11 @@ export async function runGenerator(
         if (block.type === "text" && block.text) {
           fullResponse += block.text;
           convLog.logAssistantText(block.text);
-          span?.logMessage("assistant", block.text);
           if (shouldLog("verbose", level)) {
             log("GENERATOR", block.text.slice(0, 200));
           }
         } else if (block.type === "tool_use" && block.name) {
           convLog.logToolUse(block.name, block.input);
-          span?.logToolCall(block.name, block.input);
           if (shouldLog("normal", level)) {
             log("GENERATOR", `  Tool: ${block.name}`);
           }
@@ -106,7 +103,6 @@ export async function runGenerator(
         if (block.type === "tool_result" && block.tool_use_id) {
           logDebug("GENERATOR", `Tool result for ${block.tool_use_id}: ${summarize(block.content ?? "")}`);
           convLog.logToolResult(block.content ?? "");
-          span?.logMessage("user", `tool_result: ${summarize(block.content ?? "")}`);
         }
       }
     } else if (msg.type === "tool_use_summary") {
@@ -127,7 +123,6 @@ export async function runGenerator(
 
   const duration = Date.now() - startTime.getTime();
   await convLog.finalize(duration);
-  span?.end({ result: "completed", sessionId });
 
   if (!fullResponse) {
     log("GENERATOR", `Sprint ${sprint} completed (agent used tools only, no text output)`);

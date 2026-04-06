@@ -19,7 +19,7 @@ import { promptGate, promptGateWithText } from "../shared/interaction.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog, summarize } from "../shared/logger.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
 import { resolveSkills, routeSkillsForAgent, warnIfOversized } from "../shared/skills.ts";
-import { initTracing, type Span, type Tracer } from "../shared/tracing.ts";
+import { initTracing } from "../shared/tracing.ts";
 import type {
   CommitSource,
   EvalResult,
@@ -67,7 +67,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   // --- Resume path ---
   if (config.isResume) {
-    const result = await resumeHarness(config, model, isGreenfield, startTime, tracer, usage);
+    const result = await resumeHarness(config, model, isGreenfield, startTime, usage);
     await tracer.flush();
     return result;
   }
@@ -115,9 +115,8 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   };
   await writeProgress(config.workDir, progress);
 
-  const plannerSpan = tracer.startSpan("planner", { model });
   logDebug("HARNESS", "Calling runPlanner...");
-  const spec = await runPlanner(config, plannerSpan, undefined, usage, plannerSkills);
+  const spec = await runPlanner(config, undefined, usage, plannerSkills);
   logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
   await writeSpec(config.workDir, spec);
   log("HARNESS", "Product spec written");
@@ -125,7 +124,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   // A3: Spec approval gate
   progress.status = "spec-review";
   await writeProgress(config.workDir, progress);
-  const approvedSpec = await specApprovalGate(config, spec, plannerSpan, usage, plannerSkills);
+  const approvedSpec = await specApprovalGate(config, spec, usage, plannerSkills);
   progress.specApproved = true;
   await writeProgress(config.workDir, progress);
 
@@ -162,7 +161,6 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     1,
     totalSprints,
     startTime,
-    tracer,
     usage,
     { generator: generatorSkills, evaluator: evaluatorSkills },
   );
@@ -175,7 +173,6 @@ async function resumeHarness(
   model: string,
   isGreenfield: boolean,
   startTime: number,
-  tracer: Tracer,
   usage: UsageTracker,
 ): Promise<HarnessResult> {
   log("HARNESS", "Resuming from checkpoint...");
@@ -212,7 +209,7 @@ async function resumeHarness(
   // If spec was written but not yet approved, show the gate
   if (!progress.specApproved) {
     log("HARNESS", "Spec exists but was not approved. Showing review gate.");
-    spec = await specApprovalGate(config, spec, tracer.startSpan("spec-review"), usage, plannerSkills);
+    spec = await specApprovalGate(config, spec, usage, plannerSkills);
     progress.specApproved = true;
     await writeProgress(config.workDir, progress);
     // Re-count sprints in case spec was edited
@@ -253,7 +250,6 @@ async function resumeHarness(
     startSprint,
     progress.totalSprints,
     startTime,
-    tracer,
     usage,
     { generator: generatorSkills, evaluator: evaluatorSkills },
   );
@@ -297,7 +293,6 @@ async function runSprintLoop(
   startSprint: number,
   totalSprints: number,
   startTime: number,
-  tracer: Tracer,
   usage: UsageTracker,
   skills?: { generator: AgentSkills; evaluator: AgentSkills },
 ): Promise<HarnessResult> {
@@ -312,8 +307,6 @@ async function runSprintLoop(
     log("HARNESS", `SPRINT ${sprint}/${totalSprints}`);
     logDivider();
 
-    const sprintSpan = tracer.startSpan(`sprint-${sprint}`, { sprintNumber: sprint });
-
     // Phase 2: Contract Negotiation
     progress.status = "negotiating";
     progress.currentSprint = sprint;
@@ -322,18 +315,14 @@ async function runSprintLoop(
 
     log("HARNESS", "Negotiating sprint contract...");
     let contract: SprintContract;
-    const negotiationSpan = sprintSpan.startChild("contract-negotiation", { sprint });
     try {
       contract = await withTransientRetry(
-        () => negotiateContract(config.workDir, spec, sprint, generatorModel, evaluatorModel, negotiationSpan, usage),
+        () => negotiateContract(config.workDir, spec, sprint, generatorModel, evaluatorModel, usage),
         "contract negotiation",
       );
     } catch (err) {
-      negotiationSpan.end({ error: String(err) });
-      sprintSpan.end({ error: String(err) });
       return await handleFatalError(err, config, progress, results);
     }
-    negotiationSpan.end({ criteria: contract.criteria.length, features: contract.features.length });
     await writeContract(config.workDir, contract);
     log("HARNESS", `Contract agreed: ${contract.criteria.length} criteria for ${contract.features.length} features`);
 
@@ -362,8 +351,6 @@ async function runSprintLoop(
 
     for (let retry = 0; retry <= config.maxRetriesPerSprint; retry++) {
       attempts = retry + 1;
-      const attemptSpan = sprintSpan.startChild(`attempt-${retry}`, { attempt: retry });
-
       // Capture SHA before generator runs
       let beforeSha = "";
       try {
@@ -377,7 +364,6 @@ async function runSprintLoop(
       progress.retryCount = retry;
       await writeProgress(config.workDir, progress);
 
-      const generatorSpan = attemptSpan.startChild("generator", { model: generatorModel, sprint, attempt: retry });
       let generatorSessionId: string | undefined;
       try {
         const result = await withTransientRetry(
@@ -390,10 +376,11 @@ async function runSprintLoop(
               generatorModel,
               isGreenfield,
               logLevel,
-              generatorSpan,
               retry,
               config.noTdd,
               skills?.generator,
+              config.sourceDir,
+              config.testDir,
             ),
           "generator",
         );
@@ -402,9 +389,6 @@ async function runSprintLoop(
           usage.recordStage(`sprint-${sprint}-attempt-${retry}-generator`, result.sdkResult);
         }
       } catch (err) {
-        generatorSpan.end({ error: String(err) });
-        attemptSpan.end({ error: String(err) });
-        sprintSpan.end({ error: String(err) });
         return await handleFatalError(err, config, progress, results);
       }
 
@@ -430,7 +414,6 @@ async function runSprintLoop(
       progress.status = "evaluating";
       await writeProgress(config.workDir, progress);
 
-      const evaluatorSpan = attemptSpan.startChild("evaluator", { model: evaluatorModel, sprint, attempt: retry });
       try {
         const evalWithUsage = await withTransientRetry(
           () =>
@@ -442,9 +425,10 @@ async function runSprintLoop(
               isGreenfield,
               logLevel,
               retry,
-              evaluatorSpan,
               config.noBdd,
               skills?.evaluator,
+              config.sourceDir,
+              config.testDir,
             ),
           "evaluator",
         );
@@ -453,14 +437,9 @@ async function runSprintLoop(
         }
         lastEval = evalWithUsage;
       } catch (err) {
-        evaluatorSpan.end({ error: String(err) });
-        attemptSpan.end({ error: String(err) });
-        sprintSpan.end({ error: String(err) });
         return await handleFatalError(err, config, progress, results);
       }
       await writeFeedback(config.workDir, sprint, retry, lastEval);
-
-      attemptSpan.end({ passed: lastEval.passed });
 
       if (lastEval.passed) {
         passed = true;
@@ -507,8 +486,6 @@ async function runSprintLoop(
       evalResult: lastEval,
       commitSource: lastCommitSource,
     });
-
-    sprintSpan.end({ passed, attempts });
 
     if (passed) {
       progress.completedSprints++;
@@ -714,7 +691,6 @@ async function checkDirtyTree(config: HarnessConfig): Promise<void> {
 async function specApprovalGate(
   config: HarnessConfig,
   spec: string,
-  plannerSpan: Span,
   usage: UsageTracker,
   plannerSkills?: AgentSkills,
 ): Promise<string> {
@@ -777,7 +753,7 @@ async function specApprovalGate(
     if (result.key === "r" && result.freeText) {
       // Re-run planner with feedback
       log("HARNESS", "Re-running planner with your feedback...");
-      const revisedSpec = await runPlanner(config, plannerSpan, result.freeText, usage, plannerSkills);
+      const revisedSpec = await runPlanner(config, result.freeText, usage, plannerSkills);
       currentSpec = revisedSpec;
       await writeSpec(config.workDir, currentSpec);
       log("HARNESS", "Spec revised. Re-reviewing.");
@@ -793,7 +769,6 @@ async function negotiateContract(
   sprintNumber: number,
   proposalModel: string,
   reviewModel: string,
-  parentSpan?: Span,
   usage?: UsageTracker,
 ): Promise<SprintContract> {
   const startTime = new Date();
@@ -827,10 +802,8 @@ async function negotiateContract(
         if (block.type === "text" && block.text) {
           proposalText += block.text;
           convLog.logAssistantText(`**[Generator Proposal]**\n\n${block.text}`);
-          parentSpan?.logMessage("assistant:generator", block.text);
         } else if (block.type === "tool_use" && block.name) {
           convLog.logToolUse(block.name, block.input);
-          parentSpan?.logToolCall(block.name, block.input);
         }
       }
     } else if (msg.type === "system") {
@@ -844,7 +817,6 @@ async function negotiateContract(
         if (block.type === "tool_result" && block.tool_use_id) {
           logDebug("HARNESS", `Contract proposal tool result: ${summarize(block.content ?? "")}`);
           convLog.logToolResult(block.content ?? "");
-          parentSpan?.logMessage("user:generator", `tool_result: ${summarize(block.content ?? "")}`);
         }
       }
     } else if (msg.type === "tool_use_summary") {
@@ -884,10 +856,8 @@ async function negotiateContract(
         if (block.type === "text" && block.text) {
           reviewText += block.text;
           convLog.logAssistantText(`**[Evaluator Review]**\n\n${block.text}`);
-          parentSpan?.logMessage("assistant:evaluator", block.text);
         } else if (block.type === "tool_use" && block.name) {
           convLog.logToolUse(block.name, block.input);
-          parentSpan?.logToolCall(block.name, block.input);
         }
       }
     } else if (msg.type === "system") {
@@ -901,7 +871,6 @@ async function negotiateContract(
         if (block.type === "tool_result" && block.tool_use_id) {
           logDebug("HARNESS", `Contract review tool result: ${summarize(block.content ?? "")}`);
           convLog.logToolResult(block.content ?? "");
-          parentSpan?.logMessage("user:evaluator", `tool_result: ${summarize(block.content ?? "")}`);
         }
       }
     } else if (msg.type === "tool_use_summary") {

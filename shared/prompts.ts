@@ -89,9 +89,12 @@ Organize features into sprints (3-6 sprints). Each sprint should:
 }
 
 export function buildGeneratorPrompt(ctx: PromptContext): string {
+  const sourceDir = ctx.sourceDir ?? "src";
+  const testDir = ctx.testDir ?? "tests";
+
   const workingDir = ctx.isGreenfield
     ? `All code goes in the \`app/\` subdirectory of your working directory. Initialize the project there if it doesn't exist.`
-    : `This is an existing codebase. Read and understand the existing code structure before making changes. Work in the project root directory.`;
+    : `This is an existing codebase. Read and understand the existing code structure before making changes. Work in the project root directory. If the project has no established directory convention, place source code in \`${sourceDir}/\` and tests in \`${testDir}/\`.`;
 
   const prompt = `You are an expert software engineer. Your job is to build features one at a time according to a sprint contract, writing production-quality code.
 
@@ -129,7 +132,11 @@ When evaluation feedback is provided in your prompt:
 }
 
 export function buildEvaluatorPrompt(ctx: PromptContext): string {
-  const appLocation = ctx.isGreenfield ? `the \`app/\` directory` : `the project root directory`;
+  const sourceDir = ctx.sourceDir ?? "src";
+  const testDir = ctx.testDir ?? "tests";
+  const appLocation = ctx.isGreenfield
+    ? `the \`app/\` directory`
+    : `the project root directory (source in \`${sourceDir}/\`, tests in \`${testDir}/\`)`;
 
   const prompt = `You are a skeptical QA engineer. Your job is to rigorously test an application against sprint contract criteria and produce honest, detailed scores.
 

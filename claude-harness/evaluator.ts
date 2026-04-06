@@ -4,7 +4,6 @@ import { createConversationLog } from "../shared/conversation-logger.ts";
 import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
-import type { Span } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 import { extractBalancedJson } from "./harness.ts";
@@ -17,15 +16,16 @@ export async function runEvaluator(
   isGreenfield: boolean,
   logLevel?: LogLevel,
   attempt?: number,
-  span?: Span,
   noBdd?: boolean,
   skills?: AgentSkills,
+  sourceDir?: string,
+  testDir?: string,
 ): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
   log("EVALUATOR", `Evaluating sprint ${sprint} against ${contract.criteria.length} criteria`);
 
-  const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield, noBdd, skills });
+  const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield, noBdd, skills, sourceDir, testDir });
   const appLocation = isGreenfield ? `${workDir}/app/` : workDir;
 
   const prompt = `IMPORTANT: Your working directory is ${workDir}. The application code is in ${appLocation}. All file operations must be within ${workDir}.
@@ -57,7 +57,6 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt ?? 0, { model, startTime });
 
-  span?.logMessage("user", prompt);
 
   let fullResponse = "";
   let sdkResult: SDKResultFields | undefined;
@@ -71,13 +70,11 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
         if (block.type === "text" && block.text) {
           fullResponse += block.text;
           convLog.logAssistantText(block.text);
-          span?.logMessage("assistant", block.text);
           if (shouldLog("verbose", level)) {
             log("EVALUATOR", block.text.slice(0, 200));
           }
         } else if (block.type === "tool_use" && block.name) {
           convLog.logToolUse(block.name, block.input);
-          span?.logToolCall(block.name, block.input);
           if (shouldLog("normal", level)) {
             log("EVALUATOR", `  Tool: ${block.name}`);
           }
@@ -94,7 +91,6 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
         if (block.type === "tool_result" && block.tool_use_id) {
           logDebug("EVALUATOR", `Tool result for ${block.tool_use_id}: ${summarize(block.content ?? "")}`);
           convLog.logToolResult(block.content ?? "");
-          span?.logMessage("user", `tool_result: ${summarize(block.content ?? "")}`);
         }
       }
     } else if (msg.type === "tool_use_summary") {
@@ -121,7 +117,6 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   );
   evalResult.sdkResult = sdkResult;
 
-  span?.end({ result: evalResult.passed ? "passed" : "failed", scores: evalResult.scores });
 
   if (shouldLog("normal", level)) {
     const passedCount = evalResult.feedback.filter((f) => f.score >= passThreshold).length;

@@ -1,7 +1,7 @@
 import { log, logDebug } from "./logger.ts";
 import type { HarnessConfig } from "./types.ts";
 
-// --- Public interfaces (used by agents regardless of whether Langfuse is enabled) ---
+// --- Public interfaces (used by harness for structural spans) ---
 
 export interface Tracer {
   startSpan(name: string, metadata?: Record<string, unknown>): Span;
@@ -9,8 +9,6 @@ export interface Tracer {
 }
 
 export interface Span {
-  logMessage(role: string, content: string): void;
-  logToolCall(name: string, input: unknown, output?: string): void;
   startChild(name: string, metadata?: Record<string, unknown>): Span;
   end(metadata?: Record<string, unknown>): void;
 }
@@ -18,8 +16,6 @@ export interface Span {
 // --- No-op implementations ---
 
 const noopSpan: Span = {
-  logMessage() {},
-  logToolCall() {},
   startChild() {
     return noopSpan;
   },
@@ -33,7 +29,17 @@ const noopTracer: Tracer = {
   async flush() {},
 };
 
-// --- Langfuse-backed implementations ---
+// --- OTEL + Langfuse auto-instrumentation ---
+//
+// Uses the official Langfuse integration for the Claude Agent SDK:
+//   @arizeai/openinference-instrumentation-claude-agent-sdk
+//   @langfuse/otel
+//   @opentelemetry/sdk-node
+//
+// This auto-captures all query() calls with full prompts, responses, and tool use.
+// Harness-level spans (sprint, attempt, etc.) are structural only.
+
+let otelSdk: { shutdown(): Promise<void> } | null = null;
 
 export function initTracing(config: HarnessConfig): Tracer {
   if (!config.langfusePublicKey || !config.langfuseSecretKey) {
@@ -42,88 +48,61 @@ export function initTracing(config: HarnessConfig): Tracer {
   }
 
   try {
-    // Dynamic import to avoid loading langfuse when not needed
-    // We use require-style since we need synchronous init
-    const { Langfuse } = require("langfuse") as typeof import("langfuse");
+    // Set env vars for Langfuse OTEL span processor
+    process.env.LANGFUSE_PUBLIC_KEY = config.langfusePublicKey;
+    process.env.LANGFUSE_SECRET_KEY = config.langfuseSecretKey;
+    if (config.langfuseBaseUrl) {
+      process.env.LANGFUSE_BASEURL = config.langfuseBaseUrl;
+    }
 
-    const langfuse = new Langfuse({
-      publicKey: config.langfusePublicKey,
-      secretKey: config.langfuseSecretKey,
-      baseUrl: config.langfuseBaseUrl ?? "https://cloud.langfuse.com",
+    // Dynamic imports to avoid loading when tracing is disabled
+    // biome-ignore lint/style/noVar: dynamic require
+    var { NodeSDK } = require("@opentelemetry/sdk-node");
+    // biome-ignore lint/style/noVar: dynamic require
+    var { LangfuseSpanProcessor, isDefaultExportSpan } = require("@langfuse/otel");
+    // biome-ignore lint/style/noVar: dynamic require
+    var { ClaudeAgentSDKInstrumentation } = require(
+      "@arizeai/openinference-instrumentation-claude-agent-sdk",
+    );
+    // biome-ignore lint/style/noVar: dynamic require
+    var ClaudeAgentSDKModule = require("@anthropic-ai/claude-agent-sdk");
+
+    const instrumentation = new ClaudeAgentSDKInstrumentation();
+    instrumentation.manuallyInstrument({ ...ClaudeAgentSDKModule });
+
+    const sdk = new NodeSDK({
+      spanProcessors: [
+        new LangfuseSpanProcessor({
+          shouldExportSpan: ({ otelSpan }: { otelSpan: { instrumentationScope: { name: string } } }) =>
+            isDefaultExportSpan(otelSpan) ||
+            otelSpan.instrumentationScope.name === "@arizeai/openinference-instrumentation-claude-agent-sdk",
+        }),
+      ],
+      instrumentations: [instrumentation],
     });
+
+    sdk.start();
+    otelSdk = sdk;
 
     log("HARNESS", `Langfuse tracing: enabled (${config.langfuseBaseUrl ?? "https://cloud.langfuse.com"})`);
 
-    const traceName = `harness-run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-    const trace = langfuse.trace({
-      name: traceName,
-      metadata: {
-        model: config.model,
-        workDir: config.workDir,
-        isGreenfield: config.isGreenfield,
-        maxSprints: config.maxSprints,
-      },
-    });
-
     return {
-      startSpan(name: string, metadata?: Record<string, unknown>): Span {
-        return createLangfuseSpan(trace.span({ name, metadata }));
+      startSpan() {
+        return noopSpan;
       },
       async flush(): Promise<void> {
         try {
-          await langfuse.flushAsync();
+          if (otelSdk) {
+            await otelSdk.shutdown();
+            otelSdk = null;
+          }
         } catch (err) {
-          console.warn(`[TRACING] Failed to flush Langfuse data: ${err}`);
+          console.warn(`[TRACING] Failed to flush: ${err}`);
         }
       },
     };
   } catch (err) {
-    console.warn(`[TRACING] Failed to initialize Langfuse, continuing without tracing: ${err}`);
+    console.warn(`[TRACING] Failed to initialize Langfuse OTEL tracing, continuing without tracing: ${err}`);
     return noopTracer;
   }
-}
-
-function createLangfuseSpan(langfuseSpan: any): Span {
-  const messages: Array<{ role: string; content: string }> = [];
-
-  return {
-    logMessage(role: string, content: string): void {
-      messages.push({ role, content: content.slice(0, 10000) }); // cap to avoid huge payloads
-    },
-
-    logToolCall(name: string, input: unknown, output?: string): void {
-      try {
-        langfuseSpan.event({
-          name: `tool:${name}`,
-          metadata: {
-            input: typeof input === "string" ? input.slice(0, 5000) : input,
-            ...(output ? { output: output.slice(0, 5000) } : {}),
-          },
-        });
-      } catch {
-        // fire-and-forget
-      }
-    },
-
-    startChild(name: string, metadata?: Record<string, unknown>): Span {
-      try {
-        return createLangfuseSpan(langfuseSpan.span({ name, metadata }));
-      } catch {
-        return noopSpan;
-      }
-    },
-
-    end(metadata?: Record<string, unknown>): void {
-      try {
-        langfuseSpan.end({
-          metadata: {
-            ...metadata,
-            messages: messages.slice(-50), // cap message history
-          },
-        });
-      } catch {
-        // fire-and-forget
-      }
-    },
-  };
 }
