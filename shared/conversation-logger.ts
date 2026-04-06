@@ -1,5 +1,5 @@
-import { writeFile } from "fs/promises";
-import { join } from "path";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export interface ConversationLogger {
   logAssistantText(text: string): void;
@@ -75,7 +75,7 @@ export function createConversationLog(
       lines.push("");
 
       if (metadata) {
-        const startUtc = metadata.startTime.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+        const startUtc = `${metadata.startTime.toISOString().replace("T", " ").slice(0, 16)} UTC`;
         const durMin = Math.floor(duration / 60000);
         const durSec = Math.floor((duration % 60000) / 1000);
         const durStr = durMin > 0 ? `${durMin}m ${durSec}s` : `${durSec}s`;

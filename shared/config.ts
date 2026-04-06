@@ -1,6 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { existsSync, readFileSync } from "fs";
-import { join, resolve } from "path";
 import type { HarnessConfig, LogLevel } from "./types.ts";
 
 // --- Backward-compatible exports for codex-harness ---
@@ -183,7 +183,7 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
   return config;
 }
 
-function validateConfig(config: HarnessConfig): void {
+export function validateConfig(config: HarnessConfig): void {
   if (config.passThreshold < 1 || config.passThreshold > 10) {
     throw new Error(`Invalid threshold: ${config.passThreshold}. Must be between 1 and 10.`);
   }

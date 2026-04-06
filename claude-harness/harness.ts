@@ -1,11 +1,10 @@
+import { execSync } from "node:child_process";
+import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
-import { execSync } from "child_process";
-import { join } from "path";
 import { CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import {
   initWorkspace,
-  readContract,
   readProgress,
   readSpec,
   writeContract,
@@ -34,7 +33,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   const startTime = Date.now();
   const model = config.model ?? CLAUDE_MODEL;
   const isGreenfield = config.isGreenfield ?? false;
-  const logLevel = config.logLevel ?? "normal";
+  const _logLevel = config.logLevel ?? "normal";
 
   // Configure timezone display for terminal
   if (config.tzDisplay) {
@@ -358,7 +357,7 @@ async function runSprintLoop(
 
 // --- Error handling ---
 
-function isTransientError(err: unknown): boolean {
+export function isTransientError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   const lower = msg.toLowerCase();
   // HTTP 429 with short reset, 5xx, network errors
@@ -429,7 +428,7 @@ async function negotiateContract(
   logLevel: string,
   parentSpan?: Span,
 ): Promise<SprintContract> {
-  const level = (logLevel ?? "normal") as "quiet" | "normal" | "verbose";
+  const _level = (logLevel ?? "normal") as "quiet" | "normal" | "verbose";
   const startTime = new Date();
 
   // Generator proposes contract
@@ -514,15 +513,40 @@ async function negotiateContract(
   return parseContract(contractSource, sprintNumber);
 }
 
-function parseContract(text: string, sprintNumber: number): SprintContract {
+/**
+ * Extract the first balanced {...} block from text that contains the required key.
+ * Uses bracket-depth counting to handle nested JSON correctly.
+ */
+export function extractBalancedJson(text: string, requiredKey: string): string | null {
+  let start = -1;
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (text[i] === "}") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        const candidate = text.slice(start, i + 1);
+        if (candidate.includes(`"${requiredKey}"`)) {
+          return candidate;
+        }
+        start = -1;
+      }
+    }
+  }
+  return null;
+}
+
+export function parseContract(text: string, sprintNumber: number): SprintContract {
   // Try multiple extraction strategies
   const candidates: string[] = [];
   const codeBlocks = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
   for (const match of codeBlocks.reverse()) {
     if (match[1]) candidates.push(match[1].trim());
   }
-  const braceMatch = text.match(/\{[\s\S]*?"criteria"[\s\S]*?\}/);
-  if (braceMatch) candidates.push(braceMatch[0]);
+  const balanced = extractBalancedJson(text, "criteria");
+  if (balanced) candidates.push(balanced);
   candidates.push(text.trim());
 
   for (const candidate of candidates) {

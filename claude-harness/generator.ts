@@ -1,8 +1,8 @@
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
+import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
-import { log, logError, shouldLog } from "../shared/logger.ts";
+import { log, shouldLog } from "../shared/logger.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";

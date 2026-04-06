@@ -93,6 +93,6 @@ function parseEvalResult(response: string, contract: SprintContract, passThresho
       score: 0,
       details: "Evaluator failed to produce parseable output",
     })),
-    overallSummary: "Evaluation parsing failed. Raw response: " + response.slice(0, 500),
+    overallSummary: `Evaluation parsing failed. Raw response: ${response.slice(0, 500)}`,
   };
 }

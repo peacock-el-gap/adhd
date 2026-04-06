@@ -1,10 +1,11 @@
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
-import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
+import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { log, logError, shouldLog } from "../shared/logger.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
+import { extractBalancedJson } from "./harness.ts";
 
 export async function runEvaluator(
   workDir: string,
@@ -110,7 +111,7 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   return evalResult;
 }
 
-function parseEvalResult(response: string, contract: SprintContract, passThreshold: number): EvalResult {
+export function parseEvalResult(response: string, contract: SprintContract, passThreshold: number): EvalResult {
   const candidates: string[] = [];
 
   // Strategy 1: Look for the LAST JSON code block
@@ -119,9 +120,9 @@ function parseEvalResult(response: string, contract: SprintContract, passThresho
     if (match[1]) candidates.push(match[1].trim());
   }
 
-  // Strategy 2: Find the largest {...} block in the raw response
-  const braceMatch = response.match(/\{[\s\S]*?"passed"[\s\S]*?"feedback"[\s\S]*?\}/);
-  if (braceMatch) candidates.push(braceMatch[0]);
+  // Strategy 2: Find balanced {...} block containing "feedback"
+  const balanced = extractBalancedJson(response, "feedback");
+  if (balanced) candidates.push(balanced);
 
   // Strategy 3: Raw response as-is
   candidates.push(response.trim());
@@ -147,6 +148,6 @@ function parseEvalResult(response: string, contract: SprintContract, passThresho
       score: 0,
       details: "Evaluator failed to produce parseable output",
     })),
-    overallSummary: "Evaluation parsing failed. Raw response: " + response.slice(0, 500),
+    overallSummary: `Evaluation parsing failed. Raw response: ${response.slice(0, 500)}`,
   };
 }

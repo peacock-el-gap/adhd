@@ -6,7 +6,7 @@ try {
   const cli = parseCli();
 
   // Resolve project dir early so we can load .harness/.env
-  const projectDir = cli.project ? (await import("path")).resolve(cli.project) : process.cwd();
+  const projectDir = cli.project ? (await import("node:path")).resolve(cli.project) : process.cwd();
   loadHarnessEnv(projectDir);
 
   const config = resolveConfig(cli);

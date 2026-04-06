@@ -1,5 +1,5 @@
-import { readFile } from "fs/promises";
-import { resolve } from "path";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
 import { log, logDivider, logError } from "../shared/logger.ts";
 import type { HarnessConfig } from "../shared/types.ts";
