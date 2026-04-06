@@ -1,5 +1,5 @@
 {
-  "name": "adversarial-dev",
+  "name": "ADHD",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.85",
-    "@openai/codex-sdk": "^0.117.0"
+    "@openai/codex-sdk": "^0.117.0",
+    "langfuse": "^3.38.20"
   }
 }

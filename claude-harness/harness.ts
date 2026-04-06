@@ -1,10 +1,14 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { execSync } from "child_process";
+import { join } from "path";
 import {
   CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
   CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
 } from "../shared/prompts.ts";
 import { CLAUDE_MODEL } from "../shared/config.ts";
-import { log, logError, logDivider } from "../shared/logger.ts";
+import { log, logError, logDivider, setDisplayTimezone, shouldLog } from "../shared/logger.ts";
+import { createConversationLog } from "../shared/conversation-logger.ts";
+import { initTracing, type Tracer, type Span } from "../shared/tracing.ts";
 import {
   initWorkspace,
   writeSpec,
@@ -13,6 +17,7 @@ import {
   readContract,
   writeFeedback,
   writeProgress,
+  readProgress,
 } from "../shared/files.ts";
 import type {
   HarnessConfig,
@@ -27,15 +32,35 @@ import { runPlanner } from "./planner.ts";
 import { runGenerator } from "./generator.ts";
 import { runEvaluator } from "./evaluator.ts";
 
+const TRANSIENT_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
+
 export async function runHarness(config: HarnessConfig): Promise<HarnessResult> {
   const startTime = Date.now();
-  const results: SprintResult[] = [];
+  const model = config.model ?? CLAUDE_MODEL;
+  const isGreenfield = config.isGreenfield ?? false;
+  const logLevel = config.logLevel ?? "normal";
+
+  // Configure timezone display for terminal
+  if (config.tzDisplay) {
+    setDisplayTimezone(config.tzDisplay);
+  }
+
+  // Initialize tracing
+  const tracer = initTracing(config);
 
   log("HARNESS", "Initializing Claude Agent SDK harness");
   log("HARNESS", `Work directory: ${config.workDir}`);
-  log("HARNESS", `Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`);
+  log("HARNESS", `Model: ${model} | Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`);
 
-  await initWorkspace(config.workDir);
+  // --- Resume path ---
+  if (config.isResume) {
+    const result = await resumeHarness(config, model, isGreenfield, startTime, tracer);
+    await tracer.flush();
+    return result;
+  }
+
+  // --- Fresh run path ---
+  await initWorkspace(config.workDir, { greenfield: isGreenfield });
 
   // Phase 1: Planning
   logDivider();
@@ -51,34 +76,114 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   };
   await writeProgress(config.workDir, progress);
 
-  const plannerResponse = await runPlanner(config.userPrompt, config.workDir);
+  const plannerSpan = tracer.startSpan("planner", { model });
+  const spec = await runPlanner(config, plannerSpan);
+  await writeSpec(config.workDir, spec);
+  log("HARNESS", "Product spec written");
 
-  // Planner may have written spec.md via Write tool, or returned it as text
-  let spec: string;
+  // Count sprints from the spec (look for "Sprint N" patterns)
+  const sprintMatches = spec.match(/##\s*Sprint\s+\d+/gi);
+  const totalSprints = sprintMatches
+    ? Math.min(sprintMatches.length, config.maxSprints)
+    : config.maxSprints;
+  progress.totalSprints = totalSprints;
+
+  const result = await runSprintLoop(config, model, isGreenfield, spec, progress, [], 1, totalSprints, startTime, tracer);
+  await tracer.flush();
+  return result;
+}
+
+async function resumeHarness(
+  config: HarnessConfig,
+  model: string,
+  isGreenfield: boolean,
+  startTime: number,
+  tracer: Tracer,
+): Promise<HarnessResult> {
+  log("HARNESS", "Resuming from checkpoint...");
+
+  // Don't clean artifacts on resume
+  await initWorkspace(config.workDir, { greenfield: isGreenfield, resume: true });
+
+  let progress: HarnessProgress;
   try {
-    spec = await readSpec(config.workDir);
+    progress = await readProgress(config.workDir);
   } catch {
-    log("HARNESS", "Planner returned spec as text, writing to spec.md");
-    await writeSpec(config.workDir, plannerResponse);
-    spec = plannerResponse;
+    throw new Error("Nothing to resume. No .harness/progress.json found. Run without --resume first.");
   }
 
-  // Parse sprint count from spec - look for "Sprint N" patterns
-  const sprintNumbers = Array.from(spec.matchAll(/sprint\s+(\d+)/gi))
-    .map((m) => parseInt(m[1]!, 10))
-    .filter((n) => n > 0 && n <= config.maxSprints);
-  const totalSprints = sprintNumbers.length > 0
-    ? Math.min(Math.max(...sprintNumbers), config.maxSprints)
-    : 3; // Default to 3 if no sprint numbers found
+  if (progress.status === "complete") {
+    throw new Error("All sprints already completed. Nothing to resume.");
+  }
 
-  progress.totalSprints = totalSprints;
-  log("HARNESS", `Planner produced ${totalSprints} sprints`);
+  const spec = await readSpec(config.workDir);
+  log("HARNESS", `Loaded spec from disk. Completed sprints: ${progress.completedSprints}/${progress.totalSprints}`);
 
-  // Phase 2-4: Sprint Loop
-  for (let sprint = 1; sprint <= totalSprints; sprint++) {
+  // Restore prior sprint results
+  const results: SprintResult[] = progress.sprintResults ?? [];
+
+  // Git revert if there are commits after the last checkpoint
+  if (progress.lastPassedCommitSha) {
+    await revertToCheckpoint(config.workDir, isGreenfield, progress);
+  }
+
+  const startSprint = progress.completedSprints + 1;
+  return runSprintLoop(config, model, isGreenfield, spec, progress, results, startSprint, progress.totalSprints, startTime, tracer);
+}
+
+async function revertToCheckpoint(
+  workDir: string,
+  isGreenfield: boolean,
+  progress: HarnessProgress,
+): Promise<void> {
+  const gitDir = isGreenfield ? join(workDir, "app") : workDir;
+  const sha = progress.lastPassedCommitSha!;
+
+  try {
+    const currentHead = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
+    if (currentHead === sha) {
+      log("HARNESS", "HEAD matches checkpoint — no revert needed");
+      return;
+    }
+
+    log("HARNESS", `Reverting commits after checkpoint ${sha.slice(0, 8)}...`);
+    execSync(
+      `git revert --no-commit ${sha}..HEAD && git commit -m "Revert incomplete sprint ${progress.completedSprints + 1} attempt"`,
+      { cwd: gitDir, stdio: "pipe" },
+    );
+    log("HARNESS", "Revert successful");
+  } catch (err) {
+    // Revert failed (conflicts) — warn and continue
+    logError("HARNESS", `Git revert failed (conflicts?). Continuing without revert. Error: ${err}`);
+    try {
+      execSync("git revert --abort", { cwd: gitDir, stdio: "ignore" });
+    } catch {
+      // Already clean
+    }
+  }
+}
+
+async function runSprintLoop(
+  config: HarnessConfig,
+  model: string,
+  isGreenfield: boolean,
+  spec: string,
+  progress: HarnessProgress,
+  results: SprintResult[],
+  startSprint: number,
+  totalSprints: number,
+  startTime: number,
+  tracer: Tracer,
+): Promise<HarnessResult> {
+  const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
+  const logLevel = config.logLevel ?? "normal";
+
+  for (let sprint = startSprint; sprint <= totalSprints; sprint++) {
     logDivider();
     log("HARNESS", `SPRINT ${sprint}/${totalSprints}`);
     logDivider();
+
+    const sprintSpan = tracer.startSpan(`sprint-${sprint}`, { sprintNumber: sprint });
 
     // Phase 2: Contract Negotiation
     progress.status = "negotiating";
@@ -87,7 +192,19 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     await writeProgress(config.workDir, progress);
 
     log("HARNESS", "Negotiating sprint contract...");
-    const contract = await negotiateContract(config.workDir, spec, sprint);
+    let contract: SprintContract;
+    const negotiationSpan = sprintSpan.startChild("contract-negotiation", { sprint });
+    try {
+      contract = await withTransientRetry(
+        () => negotiateContract(config.workDir, spec, sprint, model, logLevel, negotiationSpan),
+        "contract negotiation",
+      );
+    } catch (err) {
+      negotiationSpan.end({ error: String(err) });
+      sprintSpan.end({ error: String(err) });
+      return handleFatalError(err, config, progress, results, startTime);
+    }
+    negotiationSpan.end({ criteria: contract.criteria.length, features: contract.features.length });
     await writeContract(config.workDir, contract);
     log("HARNESS", `Contract agreed: ${contract.criteria.length} criteria for ${contract.features.length} features`);
 
@@ -98,29 +215,58 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
     for (let retry = 0; retry <= config.maxRetriesPerSprint; retry++) {
       attempts = retry + 1;
+      const attemptSpan = sprintSpan.startChild(`attempt-${retry}`, { attempt: retry });
 
       // Build
       progress.status = "building";
       progress.retryCount = retry;
       await writeProgress(config.workDir, progress);
 
-      await runGenerator(config.workDir, spec, contract, lastEval);
+      const generatorSpan = attemptSpan.startChild("generator", { model, sprint, attempt: retry });
+      try {
+        await withTransientRetry(
+          () => runGenerator(config.workDir, spec, contract, lastEval, model, isGreenfield, logLevel, generatorSpan),
+          "generator",
+        );
+      } catch (err) {
+        generatorSpan.end({ error: String(err) });
+        attemptSpan.end({ error: String(err) });
+        sprintSpan.end({ error: String(err) });
+        return handleFatalError(err, config, progress, results, startTime);
+      }
 
       // Evaluate
       progress.status = "evaluating";
       await writeProgress(config.workDir, progress);
 
-      lastEval = await runEvaluator(config.workDir, contract, config.passThreshold);
+      const evaluatorSpan = attemptSpan.startChild("evaluator", { model, sprint, attempt: retry });
+      try {
+        lastEval = await withTransientRetry(
+          () => runEvaluator(config.workDir, contract, config.passThreshold, model, isGreenfield, logLevel, retry, evaluatorSpan),
+          "evaluator",
+        );
+      } catch (err) {
+        evaluatorSpan.end({ error: String(err) });
+        attemptSpan.end({ error: String(err) });
+        sprintSpan.end({ error: String(err) });
+        return handleFatalError(err, config, progress, results, startTime);
+      }
       await writeFeedback(config.workDir, sprint, retry, lastEval);
+
+      attemptSpan.end({ passed: lastEval.passed });
 
       if (lastEval.passed) {
         passed = true;
-        log("HARNESS", `Sprint ${sprint} PASSED on attempt ${attempts}`);
+        if (shouldLog("quiet", logLevel)) {
+          log("HARNESS", `Sprint ${sprint} PASSED on attempt ${attempts}`);
+        }
         break;
       }
 
       if (retry < config.maxRetriesPerSprint) {
-        log("HARNESS", `Sprint ${sprint} failed attempt ${attempts}, retrying...`);
+        if (shouldLog("normal", logLevel)) {
+          log("HARNESS", `Sprint ${sprint} failed attempt ${attempts}, retrying...`);
+        }
       } else {
         logError("HARNESS", `Sprint ${sprint} FAILED after ${attempts} attempts`);
       }
@@ -133,10 +279,33 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
       evalResult: lastEval,
     });
 
+    sprintSpan.end({ passed, attempts });
+
     if (passed) {
       progress.completedSprints++;
+
+      // Checkpoint: save commit SHA and sprint results
+      try {
+        const headSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
+        progress.lastPassedCommitSha = headSha;
+      } catch {
+        // No git repo or no commits — skip SHA capture
+      }
+      progress.sprintResults = results.map(({ sprintNumber, passed, attempts }) => ({
+        sprintNumber,
+        passed,
+        attempts,
+      }));
+      await writeProgress(config.workDir, progress);
+
+      log("HARNESS", `Sprint ${sprint} PASSED — checkpoint saved. To resume later: bun run claude-harness/index.ts --resume`);
     } else {
       progress.status = "failed";
+      progress.sprintResults = results.map(({ sprintNumber, passed, attempts }) => ({
+        sprintNumber,
+        passed,
+        attempts,
+      }));
       await writeProgress(config.workDir, progress);
       logError("HARNESS", `Harness stopped: sprint ${sprint} could not pass evaluation`);
       break;
@@ -156,11 +325,73 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   return { success: allPassed, sprints: results, totalDurationMs: totalDuration };
 }
 
+// --- Error handling ---
+
+function isTransientError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  // HTTP 429 with short reset, 5xx, network errors
+  if (lower.includes("429") && !lower.includes("quota") && !lower.includes("daily")) return true;
+  if (/\b5\d{2}\b/.test(msg)) return true;
+  if (lower.includes("timeout") || lower.includes("econnreset") || lower.includes("econnrefused")) return true;
+  if (lower.includes("network") || lower.includes("socket hang up")) return true;
+  return false;
+}
+
+async function withTransientRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  for (let attempt = 0; attempt <= TRANSIENT_RETRY_DELAYS.length; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt < TRANSIENT_RETRY_DELAYS.length && isTransientError(err)) {
+        const delay = TRANSIENT_RETRY_DELAYS[attempt]!;
+        log("HARNESS", `Transient error during ${label}, retrying in ${delay / 1000}s... (${err})`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw err; // Non-transient or exhausted retries
+    }
+  }
+  throw new Error("Unreachable");
+}
+
+function handleFatalError(
+  err: unknown,
+  config: HarnessConfig,
+  progress: HarnessProgress,
+  results: SprintResult[],
+  startTime: number,
+): HarnessResult {
+  const msg = err instanceof Error ? err.message : String(err);
+  logError("HARNESS", msg);
+
+  // Save checkpoint before exiting
+  progress.sprintResults = results.map(({ sprintNumber, passed, attempts }) => ({
+    sprintNumber,
+    passed,
+    attempts,
+  }));
+  writeProgress(config.workDir, progress).catch(() => {});
+
+  log("HARNESS", "Progress saved. Resume with: bun run claude-harness/index.ts --resume");
+
+  // Exit with code 2 to distinguish from test failure (code 1)
+  process.exit(2);
+}
+
+// --- Contract negotiation ---
+
 async function negotiateContract(
   workDir: string,
   spec: string,
   sprintNumber: number,
+  model: string,
+  logLevel: string,
+  parentSpan?: Span,
 ): Promise<SprintContract> {
+  const level = (logLevel ?? "normal") as "quiet" | "normal" | "verbose";
+  const startTime = new Date();
+
   // Generator proposes contract
   const proposalPrompt = `## Product Spec\n\n${spec}\n\n## Sprint Number: ${sprintNumber}\n\nPropose a sprint contract for this sprint.`;
 
@@ -170,20 +401,30 @@ async function negotiateContract(
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     tools: ["Read"],
-    model: CLAUDE_MODEL,
+    model,
     maxTurns: 10,
     persistSession: false,
   };
 
+  const convLog = createConversationLog(workDir, "contract-negotiation", sprintNumber, undefined, { model, startTime });
+
   let proposalText = "";
   for await (const msg of query({ prompt: proposalPrompt, options: proposalOptions })) {
     if (msg.type === "assistant") {
-      const message = msg as { message: { content: Array<{ type: string; text?: string }> } };
+      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
       for (const block of message.message.content) {
         if (block.type === "text" && block.text) {
           proposalText += block.text;
+          convLog.logAssistantText(`**[Generator Proposal]**\n\n${block.text}`);
+          parentSpan?.logMessage("assistant:generator", block.text);
+        } else if (block.type === "tool_use" && block.name) {
+          convLog.logToolUse(block.name, block.input);
+          parentSpan?.logToolCall(block.name, block.input);
         }
       }
+    } else if (msg.type === "tool_use_summary") {
+      const summary = msg as { summary?: string };
+      convLog.logToolResult(summary.summary ?? "");
     }
   }
 
@@ -196,7 +437,7 @@ async function negotiateContract(
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     tools: ["Read"],
-    model: CLAUDE_MODEL,
+    model,
     maxTurns: 10,
     persistSession: false,
   };
@@ -204,14 +445,25 @@ async function negotiateContract(
   let reviewText = "";
   for await (const msg of query({ prompt: reviewPrompt, options: reviewOptions })) {
     if (msg.type === "assistant") {
-      const message = msg as { message: { content: Array<{ type: string; text?: string }> } };
+      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
       for (const block of message.message.content) {
         if (block.type === "text" && block.text) {
           reviewText += block.text;
+          convLog.logAssistantText(`**[Evaluator Review]**\n\n${block.text}`);
+          parentSpan?.logMessage("assistant:evaluator", block.text);
+        } else if (block.type === "tool_use" && block.name) {
+          convLog.logToolUse(block.name, block.input);
+          parentSpan?.logToolCall(block.name, block.input);
         }
       }
+    } else if (msg.type === "tool_use_summary") {
+      const summary = msg as { summary?: string };
+      convLog.logToolResult(summary.summary ?? "");
     }
   }
+
+  const duration = Date.now() - startTime.getTime();
+  await convLog.finalize(duration);
 
   // Parse the final contract (either the proposal if approved, or the revised version)
   const contractSource = reviewText.trim() === "APPROVED" ? proposalText : reviewText;
@@ -241,28 +493,26 @@ function parseContract(text: string, sprintNumber: number): SprintContract {
     }
   }
 
-  {
-    logError("HARNESS", "Failed to parse contract JSON, creating default");
-    return {
-      sprintNumber,
-      features: [`Sprint ${sprintNumber} features`],
-      criteria: [
-        {
-          name: "basic_functionality",
-          description: "Core features for this sprint are implemented and working",
-          threshold: 7,
-        },
-        {
-          name: "code_quality",
-          description: "Code is clean, well-structured, and follows best practices",
-          threshold: 7,
-        },
-        {
-          name: "error_handling",
-          description: "Errors are handled gracefully with appropriate user feedback",
-          threshold: 7,
-        },
-      ],
-    };
-  }
+  logError("HARNESS", "Failed to parse contract JSON, creating default");
+  return {
+    sprintNumber,
+    features: [`Sprint ${sprintNumber} features`],
+    criteria: [
+      {
+        name: "basic_functionality",
+        description: "Core features for this sprint are implemented and working",
+        threshold: 7,
+      },
+      {
+        name: "code_quality",
+        description: "Code is clean, well-structured, and follows best practices",
+        threshold: 7,
+      },
+      {
+        name: "error_handling",
+        description: "Errors are handled gracefully with appropriate user feedback",
+        threshold: 7,
+      },
+    ],
+  };
 }

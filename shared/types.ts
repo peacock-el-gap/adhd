@@ -1,9 +1,23 @@
+export type LogLevel = "quiet" | "normal" | "verbose";
+
 export interface HarnessConfig {
   userPrompt: string;
   workDir: string;
   maxSprints: number;
   maxRetriesPerSprint: number;
   passThreshold: number;
+  // Phase 1 additions (optional for backward compat with codex-harness)
+  model?: string;
+  isGreenfield?: boolean;
+  isResume?: boolean;
+  logLevel?: LogLevel;
+  interactive?: boolean;
+  harnessDir?: string; // resolved path to .harness/
+  // Phase 2 additions (optional for backward compat)
+  tzDisplay?: string; // IANA timezone for terminal display (e.g. "Europe/Warsaw")
+  langfusePublicKey?: string;
+  langfuseSecretKey?: string;
+  langfuseBaseUrl?: string;
 }
 
 export interface SprintContract {
@@ -37,6 +51,9 @@ export interface HarnessProgress {
   totalSprints: number;
   completedSprints: number;
   retryCount: number;
+  // Phase 1 additions (optional for backward compat)
+  lastPassedCommitSha?: string;
+  sprintResults?: SprintResult[];
 }
 
 export interface SprintResult {

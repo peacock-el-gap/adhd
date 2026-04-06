@@ -1,18 +1,29 @@
 import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { EVALUATOR_SYSTEM_PROMPT } from "../shared/prompts.ts";
+import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import { CLAUDE_MODEL, CLAUDE_MAX_TURNS } from "../shared/config.ts";
-import { log, logError } from "../shared/logger.ts";
-import type { SprintContract, EvalResult } from "../shared/types.ts";
+import { log, logError, shouldLog } from "../shared/logger.ts";
+import { createConversationLog } from "../shared/conversation-logger.ts";
+import type { SprintContract, EvalResult, LogLevel } from "../shared/types.ts";
+import type { Span } from "../shared/tracing.ts";
 
 export async function runEvaluator(
   workDir: string,
   contract: SprintContract,
   passThreshold: number,
+  model: string,
+  isGreenfield: boolean,
+  logLevel?: LogLevel,
+  attempt?: number,
+  span?: Span,
 ): Promise<EvalResult> {
   const sprint = contract.sprintNumber;
+  const level = logLevel ?? "normal";
   log("EVALUATOR", `Evaluating sprint ${sprint} against ${contract.criteria.length} criteria`);
 
-  const prompt = `IMPORTANT: Your working directory is ${workDir}. The application code is in ${workDir}/app/. All file operations must be within ${workDir}.
+  const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield });
+  const appLocation = isGreenfield ? `${workDir}/app/` : workDir;
+
+  const prompt = `IMPORTANT: Your working directory is ${workDir}. The application code is in ${appLocation}. All file operations must be within ${workDir}.
 
 ## Sprint Contract to Evaluate Against
 
@@ -24,46 +35,74 @@ Each criterion must score at least ${passThreshold}/10 to pass.
 
 ## Instructions
 
-Examine the application in the \`app/\` directory. Read the code, run it if possible, and score each criterion. Output ONLY the JSON evaluation object.`;
+Examine the application in ${isGreenfield ? "the `app/` directory" : "the project root"}. Read the code, run it if possible, and score each criterion. Output ONLY the JSON evaluation object.`;
 
   const options: Options = {
     cwd: workDir,
-    systemPrompt: EVALUATOR_SYSTEM_PROMPT,
+    systemPrompt,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     tools: ["Read", "Bash", "Glob", "Grep"],
-    model: CLAUDE_MODEL,
+    model,
     maxTurns: CLAUDE_MAX_TURNS,
     persistSession: false,
   };
+
+  const startTime = new Date();
+  const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt ?? 0, { model, startTime });
+
+  span?.logMessage("user", prompt);
 
   let fullResponse = "";
 
   for await (const msg of query({ prompt, options })) {
     if (msg.type === "assistant") {
-      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string }> } };
+      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
       for (const block of message.message.content) {
         if (block.type === "text" && block.text) {
           fullResponse += block.text;
+          convLog.logAssistantText(block.text);
+          span?.logMessage("assistant", block.text);
+          if (shouldLog("verbose", level)) {
+            log("EVALUATOR", block.text.slice(0, 200));
+          }
         } else if (block.type === "tool_use" && block.name) {
-          log("EVALUATOR", `  Tool: ${block.name}`);
+          convLog.logToolUse(block.name, block.input);
+          span?.logToolCall(block.name, block.input);
+          if (shouldLog("normal", level)) {
+            log("EVALUATOR", `  Tool: ${block.name}`);
+          }
         }
       }
+    } else if (msg.type === "tool_use_summary") {
+      const summary = msg as { summary?: string };
+      convLog.logToolResult(summary.summary ?? "");
     } else if (msg.type === "result") {
       log("EVALUATOR", `Evaluation complete for sprint ${sprint}`);
     }
   }
 
+  const duration = Date.now() - startTime.getTime();
+  await convLog.finalize(duration);
+
   const evalResult = parseEvalResult(fullResponse, contract, passThreshold);
 
-  const passedCount = evalResult.feedback.filter((f) => f.score >= passThreshold).length;
-  const totalCount = evalResult.feedback.length;
-  const verdict = evalResult.passed ? "PASSED" : "FAILED";
-  log("EVALUATOR", `Sprint ${sprint}: ${verdict} (${passedCount}/${totalCount} criteria passed)`);
+  span?.end({ result: evalResult.passed ? "passed" : "failed", scores: evalResult.scores });
 
-  for (const item of evalResult.feedback) {
-    const status = item.score >= passThreshold ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m";
-    log("EVALUATOR", `  [${status}] ${item.criterion}: ${item.score}/10 - ${item.details.slice(0, 100)}`);
+  if (shouldLog("normal", level)) {
+    const passedCount = evalResult.feedback.filter((f) => f.score >= passThreshold).length;
+    const totalCount = evalResult.feedback.length;
+    const verdict = evalResult.passed ? "PASSED" : "FAILED";
+    log("EVALUATOR", `Sprint ${sprint}: ${verdict} (${passedCount}/${totalCount} criteria passed)`);
+
+    for (const item of evalResult.feedback) {
+      const status = item.score >= passThreshold ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m";
+      log("EVALUATOR", `  [${status}] ${item.criterion}: ${item.score}/10 - ${item.details.slice(0, 100)}`);
+    }
+  } else {
+    // quiet mode: just show pass/fail
+    const verdict = evalResult.passed ? "PASSED" : "FAILED";
+    log("EVALUATOR", `Sprint ${sprint}: ${verdict}`);
   }
 
   return evalResult;
@@ -74,10 +113,9 @@ function parseEvalResult(
   contract: SprintContract,
   passThreshold: number,
 ): EvalResult {
-  // Try multiple strategies to extract JSON from the response
   const candidates: string[] = [];
 
-  // Strategy 1: Look for the LAST JSON code block (most likely the final answer)
+  // Strategy 1: Look for the LAST JSON code block
   const codeBlocks = [...response.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
   for (const match of codeBlocks.reverse()) {
     if (match[1]) candidates.push(match[1].trim());
@@ -94,7 +132,6 @@ function parseEvalResult(
     try {
       const parsed = JSON.parse(candidate) as EvalResult;
       if (parsed.feedback && Array.isArray(parsed.feedback)) {
-        // Recalculate passed based on threshold
         parsed.passed = parsed.feedback.every((f) => f.score >= passThreshold);
         return parsed;
       }

@@ -33,7 +33,7 @@ const config: HarnessConfig = {
 };
 
 logDivider();
-log("HARNESS", "ADVERSARIAL DEV - Codex SDK Harness");
+log("HARNESS", "ADHD - Codex SDK Harness");
 log("HARNESS", `Prompt: "${userPrompt}"`);
 logDivider();
 

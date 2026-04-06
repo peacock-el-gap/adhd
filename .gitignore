@@ -44,3 +44,9 @@ __pycache__/
 
 # Runtime workspace directories
 workspace/
+
+# Temporarty project files
+__tmp/
+
+# Claude Code
+.claude/settings.local.json

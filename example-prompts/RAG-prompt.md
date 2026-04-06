@@ -1,3 +1,5 @@
+> This is an original example prompt from https://github.com/coleam00/adversarial-dev
+
 Build a full-stack RAG (Retrieval-Augmented Generation) chat application that looks and feels like a premium AI chat platform (similar to ChatGPT or Claude.ai). The app should allow users to ask questions over ingested YouTube video content from a creator's channel, with full conversation management and history.
 
 ## Tech Stack

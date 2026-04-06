@@ -1,43 +1,32 @@
-import { resolve } from "path";
-import { readFile } from "fs/promises";
+import { parseCli, loadHarnessEnv, resolveConfig } from "../shared/config.ts";
+import { log, logError, logDivider, setDisplayTimezone } from "../shared/logger.ts";
 import { runHarness } from "./harness.ts";
-import { DEFAULT_CONFIG } from "../shared/config.ts";
-import { log, logError, logDivider } from "../shared/logger.ts";
-import type { HarnessConfig } from "../shared/types.ts";
-
-let userPrompt: string | undefined;
-
-const arg = process.argv[2];
-if (arg === "--file" || arg === "-f") {
-  const filePath = process.argv[3];
-  if (!filePath) {
-    console.error("Error: --file requires a path argument");
-    process.exit(1);
-  }
-  userPrompt = await readFile(resolve(filePath), "utf-8");
-} else {
-  userPrompt = arg;
-}
-
-if (!userPrompt) {
-  console.error("Usage: bun run claude-harness/index.ts <prompt>");
-  console.error('       bun run claude-harness/index.ts --file <path-to-prompt.md>');
-  console.error('Example: bun run claude-harness/index.ts "Build a task manager with REST API and dashboard"');
-  process.exit(1);
-}
-
-const config: HarnessConfig = {
-  ...DEFAULT_CONFIG,
-  userPrompt,
-  workDir: resolve("workspace/claude"),
-};
-
-logDivider();
-log("HARNESS", "ADVERSARIAL DEV - Claude Agent SDK Harness");
-log("HARNESS", `Prompt: "${userPrompt}"`);
-logDivider();
 
 try {
+  const cli = parseCli();
+
+  // Resolve project dir early so we can load .harness/.env
+  const projectDir = cli.project ? (await import("path")).resolve(cli.project) : process.cwd();
+  loadHarnessEnv(projectDir);
+
+  const config = resolveConfig(cli);
+
+  // Configure timezone for terminal display
+  if (config.tzDisplay) {
+    setDisplayTimezone(config.tzDisplay);
+  }
+
+  logDivider();
+  log("HARNESS", "ADHD - Claude Agent SDK Harness");
+  if (config.userPrompt) {
+    log("HARNESS", `Prompt: "${config.userPrompt.slice(0, 120)}${config.userPrompt.length > 120 ? "..." : ""}"`);
+  }
+  log("HARNESS", `Mode: ${config.isGreenfield ? "greenfield" : "existing project"} | Project: ${config.workDir}`);
+  if (config.isResume) {
+    log("HARNESS", "Resuming from checkpoint");
+  }
+  logDivider();
+
   const result = await runHarness(config);
 
   logDivider();
