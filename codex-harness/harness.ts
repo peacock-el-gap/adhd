@@ -1,30 +1,19 @@
 import { Codex } from "@openai/codex-sdk";
-import {
-  CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
-  CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
-} from "../shared/prompts.ts";
 import { CODEX_MODEL, CODEX_NETWORK_ACCESS } from "../shared/config.ts";
-import { log, logError, logDivider } from "../shared/logger.ts";
-import {
-  initWorkspace,
-  writeSpec,
-  readSpec,
-  writeContract,
-  writeFeedback,
-  writeProgress,
-} from "../shared/files.ts";
+import { initWorkspace, readSpec, writeContract, writeFeedback, writeProgress, writeSpec } from "../shared/files.ts";
+import { log, logDivider, logError } from "../shared/logger.ts";
+import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
 import type {
-  HarnessConfig,
-  SprintContract,
   EvalResult,
+  HarnessConfig,
   HarnessProgress,
   HarnessResult,
+  SprintContract,
   SprintResult,
 } from "../shared/types.ts";
-
-import { runPlanner } from "./planner.ts";
-import { runGenerator } from "./generator.ts";
 import { runEvaluator } from "./evaluator.ts";
+import { runGenerator } from "./generator.ts";
+import { runPlanner } from "./planner.ts";
 
 export async function runHarness(config: HarnessConfig): Promise<HarnessResult> {
   const startTime = Date.now();
@@ -32,7 +21,10 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   log("HARNESS", "Initializing Codex SDK harness");
   log("HARNESS", `Work directory: ${config.workDir}`);
-  log("HARNESS", `Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`);
+  log(
+    "HARNESS",
+    `Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`,
+  );
 
   await initWorkspace(config.workDir);
 
@@ -66,9 +58,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   const sprintNumbers = Array.from(spec.matchAll(/sprint\s+(\d+)/gi))
     .map((m) => parseInt(m[1]!, 10))
     .filter((n) => n > 0 && n <= config.maxSprints);
-  const totalSprints = sprintNumbers.length > 0
-    ? Math.min(Math.max(...sprintNumbers), config.maxSprints)
-    : 3; // Default to 3 if no sprint numbers found
+  const totalSprints = sprintNumbers.length > 0 ? Math.min(Math.max(...sprintNumbers), config.maxSprints) : 3; // Default to 3 if no sprint numbers found
 
   progress.totalSprints = totalSprints;
   log("HARNESS", `Planner produced ${totalSprints} sprints`);
@@ -154,11 +144,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   return { success: allPassed, sprints: results, totalDurationMs: totalDuration };
 }
 
-async function negotiateContract(
-  workDir: string,
-  spec: string,
-  sprintNumber: number,
-): Promise<SprintContract> {
+async function negotiateContract(workDir: string, spec: string, sprintNumber: number): Promise<SprintContract> {
   const codex = new Codex();
 
   // Generator proposes contract
@@ -215,29 +201,26 @@ function parseContract(text: string, sprintNumber: number): SprintContract {
       // Try next candidate
     }
   }
-
-  {
-    logError("HARNESS", "Failed to parse contract JSON, creating default");
-    return {
-      sprintNumber,
-      features: [`Sprint ${sprintNumber} features`],
-      criteria: [
-        {
-          name: "basic_functionality",
-          description: "Core features for this sprint are implemented and working",
-          threshold: 7,
-        },
-        {
-          name: "code_quality",
-          description: "Code is clean, well-structured, and follows best practices",
-          threshold: 7,
-        },
-        {
-          name: "error_handling",
-          description: "Errors are handled gracefully with appropriate user feedback",
-          threshold: 7,
-        },
-      ],
-    };
-  }
+  logError("HARNESS", "Failed to parse contract JSON, creating default");
+  return {
+    sprintNumber,
+    features: [`Sprint ${sprintNumber} features`],
+    criteria: [
+      {
+        name: "basic_functionality",
+        description: "Core features for this sprint are implemented and working",
+        threshold: 7,
+      },
+      {
+        name: "code_quality",
+        description: "Code is clean, well-structured, and follows best practices",
+        threshold: 7,
+      },
+      {
+        name: "error_handling",
+        description: "Errors are handled gracefully with appropriate user feedback",
+        threshold: 7,
+      },
+    ],
+  };
 }

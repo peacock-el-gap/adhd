@@ -1,9 +1,9 @@
-import { resolve } from "path";
 import { readFile } from "fs/promises";
-import { runHarness } from "./harness.ts";
+import { resolve } from "path";
 import { DEFAULT_CONFIG } from "../shared/config.ts";
-import { log, logError, logDivider } from "../shared/logger.ts";
+import { log, logDivider, logError } from "../shared/logger.ts";
 import type { HarnessConfig } from "../shared/types.ts";
+import { runHarness } from "./harness.ts";
 
 let userPrompt: string | undefined;
 
@@ -21,7 +21,7 @@ if (arg === "--file" || arg === "-f") {
 
 if (!userPrompt) {
   console.error("Usage: bun run codex-harness/index.ts <prompt>");
-  console.error('       bun run codex-harness/index.ts --file <path-to-prompt.md>');
+  console.error("       bun run codex-harness/index.ts --file <path-to-prompt.md>");
   console.error('Example: bun run codex-harness/index.ts "Build a task manager with REST API and dashboard"');
   process.exit(1);
 }

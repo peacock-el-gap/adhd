@@ -1,11 +1,11 @@
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { buildGeneratorPrompt } from "../shared/prompts.ts";
-import { CLAUDE_MODEL, CLAUDE_MAX_TURNS } from "../shared/config.ts";
+import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
+import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logError, shouldLog } from "../shared/logger.ts";
-import { createConversationLog } from "../shared/conversation-logger.ts";
-import type { SprintContract, EvalResult, LogLevel } from "../shared/types.ts";
+import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
+import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 
 export async function runGenerator(
   workDir: string,
@@ -20,7 +20,10 @@ export async function runGenerator(
 ): Promise<{ response: string; sessionId?: string }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
-  log("GENERATOR", `Sprint ${sprint} (${previousFeedback ? "retry" : "initial"}) - Building: ${contract.features.join(", ")}`);
+  log(
+    "GENERATOR",
+    `Sprint ${sprint} (${previousFeedback ? "retry" : "initial"}) - Building: ${contract.features.join(", ")}`,
+  );
 
   const systemPrompt = buildGeneratorPrompt({ workDir, isGreenfield });
   const hDir = harnessDir(workDir);
@@ -59,7 +62,9 @@ export async function runGenerator(
 
   for await (const msg of query({ prompt, options })) {
     if (msg.type === "assistant") {
-      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
+      const message = msg as {
+        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
+      };
       for (const block of message.message.content) {
         if (block.type === "text" && block.text) {
           fullResponse += block.text;
@@ -75,7 +80,10 @@ export async function runGenerator(
             log("GENERATOR", `  Tool: ${block.name}`);
           }
           if (shouldLog("verbose", level) && block.input) {
-            const summary = String(typeof block.input === "object" ? JSON.stringify(block.input) : block.input).slice(0, 120);
+            const summary = String(typeof block.input === "object" ? JSON.stringify(block.input) : block.input).slice(
+              0,
+              120,
+            );
             log("GENERATOR", `    ${summary}`);
           }
         }

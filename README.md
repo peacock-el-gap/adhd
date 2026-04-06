@@ -38,7 +38,7 @@ bun install
 
 ### Claude harness
 
-> Claude haness supports:
+> Claude harness supports:
 > - running against an existing project
 > - building a new project from scratch
 > - loading prompt from a file
@@ -111,7 +111,9 @@ bun run /some-directory/harness/claude-harness/index.ts \
 
 The Codex harness uses the original greenfield-only workflow, building into `workspace/codex/app/`.
 
-> Codex haness DOES NOT support:
+> **Note:** The Codex harness is frozen — it works as-is but no new features are planned. The Claude harness is the actively developed implementation.
+>
+> Codex harness DOES NOT support:
 > - running against an existing project
 > - resuming after interruption
 

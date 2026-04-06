@@ -3,8 +3,8 @@ import type { LogLevel } from "./types.ts";
 type AgentRole = "HARNESS" | "PLANNER" | "GENERATOR" | "EVALUATOR";
 
 const COLORS: Record<AgentRole, string> = {
-  HARNESS: "\x1b[36m",   // cyan
-  PLANNER: "\x1b[35m",   // magenta
+  HARNESS: "\x1b[36m", // cyan
+  PLANNER: "\x1b[35m", // magenta
   GENERATOR: "\x1b[32m", // green
   EVALUATOR: "\x1b[33m", // yellow
 };

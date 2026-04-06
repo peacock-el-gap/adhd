@@ -1,8 +1,8 @@
 import { Codex } from "@openai/codex-sdk";
-import { GENERATOR_SYSTEM_PROMPT } from "../shared/prompts.ts";
 import { CODEX_MODEL, CODEX_NETWORK_ACCESS } from "../shared/config.ts";
 import { log, logError } from "../shared/logger.ts";
-import type { SprintContract, EvalResult } from "../shared/types.ts";
+import { GENERATOR_SYSTEM_PROMPT } from "../shared/prompts.ts";
+import type { EvalResult, SprintContract } from "../shared/types.ts";
 
 export async function runGenerator(
   workDir: string,

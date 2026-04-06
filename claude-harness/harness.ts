@@ -1,36 +1,32 @@
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { execSync } from "child_process";
 import { join } from "path";
-import {
-  CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
-  CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
-} from "../shared/prompts.ts";
 import { CLAUDE_MODEL } from "../shared/config.ts";
-import { log, logError, logDivider, setDisplayTimezone, shouldLog } from "../shared/logger.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
-import { initTracing, type Tracer, type Span } from "../shared/tracing.ts";
 import {
   initWorkspace,
-  writeSpec,
+  readContract,
+  readProgress,
   readSpec,
   writeContract,
-  readContract,
   writeFeedback,
   writeProgress,
-  readProgress,
+  writeSpec,
 } from "../shared/files.ts";
+import { log, logDivider, logError, setDisplayTimezone, shouldLog } from "../shared/logger.ts";
+import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
+import { initTracing, type Span, type Tracer } from "../shared/tracing.ts";
 import type {
-  HarnessConfig,
-  SprintContract,
   EvalResult,
+  HarnessConfig,
   HarnessProgress,
   HarnessResult,
+  SprintContract,
   SprintResult,
 } from "../shared/types.ts";
-
-import { runPlanner } from "./planner.ts";
-import { runGenerator } from "./generator.ts";
 import { runEvaluator } from "./evaluator.ts";
+import { runGenerator } from "./generator.ts";
+import { runPlanner } from "./planner.ts";
 
 const TRANSIENT_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
 
@@ -50,7 +46,10 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   log("HARNESS", "Initializing Claude Agent SDK harness");
   log("HARNESS", `Work directory: ${config.workDir}`);
-  log("HARNESS", `Model: ${model} | Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`);
+  log(
+    "HARNESS",
+    `Model: ${model} | Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`,
+  );
 
   // --- Resume path ---
   if (config.isResume) {
@@ -83,12 +82,21 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   // Count sprints from the spec (look for "Sprint N" patterns)
   const sprintMatches = spec.match(/##\s*Sprint\s+\d+/gi);
-  const totalSprints = sprintMatches
-    ? Math.min(sprintMatches.length, config.maxSprints)
-    : config.maxSprints;
+  const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
   progress.totalSprints = totalSprints;
 
-  const result = await runSprintLoop(config, model, isGreenfield, spec, progress, [], 1, totalSprints, startTime, tracer);
+  const result = await runSprintLoop(
+    config,
+    model,
+    isGreenfield,
+    spec,
+    progress,
+    [],
+    1,
+    totalSprints,
+    startTime,
+    tracer,
+  );
   await tracer.flush();
   return result;
 }
@@ -128,14 +136,21 @@ async function resumeHarness(
   }
 
   const startSprint = progress.completedSprints + 1;
-  return runSprintLoop(config, model, isGreenfield, spec, progress, results, startSprint, progress.totalSprints, startTime, tracer);
+  return runSprintLoop(
+    config,
+    model,
+    isGreenfield,
+    spec,
+    progress,
+    results,
+    startSprint,
+    progress.totalSprints,
+    startTime,
+    tracer,
+  );
 }
 
-async function revertToCheckpoint(
-  workDir: string,
-  isGreenfield: boolean,
-  progress: HarnessProgress,
-): Promise<void> {
+async function revertToCheckpoint(workDir: string, isGreenfield: boolean, progress: HarnessProgress): Promise<void> {
   const gitDir = isGreenfield ? join(workDir, "app") : workDir;
   const sha = progress.lastPassedCommitSha!;
 
@@ -225,7 +240,8 @@ async function runSprintLoop(
       const generatorSpan = attemptSpan.startChild("generator", { model, sprint, attempt: retry });
       try {
         await withTransientRetry(
-          () => runGenerator(config.workDir, spec, contract, lastEval, model, isGreenfield, logLevel, generatorSpan, retry),
+          () =>
+            runGenerator(config.workDir, spec, contract, lastEval, model, isGreenfield, logLevel, generatorSpan, retry),
           "generator",
         );
       } catch (err) {
@@ -242,7 +258,17 @@ async function runSprintLoop(
       const evaluatorSpan = attemptSpan.startChild("evaluator", { model, sprint, attempt: retry });
       try {
         lastEval = await withTransientRetry(
-          () => runEvaluator(config.workDir, contract, config.passThreshold, model, isGreenfield, logLevel, retry, evaluatorSpan),
+          () =>
+            runEvaluator(
+              config.workDir,
+              contract,
+              config.passThreshold,
+              model,
+              isGreenfield,
+              logLevel,
+              retry,
+              evaluatorSpan,
+            ),
           "evaluator",
         );
       } catch (err) {
@@ -299,7 +325,10 @@ async function runSprintLoop(
       }));
       await writeProgress(config.workDir, progress);
 
-      log("HARNESS", `Sprint ${sprint} PASSED — checkpoint saved. To resume later: bun run claude-harness/index.ts --resume`);
+      log(
+        "HARNESS",
+        `Sprint ${sprint} PASSED — checkpoint saved. To resume later: bun run claude-harness/index.ts --resume`,
+      );
     } else {
       progress.status = "failed";
       progress.sprintResults = results.map(({ sprintNumber, passed, attempts, evalResult }) => ({
@@ -422,7 +451,9 @@ async function negotiateContract(
   let proposalText = "";
   for await (const msg of query({ prompt: proposalPrompt, options: proposalOptions })) {
     if (msg.type === "assistant") {
-      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
+      const message = msg as {
+        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
+      };
       for (const block of message.message.content) {
         if (block.type === "text" && block.text) {
           proposalText += block.text;
@@ -456,7 +487,9 @@ async function negotiateContract(
   let reviewText = "";
   for await (const msg of query({ prompt: reviewPrompt, options: reviewOptions })) {
     if (msg.type === "assistant") {
-      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
+      const message = msg as {
+        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
+      };
       for (const block of message.message.content) {
         if (block.type === "text" && block.text) {
           reviewText += block.text;

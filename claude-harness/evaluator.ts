@@ -1,10 +1,10 @@
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
-import { buildEvaluatorPrompt } from "../shared/prompts.ts";
-import { CLAUDE_MODEL, CLAUDE_MAX_TURNS } from "../shared/config.ts";
-import { log, logError, shouldLog } from "../shared/logger.ts";
+import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
-import type { SprintContract, EvalResult, LogLevel } from "../shared/types.ts";
+import { log, logError, shouldLog } from "../shared/logger.ts";
+import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
+import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 
 export async function runEvaluator(
   workDir: string,
@@ -57,7 +57,9 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
 
   for await (const msg of query({ prompt, options })) {
     if (msg.type === "assistant") {
-      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
+      const message = msg as {
+        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
+      };
       for (const block of message.message.content) {
         if (block.type === "text" && block.text) {
           fullResponse += block.text;
@@ -108,11 +110,7 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   return evalResult;
 }
 
-function parseEvalResult(
-  response: string,
-  contract: SprintContract,
-  passThreshold: number,
-): EvalResult {
+function parseEvalResult(response: string, contract: SprintContract, passThreshold: number): EvalResult {
   const candidates: string[] = [];
 
   // Strategy 1: Look for the LAST JSON code block

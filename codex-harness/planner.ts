@@ -1,7 +1,7 @@
 import { Codex } from "@openai/codex-sdk";
-import { PLANNER_SYSTEM_PROMPT } from "../shared/prompts.ts";
 import { CODEX_MODEL, CODEX_NETWORK_ACCESS } from "../shared/config.ts";
 import { log, logError } from "../shared/logger.ts";
+import { PLANNER_SYSTEM_PROMPT } from "../shared/prompts.ts";
 
 export async function runPlanner(userPrompt: string, workDir: string): Promise<string> {
   log("PLANNER", `Starting planning for: "${userPrompt}"`);

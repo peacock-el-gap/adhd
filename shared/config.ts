@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
-import { resolve, join } from "path";
-import { readFileSync, existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
+import { join, resolve } from "path";
 import type { HarnessConfig, LogLevel } from "./types.ts";
 
 // --- Backward-compatible exports for codex-harness ---
@@ -117,25 +117,26 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
   }
   // --resume doesn't require a prompt (it reads spec from disk)
   if (!userPrompt && !cli.resume) {
-    throw new Error(
-      "A prompt is required. Provide one as a positional argument, with --file, or use --resume.",
-    );
+    throw new Error("A prompt is required. Provide one as a positional argument, with --file, or use --resume.");
   }
 
   // Resolve individual settings: CLI > env > default
   const model = cli.model ?? process.env.CLAUDE_MODEL ?? CLAUDE_MODEL;
 
-  const maxSprints = cli.maxSprints
-    ?? (process.env.MAX_SPRINTS ? parseInt(process.env.MAX_SPRINTS, 10) : undefined)
-    ?? DEFAULT_CONFIG.maxSprints;
+  const maxSprints =
+    cli.maxSprints ??
+    (process.env.MAX_SPRINTS ? parseInt(process.env.MAX_SPRINTS, 10) : undefined) ??
+    DEFAULT_CONFIG.maxSprints;
 
-  const maxRetriesPerSprint = cli.maxRetries
-    ?? (process.env.MAX_RETRIES ? parseInt(process.env.MAX_RETRIES, 10) : undefined)
-    ?? DEFAULT_CONFIG.maxRetriesPerSprint;
+  const maxRetriesPerSprint =
+    cli.maxRetries ??
+    (process.env.MAX_RETRIES ? parseInt(process.env.MAX_RETRIES, 10) : undefined) ??
+    DEFAULT_CONFIG.maxRetriesPerSprint;
 
-  const passThreshold = cli.threshold
-    ?? (process.env.PASS_THRESHOLD ? parseInt(process.env.PASS_THRESHOLD, 10) : undefined)
-    ?? DEFAULT_CONFIG.passThreshold;
+  const passThreshold =
+    cli.threshold ??
+    (process.env.PASS_THRESHOLD ? parseInt(process.env.PASS_THRESHOLD, 10) : undefined) ??
+    DEFAULT_CONFIG.passThreshold;
 
   // Determine log level
   let logLevel: LogLevel = "normal";

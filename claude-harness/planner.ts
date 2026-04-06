@@ -1,18 +1,15 @@
-import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { buildPlannerPrompt } from "../shared/prompts.ts";
-import { CLAUDE_MODEL, CLAUDE_MAX_TURNS } from "../shared/config.ts";
+import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
+import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logError, shouldLog } from "../shared/logger.ts";
-import { createConversationLog } from "../shared/conversation-logger.ts";
-import type { HarnessConfig } from "../shared/types.ts";
+import { buildPlannerPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
+import type { HarnessConfig } from "../shared/types.ts";
 
-export async function runPlanner(
-  config: HarnessConfig,
-  span?: Span,
-): Promise<string> {
+export async function runPlanner(config: HarnessConfig, span?: Span): Promise<string> {
   const { userPrompt, workDir } = config;
   const isGreenfield = config.isGreenfield ?? false;
   const interactive = config.interactive ?? true;
@@ -25,7 +22,8 @@ export async function runPlanner(
   let systemPrompt = buildPlannerPrompt({ workDir, isGreenfield: greenfield });
 
   if (!interactive) {
-    systemPrompt += "\n\nDo not ask questions. Make your best judgment on any ambiguous points and document your assumptions in the spec.";
+    systemPrompt +=
+      "\n\nDo not ask questions. Make your best judgment on any ambiguous points and document your assumptions in the spec.";
   }
 
   const hDir = harnessDir(workDir);
@@ -92,7 +90,9 @@ export async function runPlanner(
 
   for await (const msg of query({ prompt: fullPrompt, options })) {
     if (msg.type === "assistant") {
-      const message = msg as { message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> } };
+      const message = msg as {
+        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
+      };
       for (const block of message.message.content) {
         if (block.type === "text" && block.text) {
           fullResponse += block.text;

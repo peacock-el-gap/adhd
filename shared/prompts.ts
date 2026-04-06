@@ -103,9 +103,7 @@ When evaluation feedback is provided in your prompt:
 }
 
 export function buildEvaluatorPrompt(ctx: PromptContext): string {
-  const appLocation = ctx.isGreenfield
-    ? `the \`app/\` directory`
-    : `the project root directory`;
+  const appLocation = ctx.isGreenfield ? `the \`app/\` directory` : `the project root directory`;
 
   return `You are a skeptical QA engineer. Your job is to rigorously test an application against sprint contract criteria and produce honest, detailed scores.
 
@@ -163,8 +161,9 @@ A sprint PASSES only if ALL criteria score at or above the threshold (default: 7
 If ANY criterion falls below the threshold, the sprint FAILS and work goes back to the generator.`;
 }
 
-// --- Static prompt constants (backward compat for codex-harness) ---
-// These use the old hardcoded app/ references.
+// --- Static prompt constants: consumed by codex-harness (frozen). ---
+// Do not modify without checking codex-harness compatibility.
+// These use hardcoded app/ references matching the codex-harness workflow.
 
 export const PLANNER_SYSTEM_PROMPT = `You are a product architect. Your job is to take a brief user description and produce a comprehensive product specification.
 

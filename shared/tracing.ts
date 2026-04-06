@@ -19,12 +19,16 @@ export interface Span {
 const noopSpan: Span = {
   logMessage() {},
   logToolCall() {},
-  startChild() { return noopSpan; },
+  startChild() {
+    return noopSpan;
+  },
   end() {},
 };
 
 const noopTracer: Tracer = {
-  startSpan() { return noopSpan; },
+  startSpan() {
+    return noopSpan;
+  },
   async flush() {},
 };
 

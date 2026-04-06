@@ -1,8 +1,8 @@
-import { mkdir, readFile, writeFile, access, rm, readdir, unlink } from "fs/promises";
-import { join } from "path";
-import { existsSync, readFileSync } from "fs";
 import { execSync } from "child_process";
-import type { SprintContract, EvalResult, HarnessProgress } from "./types.ts";
+import { existsSync, readFileSync } from "fs";
+import { access, mkdir, readdir, readFile, rm, unlink, writeFile } from "fs/promises";
+import { join } from "path";
+import type { EvalResult, HarnessProgress, SprintContract } from "./types.ts";
 
 /** Resolve the .harness metadata directory for a given project root. */
 export function harnessDir(workDir: string): string {
@@ -23,7 +23,7 @@ export async function initWorkspace(
   options?: { greenfield?: boolean; resume?: boolean },
 ): Promise<void> {
   // Default to greenfield when called without options (backward compat for codex-harness)
-  const greenfield = options?.greenfield ?? (options === undefined);
+  const greenfield = options?.greenfield ?? options === undefined;
   const resume = options?.resume ?? false;
 
   const hDir = harnessDir(workDir);
@@ -142,11 +142,7 @@ export async function writeFeedback(
   await writeFile(path, JSON.stringify(result, null, 2), "utf-8");
 }
 
-export async function readFeedback(
-  workDir: string,
-  sprintNumber: number,
-  round: number,
-): Promise<EvalResult> {
+export async function readFeedback(workDir: string, sprintNumber: number, round: number): Promise<EvalResult> {
   const path = join(harnessDir(workDir), "feedback", `sprint-${sprintNumber}-round-${round}.json`);
   const raw = await readFile(path, "utf-8");
   try {

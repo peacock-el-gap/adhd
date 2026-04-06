@@ -1,8 +1,8 @@
 import { Codex } from "@openai/codex-sdk";
-import { EVALUATOR_SYSTEM_PROMPT } from "../shared/prompts.ts";
 import { CODEX_MODEL, CODEX_NETWORK_ACCESS } from "../shared/config.ts";
 import { log, logError } from "../shared/logger.ts";
-import type { SprintContract, EvalResult } from "../shared/types.ts";
+import { EVALUATOR_SYSTEM_PROMPT } from "../shared/prompts.ts";
+import type { EvalResult, SprintContract } from "../shared/types.ts";
 
 export async function runEvaluator(
   workDir: string,
@@ -55,11 +55,7 @@ Examine the application in the \`app/\` directory. Read the code, run it if poss
   return evalResult;
 }
 
-function parseEvalResult(
-  response: string,
-  contract: SprintContract,
-  passThreshold: number,
-): EvalResult {
+function parseEvalResult(response: string, contract: SprintContract, passThreshold: number): EvalResult {
   // Try multiple strategies to extract JSON from the response
   const candidates: string[] = [];
 

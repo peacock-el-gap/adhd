@@ -1,5 +1,5 @@
-import { parseCli, loadHarnessEnv, resolveConfig } from "../shared/config.ts";
-import { log, logError, logDivider, setDisplayTimezone } from "../shared/logger.ts";
+import { loadHarnessEnv, parseCli, resolveConfig } from "../shared/config.ts";
+import { log, logDivider, logError, setDisplayTimezone } from "../shared/logger.ts";
 import { runHarness } from "./harness.ts";
 
 try {

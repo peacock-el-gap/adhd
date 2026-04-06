@@ -65,11 +65,12 @@ export function createConversationLog(
       const lines: string[] = [];
 
       // Header
-      const title = sprint != null
-        ? attempt != null
-          ? `${agentRole} — Sprint ${sprint}, Attempt ${attempt}`
-          : `${agentRole} — Sprint ${sprint}`
-        : agentRole;
+      const title =
+        sprint != null
+          ? attempt != null
+            ? `${agentRole} — Sprint ${sprint}, Attempt ${attempt}`
+            : `${agentRole} — Sprint ${sprint}`
+          : agentRole;
       lines.push(`# ${title}`);
       lines.push("");
 
@@ -98,7 +99,13 @@ export function createConversationLog(
               lines.push(`> ${line}`);
             }
             lines.push(`> \`\`\``);
-          } else if (entry.toolName === "Write" || entry.toolName === "Read" || entry.toolName === "Edit" || entry.toolName === "Glob" || entry.toolName === "Grep") {
+          } else if (
+            entry.toolName === "Write" ||
+            entry.toolName === "Read" ||
+            entry.toolName === "Edit" ||
+            entry.toolName === "Glob" ||
+            entry.toolName === "Grep"
+          ) {
             lines.push(`> **${entry.toolName}** ${entry.content}`);
           } else {
             lines.push(`> **${entry.toolName}**`);
