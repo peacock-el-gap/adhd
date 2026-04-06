@@ -109,6 +109,46 @@ describe("parseCli", () => {
     expect(cli.editor).toBeUndefined();
     expect(cli.gateTimeout).toBeUndefined();
   });
+
+  // Phase B CLI tests
+  test("parses --dry-run flag", () => {
+    const cli = parseCli(["--dry-run", "test"]);
+    expect(cli.dryRun).toBe(true);
+  });
+
+  test("--dry-run defaults to false", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.dryRun).toBe(false);
+  });
+
+  test("parses --context flag (single)", () => {
+    const cli = parseCli(["--context", "api-spec.yaml", "test"]);
+    expect(cli.context).toEqual(["api-spec.yaml"]);
+  });
+
+  test("parses --context flag (multiple)", () => {
+    const cli = parseCli(["--context", "api-spec.yaml", "--context", "db-schema.sql", "test"]);
+    expect(cli.context).toEqual(["api-spec.yaml", "db-schema.sql"]);
+  });
+
+  test("context defaults to undefined", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.context).toBeUndefined();
+  });
+
+  test("parses per-agent model flags", () => {
+    const cli = parseCli(["--model-planner", "claude-sonnet-4-6", "--model-generator", "claude-opus-4-6", "--model-evaluator", "claude-haiku-4-5-20251001", "test"]);
+    expect(cli.modelPlanner).toBe("claude-sonnet-4-6");
+    expect(cli.modelGenerator).toBe("claude-opus-4-6");
+    expect(cli.modelEvaluator).toBe("claude-haiku-4-5-20251001");
+  });
+
+  test("per-agent model flags default to undefined", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.modelPlanner).toBeUndefined();
+    expect(cli.modelGenerator).toBeUndefined();
+    expect(cli.modelEvaluator).toBeUndefined();
+  });
 });
 
 // --- loadHarnessEnv ---
@@ -164,27 +204,27 @@ describe("loadHarnessEnv", () => {
 
 describe("resolveConfig", () => {
   test("throws when no prompt and not resuming", () => {
-    expect(() => resolveConfig({ greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false })).toThrow("A prompt is required");
+    expect(() => resolveConfig({ greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false })).toThrow("A prompt is required");
   });
 
   test("allows missing prompt when resuming", () => {
-    const config = resolveConfig({ resume: true, greenfield: false, verbose: false, quiet: false, noInteractive: false, debug: false });
+    const config = resolveConfig({ resume: true, greenfield: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false });
     expect(config.isResume).toBe(true);
     expect(config.userPrompt).toBe("");
   });
 
   test("resolves log level from flags", () => {
-    const verbose = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: true, quiet: false, noInteractive: false, debug: false });
+    const verbose = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: true, quiet: false, noInteractive: false, debug: false, dryRun: false });
     expect(verbose.logLevel).toBe("verbose");
 
-    const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false, debug: false });
+    const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false, debug: false, dryRun: false });
     expect(quiet.logLevel).toBe("quiet");
 
-    const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true });
+    const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true, dryRun: false });
     expect(debug.logLevel).toBe("debug");
   });
 
-  const baseCli = { prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false };
+  const baseCli = { prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false };
 
   test("resolves editor from CLI flag", () => {
     const config = resolveConfig({ ...baseCli, editor: "code --wait" });
@@ -247,6 +287,53 @@ describe("resolveConfig", () => {
       if (prevEditor !== undefined) process.env.ADHD_EDITOR = prevEditor;
       if (prevTimeout !== undefined) process.env.ADHD_GATE_TIMEOUT = prevTimeout;
       if (prevSysEditor !== undefined) process.env.EDITOR = prevSysEditor;
+    }
+  });
+
+  // Phase B resolveConfig tests
+  test("resolves isDryRun from CLI flag", () => {
+    const config = resolveConfig({ ...baseCli, dryRun: true });
+    expect(config.isDryRun).toBe(true);
+  });
+
+  test("isDryRun defaults to false", () => {
+    const config = resolveConfig({ ...baseCli });
+    expect(config.isDryRun).toBe(false);
+  });
+
+  test("resolves contextFiles from CLI", () => {
+    const config = resolveConfig({ ...baseCli, context: ["api.yaml", "schema.sql"] });
+    expect(config.contextFiles).toEqual(["api.yaml", "schema.sql"]);
+  });
+
+  test("resolves per-agent models from CLI flags", () => {
+    const config = resolveConfig({ ...baseCli, modelPlanner: "claude-sonnet-4-6", modelGenerator: "claude-opus-4-6" });
+    expect(config.modelPlanner).toBe("claude-sonnet-4-6");
+    expect(config.modelGenerator).toBe("claude-opus-4-6");
+    expect(config.modelEvaluator).toBeUndefined();
+  });
+
+  test("resolves per-agent models from env vars", () => {
+    const prev = process.env.MODEL_PLANNER;
+    process.env.MODEL_PLANNER = "claude-haiku-4-5-20251001";
+    try {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.modelPlanner).toBe("claude-haiku-4-5-20251001");
+    } finally {
+      if (prev === undefined) delete process.env.MODEL_PLANNER;
+      else process.env.MODEL_PLANNER = prev;
+    }
+  });
+
+  test("CLI per-agent model takes precedence over env var", () => {
+    const prev = process.env.MODEL_GENERATOR;
+    process.env.MODEL_GENERATOR = "claude-haiku-4-5-20251001";
+    try {
+      const config = resolveConfig({ ...baseCli, modelGenerator: "claude-opus-4-6" });
+      expect(config.modelGenerator).toBe("claude-opus-4-6");
+    } finally {
+      if (prev === undefined) delete process.env.MODEL_GENERATOR;
+      else process.env.MODEL_GENERATOR = prev;
     }
   });
 });

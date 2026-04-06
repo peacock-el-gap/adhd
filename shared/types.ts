@@ -21,6 +21,12 @@ export interface HarnessConfig {
   // Phase A additions
   editor?: string; // resolved from --editor / ADHD_EDITOR / $EDITOR
   gateTimeout?: number; // override all gate timeouts (seconds). 0 = skip all gates.
+  // Phase B additions
+  isDryRun?: boolean; // B1: run planner only, show spec, exit
+  contextFiles?: string[]; // B2: files to inject into planner prompt as reference docs
+  modelPlanner?: string; // B3: per-agent model overrides
+  modelGenerator?: string;
+  modelEvaluator?: string;
 }
 
 export interface SprintContract {

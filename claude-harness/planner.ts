@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
@@ -23,7 +24,7 @@ export async function runPlanner(
 
   log("PLANNER", `Starting planning for: "${userPrompt.slice(0, 100)}${userPrompt.length > 100 ? "..." : ""}"`);
 
-  const model = config.model ?? CLAUDE_MODEL;
+  const model = config.modelPlanner ?? config.model ?? CLAUDE_MODEL;
   const greenfield = isGreenfield;
   let systemPrompt = buildPlannerPrompt({ workDir, isGreenfield: greenfield });
 
@@ -84,7 +85,18 @@ export async function runPlanner(
     };
   }
 
-  let fullPrompt = `IMPORTANT: Your working directory is ${workDir}. Write the spec to ${hDir}/spec.md. Do NOT write files outside of ${workDir}.\n\n${userPrompt}`;
+  // B2: Context injection — prepend reference documents to prompt
+  let promptBody = userPrompt;
+  if (config.contextFiles?.length) {
+    const docs = config.contextFiles.map((f) => {
+      const content = readFileSync(resolve(workDir, f), "utf-8");
+      return `### ${basename(f)}\n\n\`\`\`\n${content}\n\`\`\``;
+    });
+    promptBody = `## Reference Documents\n\n${docs.join("\n\n")}\n\n## Task\n\n${userPrompt}`;
+    log("PLANNER", `Injected ${config.contextFiles.length} context file(s) into prompt`);
+  }
+
+  let fullPrompt = `IMPORTANT: Your working directory is ${workDir}. Write the spec to ${hDir}/spec.md. Do NOT write files outside of ${workDir}.\n\n${promptBody}`;
 
   if (reviseFeedback) {
     fullPrompt += `\n\n## Revision Feedback\n\nThe user reviewed your spec and requests changes:\n\n${reviseFeedback}\n\nRewrite the spec incorporating this feedback.`;

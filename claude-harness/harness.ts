@@ -37,6 +37,9 @@ const TRANSIENT_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
 export async function runHarness(config: HarnessConfig): Promise<HarnessResult> {
   const startTime = Date.now();
   const model = config.model ?? CLAUDE_MODEL;
+  // B3: per-agent model overrides (fall back to base model)
+  const generatorModel = config.modelGenerator ?? model;
+  const evaluatorModel = config.modelEvaluator ?? model;
   const isGreenfield = config.isGreenfield ?? false;
 
   // Configure timezone display for terminal
@@ -50,9 +53,13 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   log("HARNESS", "Initializing Claude Agent SDK harness");
   log("HARNESS", `Work directory: ${config.workDir}`);
+  // B3: show per-agent model overrides if configured
+  const modelInfo = [config.modelPlanner, config.modelGenerator, config.modelEvaluator].some(Boolean)
+    ? `Models: planner=${config.modelPlanner ?? model}, generator=${generatorModel}, evaluator=${evaluatorModel}`
+    : `Model: ${model}`;
   log(
     "HARNESS",
-    `Model: ${model} | Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`,
+    `${modelInfo} | Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`,
   );
 
   // --- Resume path ---
@@ -100,6 +107,15 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   const approvedSpec = await specApprovalGate(config, spec, plannerSpan, usage);
   progress.specApproved = true;
   await writeProgress(config.workDir, progress);
+
+  // B1: Dry-run exits here
+  if (config.isDryRun) {
+    log("HARNESS", "Dry-run complete. Spec approved and saved.");
+    usage.printSummary();
+    await usage.save();
+    await tracer.flush();
+    return { success: true, sprints: [], totalDurationMs: Date.now() - startTime };
+  }
 
   // Count sprints from the (possibly edited) spec
   const sprintMatches = approvedSpec.match(/##\s*Sprint\s+\d+/gi);
@@ -228,6 +244,9 @@ async function runSprintLoop(
 ): Promise<HarnessResult> {
   const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
   const logLevel = config.logLevel ?? "normal";
+  // B3: per-agent model overrides
+  const generatorModel = config.modelGenerator ?? model;
+  const evaluatorModel = config.modelEvaluator ?? model;
 
   for (let sprint = startSprint; sprint <= totalSprints; sprint++) {
     logDivider();
@@ -247,7 +266,7 @@ async function runSprintLoop(
     const negotiationSpan = sprintSpan.startChild("contract-negotiation", { sprint });
     try {
       contract = await withTransientRetry(
-        () => negotiateContract(config.workDir, spec, sprint, model, negotiationSpan, usage),
+        () => negotiateContract(config.workDir, spec, sprint, generatorModel, evaluatorModel, negotiationSpan, usage),
         "contract negotiation",
       );
     } catch (err) {
@@ -282,12 +301,22 @@ async function runSprintLoop(
       progress.retryCount = retry;
       await writeProgress(config.workDir, progress);
 
-      const generatorSpan = attemptSpan.startChild("generator", { model, sprint, attempt: retry });
+      const generatorSpan = attemptSpan.startChild("generator", { model: generatorModel, sprint, attempt: retry });
       let generatorSessionId: string | undefined;
       try {
         const result = await withTransientRetry(
           () =>
-            runGenerator(config.workDir, spec, contract, lastEval, model, isGreenfield, logLevel, generatorSpan, retry),
+            runGenerator(
+              config.workDir,
+              spec,
+              contract,
+              lastEval,
+              generatorModel,
+              isGreenfield,
+              logLevel,
+              generatorSpan,
+              retry,
+            ),
           "generator",
         );
         generatorSessionId = result.sessionId;
@@ -311,7 +340,7 @@ async function runSprintLoop(
             generatorSessionId,
             contract,
             retry > 0,
-            model,
+            generatorModel,
           );
           log("HARNESS", `Commit source: ${lastCommitSource}`);
         } catch (err) {
@@ -323,7 +352,7 @@ async function runSprintLoop(
       progress.status = "evaluating";
       await writeProgress(config.workDir, progress);
 
-      const evaluatorSpan = attemptSpan.startChild("evaluator", { model, sprint, attempt: retry });
+      const evaluatorSpan = attemptSpan.startChild("evaluator", { model: evaluatorModel, sprint, attempt: retry });
       try {
         const evalWithUsage = await withTransientRetry(
           () =>
@@ -331,7 +360,7 @@ async function runSprintLoop(
               config.workDir,
               contract,
               config.passThreshold,
-              model,
+              evaluatorModel,
               isGreenfield,
               logLevel,
               retry,
@@ -624,7 +653,8 @@ async function negotiateContract(
   workDir: string,
   spec: string,
   sprintNumber: number,
-  model: string,
+  proposalModel: string,
+  reviewModel: string,
   parentSpan?: Span,
   usage?: UsageTracker,
 ): Promise<SprintContract> {
@@ -639,12 +669,15 @@ async function negotiateContract(
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     tools: ["Read", "Glob"],
-    model,
+    model: proposalModel,
     maxTurns: 10,
     persistSession: false,
   };
 
-  const convLog = createConversationLog(workDir, "contract-negotiation", sprintNumber, undefined, { model, startTime });
+  const convLog = createConversationLog(workDir, "contract-negotiation", sprintNumber, undefined, {
+    model: proposalModel,
+    startTime,
+  });
 
   let proposalText = "";
   for await (const msg of query({ prompt: proposalPrompt, options: proposalOptions })) {
@@ -698,7 +731,7 @@ async function negotiateContract(
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     tools: ["Read", "Glob"],
-    model,
+    model: reviewModel,
     maxTurns: 10,
     persistSession: false,
   };

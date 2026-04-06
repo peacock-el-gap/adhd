@@ -35,6 +35,12 @@ interface ParsedCli {
   debug: boolean;
   editor?: string;
   gateTimeout?: number;
+  // Phase B additions
+  dryRun: boolean;
+  context?: string[];
+  modelPlanner?: string;
+  modelGenerator?: string;
+  modelEvaluator?: string;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -55,6 +61,12 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       debug: { type: "boolean", default: false },
       editor: { type: "string" },
       "gate-timeout": { type: "string" },
+      // Phase B
+      "dry-run": { type: "boolean", default: false },
+      context: { type: "string", multiple: true },
+      "model-planner": { type: "string" },
+      "model-generator": { type: "string" },
+      "model-evaluator": { type: "string" },
     },
     allowPositionals: true,
     strict: true,
@@ -76,6 +88,12 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     debug: values.debug as boolean,
     editor: values.editor as string | undefined,
     gateTimeout: values["gate-timeout"] ? parseInt(values["gate-timeout"] as string, 10) : undefined,
+    // Phase B
+    dryRun: values["dry-run"] as boolean,
+    context: values.context as string[] | undefined,
+    modelPlanner: values["model-planner"] as string | undefined,
+    modelGenerator: values["model-generator"] as string | undefined,
+    modelEvaluator: values["model-evaluator"] as string | undefined,
   };
 }
 
@@ -176,6 +194,11 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
   const langfuseSecretKey = process.env.LANGFUSE_SECRET_KEY || undefined;
   const langfuseBaseUrl = process.env.LANGFUSE_BASEURL || undefined;
 
+  // Phase B: per-agent model overrides
+  const modelPlanner = cli.modelPlanner ?? process.env.MODEL_PLANNER ?? undefined;
+  const modelGenerator = cli.modelGenerator ?? process.env.MODEL_GENERATOR ?? undefined;
+  const modelEvaluator = cli.modelEvaluator ?? process.env.MODEL_EVALUATOR ?? undefined;
+
   const config: HarnessConfig = {
     userPrompt,
     workDir: projectDir,
@@ -194,6 +217,12 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     langfuseBaseUrl,
     editor,
     gateTimeout,
+    // Phase B
+    isDryRun: cli.dryRun || false,
+    contextFiles: cli.context,
+    modelPlanner,
+    modelGenerator,
+    modelEvaluator,
   };
 
   // Validate
