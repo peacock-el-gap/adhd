@@ -1,3 +1,4 @@
+import { log, logDebug } from "./logger.ts";
 import type { HarnessConfig } from "./types.ts";
 
 // --- Public interfaces (used by agents regardless of whether Langfuse is enabled) ---
@@ -36,6 +37,7 @@ const noopTracer: Tracer = {
 
 export function initTracing(config: HarnessConfig): Tracer {
   if (!config.langfusePublicKey || !config.langfuseSecretKey) {
+    logDebug("HARNESS", "Langfuse tracing: disabled (no LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY)");
     return noopTracer;
   }
 
@@ -49,6 +51,8 @@ export function initTracing(config: HarnessConfig): Tracer {
       secretKey: config.langfuseSecretKey,
       baseUrl: config.langfuseBaseUrl ?? "https://cloud.langfuse.com",
     });
+
+    log("HARNESS", `Langfuse tracing: enabled (${config.langfuseBaseUrl ?? "https://cloud.langfuse.com"})`);
 
     const traceName = `harness-run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
     const trace = langfuse.trace({

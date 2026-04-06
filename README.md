@@ -218,6 +218,11 @@ LOG_LEVEL=verbose
 TZ_DISPLAY=Europe/Warsaw
 ADHD_EDITOR=code --wait
 MODEL_PLANNER=claude-sonnet-4-6
+
+# Langfuse tracing (optional)
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+# LANGFUSE_BASE_URL=https://your-instance.example.com  # only for self-hosted
 ```
 
 ### Terminal Output Levels
@@ -231,7 +236,18 @@ MODEL_PLANNER=claude-sonnet-4-6
 
 ### Langfuse Tracing
 
-Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` to enable tracing to [Langfuse](https://langfuse.com). Zero overhead when disabled.
+[Langfuse](https://langfuse.com) integration traces every harness run — planner calls, generator sprints, evaluator scores, and tool usage. Zero overhead when disabled.
+
+**Setup:**
+
+1. Create a Langfuse account (cloud or self-hosted) and generate API keys from **Settings → API Keys**.
+2. Add the keys to your project's `.adhd/.env`:
+   ```env
+   LANGFUSE_PUBLIC_KEY=pk-lf-...
+   LANGFUSE_SECRET_KEY=sk-lf-...
+   ```
+   For self-hosted instances, also set `LANGFUSE_BASE_URL` (defaults to `https://cloud.langfuse.com`).
+3. Run with `--debug` to confirm: you should see `Langfuse tracing: enabled` in the startup output.
 
 ## Example Prompts
 
