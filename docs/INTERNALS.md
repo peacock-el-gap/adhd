@@ -51,6 +51,7 @@ Agents communicate through files, not shared conversation history. This keeps ea
 - `.adhd/contracts/sprint-{n}.json` -- Sprint contracts
 - `.adhd/feedback/sprint-{n}-round-{m}.json` -- Evaluator feedback per attempt
 - `.adhd/progress.json` -- Harness state tracking (includes checkpoint data for resume)
+- `.adhd/usage.json` -- Cumulative cost and token usage across sessions
 
 ### Two Operating Modes
 
@@ -98,21 +99,65 @@ Trace: "harness-run-<timestamp>"
 
 Tracing is fire-and-forget: if Langfuse is unreachable, the harness logs a warning and continues.
 
+### Interactive Control Gates
+
+The harness uses timed, single-keypress gates at decision points. Each gate shows options with a countdown timer; the default action fires on timeout. Press `w` to pause the timer and wait indefinitely. All gates are skipped in `--no-interactive` mode or with `--gate-timeout 0`.
+
+| Gate | When | Default on timeout | Options |
+|------|------|--------------------|---------|
+| **Dirty-tree check** | Before start (existing project) | Continue | Continue, Stash, Abort |
+| **Spec approval** | After planning | Abort (safe) | Approve, Edit, Revise, Abort, Wait |
+| **Contract preview** | Before each sprint | Accept | Accept, Abort |
+| **Evaluator override** | On failed evaluation | Retry | Retry, Force PASS |
+| **Mid-run steering** | Between sprints | Continue | Continue, Edit spec, Skip next, Abort |
+
+The spec approval gate supports **revision**: selecting "Revise" prompts for free-text feedback, then re-runs the planner with that feedback. "Edit" opens the spec in the configured editor (`--editor` / `ADHD_EDITOR` / `$EDITOR`).
+
+Gate implementation: `shared/interaction.ts` provides `promptGate()` and `promptGateWithText()`, using raw-mode stdin for single-keypress detection with a readline fallback.
+
+### Cost Tracking
+
+Each SDK call's token usage and cost is recorded by a `UsageTracker` (`shared/usage.ts`). After the run completes, a per-stage breakdown is printed to the terminal and appended to `.adhd/usage.json`. The file accumulates data across sessions (e.g., an initial run + resume), making it easy to see total cost.
+
+### Dry-Run Mode
+
+`--dry-run` runs the planner and spec approval gate, saves the spec, prints the usage summary, and exits without entering the sprint loop. Useful for iterating on prompts before committing to a full build.
+
+### Multi-Model Strategy
+
+Per-agent model overrides (`--model-planner`, `--model-generator`, `--model-evaluator`) let you use cheaper models for specific roles. For example, use Sonnet for planning and Opus for generation:
+
+```bash
+adhd --model-planner claude-sonnet-4-6 "Add authentication"
+```
+
+The base `--model` applies to any agent without its own override.
+
+### Context Injection
+
+`--context <file>` (repeatable) injects file contents into the planner's system prompt as reference material. This is useful for API specs, design documents, or schemas that the planner needs but that aren't in the codebase.
+
+### Branch Creation
+
+`--branch <name>` creates a new git branch before the sprint loop begins. On `--resume`, the harness warns if HEAD is on a different branch than the one recorded in `progress.json`.
+
 ## Project Structure
 
 ```
 harness/
 ├── shared/                        # Shared types, config, prompts, utilities
-│   ├── types.ts                   # TypeScript interfaces (HarnessConfig, contracts, eval)
+│   ├── types.ts                   # TypeScript interfaces (HarnessConfig, contracts, eval, usage)
 │   ├── config.ts                  # CLI parsing, env loading, config resolution
 │   ├── prompts.ts                 # Agent system prompts (dynamic builders + static constants)
 │   ├── logger.ts                  # Leveled logging (quiet/normal/verbose/debug) with timezone support
 │   ├── files.ts                   # File I/O for .adhd/ metadata
 │   ├── conversation-logger.ts     # Markdown conversation log writer
+│   ├── interaction.ts             # Interactive gate prompts (timed single-keypress input)
+│   ├── usage.ts                   # Per-stage cost tracking and usage.json persistence
 │   └── tracing.ts                 # Langfuse tracing (no-op when disabled)
 ├── claude-harness/                # Claude Agent SDK implementation (actively developed)
 │   ├── index.ts                   # CLI entry point
-│   ├── harness.ts                 # Orchestration loop (checkpoint, resume, retry)
+│   ├── harness.ts                 # Orchestration loop (checkpoint, resume, retry, gates)
 │   ├── planner.ts                 # Planner agent (async generator + interactive mode)
 │   ├── generator.ts               # Generator agent (full tool access) + commit enforcement
 │   └── evaluator.ts               # Evaluator agent (read-only tools)
@@ -122,10 +167,10 @@ harness/
 │   ├── planner.ts                 # Planner agent
 │   ├── generator.ts               # Generator agent
 │   └── evaluator.ts               # Evaluator agent
+├── example-prompts/               # Sample spec files for reference
 ├── tests/                         # Unit tests (bun test)
 ├── biome.json                     # Linter/formatter config
-├── CLAUDE.md                      # Project instructions for Claude Code
-└── workspace/                     # Runtime output for Codex harness (gitignored)
+└── CLAUDE.md                      # Project instructions for Claude Code
 ```
 
 The Claude harness uses dynamic prompt builders from `shared/prompts.ts` that interpolate the working directory and mode. The Codex harness uses static prompt constants from the same file -- these are frozen and should not be modified without checking codex-harness compatibility.

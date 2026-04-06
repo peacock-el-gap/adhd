@@ -43,8 +43,13 @@ After `bun link`, you can run `adhd` from any directory -- it operates on the cu
 | [Build a new project from a prompt](#build-a-new-project) | `adhd --greenfield "Build a task manager"` |
 | [Build a new project from a spec file](#build-a-new-project) | `adhd --greenfield --file spec.md` |
 | [Resume after interruption](#resume-after-interruption) | `adhd --resume` |
+| [Preview the plan without building](#dry-run) | `adhd --dry-run "Add auth with JWT"` |
+| [Provide reference docs to the planner](#context-injection) | `adhd --context api-spec.yaml "Implement the API"` |
 | [Use a cheaper model](#configuration) | `adhd --model claude-sonnet-4-6 "Add auth"` |
+| [Use different models per agent](#configuration) | `adhd --model-planner claude-sonnet-4-6 "Add auth"` |
+| [Work on a dedicated branch](#configuration) | `adhd --branch feature/auth "Add auth"` |
 | [Run non-interactively](#configuration) | `adhd --no-interactive --file spec.md` |
+| [Skip all interactive gates](#configuration) | `adhd --gate-timeout 0 --file spec.md` |
 
 All commands below assume you're in the project directory. Use `--project <path>` to target a different directory without cd-ing.
 
@@ -95,6 +100,26 @@ cd ~/my-app
 adhd --resume
 ```
 
+### Dry Run
+
+Preview the planner's spec without building anything. Useful for refining your prompt before committing to a full run:
+
+```bash
+adhd --dry-run "Add authentication with JWT tokens"
+```
+
+The planner generates a spec, the spec approval gate runs (if interactive), and then the harness exits. The spec is saved to `.adhd/spec.md` -- you can review it, adjust your prompt, and run again, or proceed with `adhd --resume`.
+
+### Context Injection
+
+Provide reference documents (API specs, design docs, existing schemas) to give the planner additional context:
+
+```bash
+adhd --context api-spec.yaml --context design.md "Implement the REST API"
+```
+
+The `--context` flag is repeatable. Each file's contents are injected into the planner's prompt as reference material. This is useful when the planner needs domain knowledge that isn't in your codebase.
+
 ## What to Expect
 
 **Duration:** A typical run takes 10-60 minutes depending on project complexity and number of sprints.
@@ -102,6 +127,10 @@ adhd --resume
 **Cost:** Uses Claude Opus by default. A full run with multiple sprints can consume significant API credits. Use `--model claude-sonnet-4-6` for lower cost, or `--max-sprints` to limit scope.
 
 **What happens to your files:** In existing-project mode, the generator makes changes directly and creates git commits. In greenfield mode, all code goes into `app/`. The `.adhd/` directory stores metadata and logs -- add it to your `.gitignore`.
+
+**Interactive gates:** In interactive mode (the default), the harness pauses at key decision points for your input. Gates have countdown timers with sensible defaults -- press any key to choose, or wait for the timeout. Gates include: dirty-tree warning before starting, spec approval after planning, contract preview before each sprint, evaluator override on failures, and mid-run steering between sprints. Use `--no-interactive` or `--gate-timeout 0` to skip all gates.
+
+**Cost tracking:** After each run, the harness prints a per-stage cost summary and saves cumulative usage data to `.adhd/usage.json`. This tracks input/output tokens and USD cost for each planner, generator, and evaluator invocation across sessions.
 
 **Terminal output:** Timestamped status messages, tool calls, and sprint pass/fail results. Use `--verbose` for full agent output, `--quiet` for just results, or `--debug` for SDK-level tracing.
 
@@ -119,15 +148,17 @@ adhd --resume
 
 1. **Planning** -- The planner expands your prompt into a full product spec with features organized into sprints. Saved to `.adhd/spec.md`.
 
-2. **Contract Negotiation** -- For each sprint, the generator and evaluator negotiate a JSON contract defining exactly what "done" means. The evaluator adds edge cases and tightens criteria.
+2. **Spec Approval** -- You review the spec with options to approve, edit in your editor (`--editor`), revise with feedback (re-runs the planner), or abort. Timeout defaults to abort (safe). Skipped in non-interactive mode.
 
-3. **Build** -- The generator implements features one at a time, making git commits after each. After the generator finishes, the harness verifies that all changes were committed. If not, it resumes the generator session to request a meaningful commit message. As a last resort, the harness auto-commits with a descriptive fallback message referencing the sprint and features.
+3. **Contract Negotiation** -- For each sprint, the generator and evaluator negotiate a JSON contract defining exactly what "done" means. The evaluator adds edge cases and tightens criteria. You get a preview before building starts.
 
-4. **Evaluation** -- The evaluator reads the code, runs the application, and tries to break it. Each criterion is scored 1-10. All must meet the threshold (default: 7).
+4. **Build** -- The generator implements features one at a time, making git commits after each. After the generator finishes, the harness verifies that all changes were committed. If not, it resumes the generator session to request a meaningful commit message. As a last resort, the harness auto-commits with a descriptive fallback message referencing the sprint and features.
 
-5. **Retry** -- If any criterion fails, detailed feedback goes back to the generator. This cycles up to `maxRetries` times per sprint.
+5. **Evaluation** -- The evaluator reads the code, runs the application, and tries to break it. Each criterion is scored 1-10. All must meet the threshold (default: 7). If the evaluator fails a sprint, you can override the score and force a PASS (useful for false negatives).
 
-6. **Checkpoint** -- After each passing sprint, progress is saved. Safe to interrupt and resume.
+6. **Retry** -- If any criterion fails, detailed feedback goes back to the generator. This cycles up to `maxRetries` times per sprint.
+
+7. **Checkpoint & Steering** -- After each passing sprint, progress is saved. Between sprints you can continue, skip a sprint, edit the spec, or abort. Safe to interrupt and resume.
 
 ## The `.adhd/` Directory
 
@@ -139,6 +170,7 @@ your-project/
 │   ├── .env                   # Optional: config overrides
 │   ├── progress.json          # Run state + checkpoint data
 │   ├── spec.md                # Product spec from the planner
+│   ├── usage.json             # Cumulative cost/token tracking across sessions
 │   ├── contracts/             # Sprint contract JSON files
 │   ├── feedback/              # Evaluator feedback per attempt
 │   └── logs/                  # Conversation logs (always written)
@@ -155,10 +187,13 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Setting | CLI Flag | Env Var | Default |
 |---------|----------|---------|---------|
 | User prompt | positional arg | -- | -- (required, except `--resume`) |
-| Prompt file | `--file <path>` | -- | -- |
+| Prompt file | `--file`, `-f` `<path>` | -- | -- |
 | Project directory | `--project <path>` | -- | current directory |
 | Greenfield mode | `--greenfield` | -- | off (existing project) |
-| Model | `--model <name>` | `CLAUDE_MODEL` | `claude-opus-4-6` |
+| Model (all agents) | `--model <name>` | `CLAUDE_MODEL` | `claude-opus-4-6` |
+| Planner model | `--model-planner <name>` | `MODEL_PLANNER` | same as `--model` |
+| Generator model | `--model-generator <name>` | `MODEL_GENERATOR` | same as `--model` |
+| Evaluator model | `--model-evaluator <name>` | `MODEL_EVALUATOR` | same as `--model` |
 | Max sprints | `--max-sprints <n>` | `MAX_SPRINTS` | `10` |
 | Max retries/sprint | `--max-retries <n>` | `MAX_RETRIES` | `3` |
 | Pass threshold | `--threshold <n>` | `PASS_THRESHOLD` | `7` |
@@ -166,6 +201,11 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Timezone display | -- | `TZ_DISPLAY` | system local |
 | Non-interactive | `--no-interactive` | -- | interactive |
 | Resume mode | `--resume` | -- | off |
+| Dry-run mode | `--dry-run` | -- | off |
+| Context files | `--context <file>` (repeatable) | -- | none |
+| Branch creation | `--branch <name>` | -- | off (stay on current branch) |
+| Editor for spec | `--editor <cmd>` | `ADHD_EDITOR` or `EDITOR` | none |
+| Gate timeout | `--gate-timeout <sec>` | `ADHD_GATE_TIMEOUT` | varies by gate (0 = skip all) |
 | Langfuse tracing | -- | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` | disabled |
 | Langfuse base URL | -- | `LANGFUSE_BASEURL` | `https://cloud.langfuse.com` |
 
@@ -176,6 +216,8 @@ MAX_SPRINTS=6
 PASS_THRESHOLD=8
 LOG_LEVEL=verbose
 TZ_DISPLAY=Europe/Warsaw
+ADHD_EDITOR=code --wait
+MODEL_PLANNER=claude-sonnet-4-6
 ```
 
 ### Terminal Output Levels
@@ -190,6 +232,10 @@ TZ_DISPLAY=Europe/Warsaw
 ### Langfuse Tracing
 
 Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` to enable tracing to [Langfuse](https://langfuse.com). Zero overhead when disabled.
+
+## Example Prompts
+
+The `example-prompts/` directory contains sample spec files for reference -- a RAG chat application and an initiative tracker. These show the level of detail that produces good results with the planner.
 
 ## Codex Harness
 
