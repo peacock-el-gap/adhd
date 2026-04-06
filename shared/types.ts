@@ -56,11 +56,14 @@ export interface HarnessProgress {
   sprintResults?: SprintResult[];
 }
 
+export type CommitSource = "agent" | "resume" | "fallback" | "none";
+
 export interface SprintResult {
   sprintNumber: number;
   passed: boolean;
   attempts: number;
   evalResult?: EvalResult;
+  commitSource?: CommitSource;
 }
 
 export interface HarnessResult {

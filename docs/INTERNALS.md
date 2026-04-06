@@ -58,6 +58,16 @@ Agents communicate through files, not shared conversation history. This keeps ea
 
 **Greenfield mode** (`--greenfield`): The harness creates a new project from scratch in an `app/` subdirectory with a fresh git repo. Metadata still goes to `.harness/`. This is useful for generating entire applications from a prompt.
 
+### Commit Enforcement
+
+The generator is instructed via system prompt to `git commit` after each feature. However, since this relies on LLM compliance, the harness enforces it with a three-tier safety net after every generator run:
+
+1. **Check** -- Compare `git rev-parse HEAD` before and after the generator. If HEAD moved and the tree is clean, the agent committed normally (`commitSource: "agent"`).
+2. **Resume** -- If uncommitted changes exist, resume the generator's session with a focused prompt requesting only a `git add` + `git commit`. The resume has `Bash`-only tool access and `maxTurns: 3` to prevent the agent from building more. The prompt varies for initial attempts vs retries so the commit message reflects what actually happened (`commitSource: "resume"`).
+3. **Fallback** -- If the agent still doesn't commit, the harness runs `git add -A && git commit` with a contextual message: `[auto-commit] Sprint {N}: uncommitted {work on|fixes for}: {features} (generator did not commit)` (`commitSource: "fallback"`).
+
+The `commitSource` field is recorded in each `SprintResult` in `progress.json`, providing observability into how often each path fires. Grep for `commitSource` in your progress files or git log for `[auto-commit]` to monitor compliance.
+
 ### Checkpoint & Resume
 
 After each passing sprint, the harness saves a checkpoint to `.harness/progress.json` -- including the git commit SHA, all sprint results, and the last evaluation feedback. If the harness is interrupted, `--resume` will:
@@ -104,7 +114,7 @@ harness/
 │   ├── index.ts                   # CLI entry point
 │   ├── harness.ts                 # Orchestration loop (checkpoint, resume, retry)
 │   ├── planner.ts                 # Planner agent (async generator + interactive mode)
-│   ├── generator.ts               # Generator agent (full tool access)
+│   ├── generator.ts               # Generator agent (full tool access) + commit enforcement
 │   └── evaluator.ts               # Evaluator agent (read-only tools)
 ├── codex-harness/                 # Codex SDK implementation (frozen)
 │   ├── index.ts                   # CLI entry point

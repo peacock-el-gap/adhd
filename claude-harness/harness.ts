@@ -16,6 +16,7 @@ import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog, sum
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
 import { initTracing, type Span, type Tracer } from "../shared/tracing.ts";
 import type {
+  CommitSource,
   EvalResult,
   HarnessConfig,
   HarnessProgress,
@@ -24,7 +25,7 @@ import type {
   SprintResult,
 } from "../shared/types.ts";
 import { runEvaluator } from "./evaluator.ts";
-import { runGenerator } from "./generator.ts";
+import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
 import { runPlanner } from "./planner.ts";
 
 const TRANSIENT_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
@@ -229,10 +230,19 @@ async function runSprintLoop(
     let passed = false;
     let lastEval: EvalResult | undefined;
     let attempts = 0;
+    let lastCommitSource: CommitSource = "none";
 
     for (let retry = 0; retry <= config.maxRetriesPerSprint; retry++) {
       attempts = retry + 1;
       const attemptSpan = sprintSpan.startChild(`attempt-${retry}`, { attempt: retry });
+
+      // Capture SHA before generator runs
+      let beforeSha = "";
+      try {
+        beforeSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
+      } catch {
+        // No git repo or no commits yet
+      }
 
       // Build
       progress.status = "building";
@@ -240,17 +250,37 @@ async function runSprintLoop(
       await writeProgress(config.workDir, progress);
 
       const generatorSpan = attemptSpan.startChild("generator", { model, sprint, attempt: retry });
+      let generatorSessionId: string | undefined;
       try {
-        await withTransientRetry(
+        const result = await withTransientRetry(
           () =>
             runGenerator(config.workDir, spec, contract, lastEval, model, isGreenfield, logLevel, generatorSpan, retry),
           "generator",
         );
+        generatorSessionId = result.sessionId;
       } catch (err) {
         generatorSpan.end({ error: String(err) });
         attemptSpan.end({ error: String(err) });
         sprintSpan.end({ error: String(err) });
         return await handleFatalError(err, config, progress, results);
+      }
+
+      // Ensure generator committed its work
+      if (beforeSha) {
+        try {
+          lastCommitSource = await ensureGeneratorCommit(
+            config.workDir,
+            gitDir,
+            beforeSha,
+            generatorSessionId,
+            contract,
+            retry > 0,
+            model,
+          );
+          log("HARNESS", `Commit source: ${lastCommitSource}`);
+        } catch (err) {
+          logError("HARNESS", `Commit enforcement failed: ${err}`);
+        }
       }
 
       // Evaluate
@@ -305,6 +335,7 @@ async function runSprintLoop(
       passed,
       attempts,
       evalResult: lastEval,
+      commitSource: lastCommitSource,
     });
 
     sprintSpan.end({ passed, attempts });
