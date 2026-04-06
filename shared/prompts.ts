@@ -7,8 +7,8 @@ interface PromptContext {
 
 export function buildPlannerPrompt(ctx: PromptContext): string {
   const writeLocation = ctx.isGreenfield
-    ? `Write the spec to \`spec.md\` in the \`.harness/\` directory (${ctx.workDir}/.harness/spec.md).`
-    : `Write the spec to \`spec.md\` in the \`.harness/\` directory (${ctx.workDir}/.harness/spec.md).`;
+    ? `Write the spec to \`spec.md\` in the \`.adhd/\` directory (${ctx.workDir}/.adhd/spec.md).`
+    : `Write the spec to \`spec.md\` in the \`.adhd/\` directory (${ctx.workDir}/.adhd/spec.md).`;
 
   const projectContext = ctx.isGreenfield
     ? "You are planning a brand-new project that will be created from scratch."

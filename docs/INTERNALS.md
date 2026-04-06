@@ -47,16 +47,16 @@ The evaluator uses contract negotiation to set traps -- adding edge cases, tight
 ### File-Based Communication
 
 Agents communicate through files, not shared conversation history. This keeps each agent's context focused on its role:
-- `.harness/spec.md` -- Product specification from the planner
-- `.harness/contracts/sprint-{n}.json` -- Sprint contracts
-- `.harness/feedback/sprint-{n}-round-{m}.json` -- Evaluator feedback per attempt
-- `.harness/progress.json` -- Harness state tracking (includes checkpoint data for resume)
+- `.adhd/spec.md` -- Product specification from the planner
+- `.adhd/contracts/sprint-{n}.json` -- Sprint contracts
+- `.adhd/feedback/sprint-{n}-round-{m}.json` -- Evaluator feedback per attempt
+- `.adhd/progress.json` -- Harness state tracking (includes checkpoint data for resume)
 
 ### Two Operating Modes
 
-**Existing project mode** (default): The harness works directly in your project directory. Agents read the existing codebase to understand context and make changes in place. Only the `.harness/` directory is created for metadata.
+**Existing project mode** (default): The harness works directly in your project directory. Agents read the existing codebase to understand context and make changes in place. Only the `.adhd/` directory is created for metadata.
 
-**Greenfield mode** (`--greenfield`): The harness creates a new project from scratch in an `app/` subdirectory with a fresh git repo. Metadata still goes to `.harness/`. This is useful for generating entire applications from a prompt.
+**Greenfield mode** (`--greenfield`): The harness creates a new project from scratch in an `app/` subdirectory with a fresh git repo. Metadata still goes to `.adhd/`. This is useful for generating entire applications from a prompt.
 
 ### Commit Enforcement
 
@@ -70,7 +70,7 @@ The `commitSource` field is recorded in each `SprintResult` in `progress.json`, 
 
 ### Checkpoint & Resume
 
-After each passing sprint, the harness saves a checkpoint to `.harness/progress.json` -- including the git commit SHA, all sprint results, and the last evaluation feedback. If the harness is interrupted, `--resume` will:
+After each passing sprint, the harness saves a checkpoint to `.adhd/progress.json` -- including the git commit SHA, all sprint results, and the last evaluation feedback. If the harness is interrupted, `--resume` will:
 - Skip the planning phase (spec already exists)
 - Revert any incomplete sprint commits back to the last known good state
 - Continue from the next unfinished sprint with full evaluation context
@@ -79,7 +79,7 @@ Transient errors (HTTP 429, 5xx, network timeouts) are retried automatically wit
 
 ### Observability
 
-**Conversation logs** are detailed markdown files written to `.harness/logs/` on every run, regardless of terminal log level. Files are named by role and context: `planner.md`, `sprint-1-contract-negotiation.md`, `sprint-1-attempt-0-generator.md`, etc. They include assistant text, tool calls with inputs, and tool outputs (long outputs collapsed in `<details>` blocks).
+**Conversation logs** are detailed markdown files written to `.adhd/logs/` on every run, regardless of terminal log level. Files are named by role and context: `planner.md`, `sprint-1-contract-negotiation.md`, `sprint-1-attempt-0-generator.md`, etc. They include assistant text, tool calls with inputs, and tool outputs (long outputs collapsed in `<details>` blocks).
 
 **Langfuse tracing** (optional) creates a span hierarchy mirroring the harness structure:
 
@@ -107,7 +107,7 @@ harness/
 │   ├── config.ts                  # CLI parsing, env loading, config resolution
 │   ├── prompts.ts                 # Agent system prompts (dynamic builders + static constants)
 │   ├── logger.ts                  # Leveled logging (quiet/normal/verbose/debug) with timezone support
-│   ├── files.ts                   # File I/O for .harness/ metadata
+│   ├── files.ts                   # File I/O for .adhd/ metadata
 │   ├── conversation-logger.ts     # Markdown conversation log writer
 │   └── tracing.ts                 # Langfuse tracing (no-op when disabled)
 ├── claude-harness/                # Claude Agent SDK implementation (actively developed)

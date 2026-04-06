@@ -155,7 +155,7 @@ export function createConversationLog(
         filename = `${agentRole.toLowerCase()}.md`;
       }
 
-      const logPath = join(workDir, ".harness", "logs", filename);
+      const logPath = join(workDir, ".adhd", "logs", filename);
       await writeFile(logPath, lines.join("\n"), "utf-8");
     },
   };

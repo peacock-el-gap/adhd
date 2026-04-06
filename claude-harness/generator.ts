@@ -7,6 +7,7 @@ import { log, logDebug, shouldLog, summarize } from "../shared/logger.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { CommitSource, EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
+import type { SDKResultFields } from "../shared/usage.ts";
 
 export async function runGenerator(
   workDir: string,
@@ -18,7 +19,7 @@ export async function runGenerator(
   logLevel?: LogLevel,
   span?: Span,
   attempt: number = 0,
-): Promise<{ response: string; sessionId?: string }> {
+): Promise<{ response: string; sessionId?: string; sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
   log(
@@ -60,6 +61,7 @@ export async function runGenerator(
 
   let fullResponse = "";
   let sessionId: string | undefined;
+  let sdkResult: SDKResultFields | undefined;
 
   for await (const msg of query({ prompt, options })) {
     if (msg.type === "assistant") {
@@ -107,8 +109,14 @@ export async function runGenerator(
       const summary = msg as { summary?: string };
       convLog.logToolResult(summary.summary ?? "");
     } else if (msg.type === "result") {
-      const result = msg as { session_id?: string };
+      const result = msg as {
+        session_id?: string;
+        total_cost_usd?: number;
+        duration_ms?: number;
+        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
+      };
       sessionId = result.session_id;
+      sdkResult = result;
       log("GENERATOR", `Sprint ${sprint} build complete (session: ${sessionId?.slice(0, 8)}...)`);
     }
   }
@@ -121,7 +129,7 @@ export async function runGenerator(
     log("GENERATOR", `Sprint ${sprint} completed (agent used tools only, no text output)`);
   }
 
-  return { response: fullResponse, sessionId };
+  return { response: fullResponse, sessionId, sdkResult };
 }
 
 /**

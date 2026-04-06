@@ -5,6 +5,7 @@ import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
+import type { SDKResultFields } from "../shared/usage.ts";
 import { extractBalancedJson } from "./harness.ts";
 
 export async function runEvaluator(
@@ -16,7 +17,7 @@ export async function runEvaluator(
   logLevel?: LogLevel,
   attempt?: number,
   span?: Span,
-): Promise<EvalResult> {
+): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
   log("EVALUATOR", `Evaluating sprint ${sprint} against ${contract.criteria.length} criteria`);
@@ -55,6 +56,7 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   span?.logMessage("user", prompt);
 
   let fullResponse = "";
+  let sdkResult: SDKResultFields | undefined;
 
   for await (const msg of query({ prompt, options })) {
     if (msg.type === "assistant") {
@@ -95,6 +97,12 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
       const summary = msg as { summary?: string };
       convLog.logToolResult(summary.summary ?? "");
     } else if (msg.type === "result") {
+      const result = msg as {
+        total_cost_usd?: number;
+        duration_ms?: number;
+        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
+      };
+      sdkResult = result;
       log("EVALUATOR", `Evaluation complete for sprint ${sprint}`);
     }
   }
@@ -102,7 +110,12 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   const duration = Date.now() - startTime.getTime();
   await convLog.finalize(duration);
 
-  const evalResult = parseEvalResult(fullResponse, contract, passThreshold);
+  const evalResult: EvalResult & { sdkResult?: SDKResultFields } = parseEvalResult(
+    fullResponse,
+    contract,
+    passThreshold,
+  );
+  evalResult.sdkResult = sdkResult;
 
   span?.end({ result: evalResult.passed ? "passed" : "failed", scores: evalResult.scores });
 

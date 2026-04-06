@@ -33,6 +33,8 @@ interface ParsedCli {
   quiet: boolean;
   noInteractive: boolean;
   debug: boolean;
+  editor?: string;
+  gateTimeout?: number;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -51,6 +53,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       quiet: { type: "boolean", default: false },
       "no-interactive": { type: "boolean", default: false },
       debug: { type: "boolean", default: false },
+      editor: { type: "string" },
+      "gate-timeout": { type: "string" },
     },
     allowPositionals: true,
     strict: true,
@@ -70,15 +74,17 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     quiet: values.quiet as boolean,
     noInteractive: values["no-interactive"] as boolean,
     debug: values.debug as boolean,
+    editor: values.editor as string | undefined,
+    gateTimeout: values["gate-timeout"] ? parseInt(values["gate-timeout"] as string, 10) : undefined,
   };
 }
 
 /**
- * Load .harness/.env from the project directory into process.env.
+ * Load .adhd/.env from the project directory into process.env.
  * Only sets vars that aren't already set (preserving real env > .env precedence).
  */
 export function loadHarnessEnv(projectDir: string): void {
-  const envPath = join(projectDir, ".harness", ".env");
+  const envPath = join(projectDir, ".adhd", ".env");
   if (!existsSync(envPath)) return;
 
   const content = readFileSync(envPath, "utf-8");
@@ -101,10 +107,10 @@ export function loadHarnessEnv(projectDir: string): void {
 }
 
 /**
- * Merge CLI flags, env vars, .harness/.env defaults, and hardcoded defaults
+ * Merge CLI flags, env vars, .adhd/.env defaults, and hardcoded defaults
  * into a fully resolved HarnessConfig.
  *
- * Precedence: CLI flag > env var > .harness/.env > default
+ * Precedence: CLI flag > env var > .adhd/.env > default
  * (loadHarnessEnv must be called before this to populate process.env from .env file)
  */
 export function resolveConfig(cli: ParsedCli): HarnessConfig {
@@ -153,7 +159,14 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     }
   }
 
-  const harnessDir = join(projectDir, ".harness");
+  // Resolve editor: CLI > ADHD_EDITOR > $EDITOR
+  const editor = cli.editor ?? process.env.ADHD_EDITOR ?? process.env.EDITOR ?? undefined;
+
+  // Resolve gate timeout
+  const gateTimeout =
+    cli.gateTimeout ?? (process.env.ADHD_GATE_TIMEOUT ? parseInt(process.env.ADHD_GATE_TIMEOUT, 10) : undefined);
+
+  const harnessDir = join(projectDir, ".adhd");
 
   // Timezone display
   const tzDisplay = process.env.TZ_DISPLAY || undefined;
@@ -179,6 +192,8 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     langfusePublicKey,
     langfuseSecretKey,
     langfuseBaseUrl,
+    editor,
+    gateTimeout,
   };
 
   // Validate

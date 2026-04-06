@@ -8,8 +8,14 @@ import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.
 import { buildPlannerPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { HarnessConfig } from "../shared/types.ts";
+import type { SDKResultFields, UsageTracker } from "../shared/usage.ts";
 
-export async function runPlanner(config: HarnessConfig, span?: Span): Promise<string> {
+export async function runPlanner(
+  config: HarnessConfig,
+  span?: Span,
+  reviseFeedback?: string,
+  usage?: UsageTracker,
+): Promise<string> {
   const { userPrompt, workDir } = config;
   const isGreenfield = config.isGreenfield ?? false;
   const interactive = config.interactive ?? true;
@@ -78,7 +84,11 @@ export async function runPlanner(config: HarnessConfig, span?: Span): Promise<st
     };
   }
 
-  const fullPrompt = `IMPORTANT: Your working directory is ${workDir}. Write the spec to ${hDir}/spec.md. Do NOT write files outside of ${workDir}.\n\n${userPrompt}`;
+  let fullPrompt = `IMPORTANT: Your working directory is ${workDir}. Write the spec to ${hDir}/spec.md. Do NOT write files outside of ${workDir}.\n\n${userPrompt}`;
+
+  if (reviseFeedback) {
+    fullPrompt += `\n\n## Revision Feedback\n\nThe user reviewed your spec and requests changes:\n\n${reviseFeedback}\n\nRewrite the spec incorporating this feedback.`;
+  }
 
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Planner", undefined, undefined, { model, startTime });
@@ -131,8 +141,16 @@ export async function runPlanner(config: HarnessConfig, span?: Span): Promise<st
       const summary = msg as { summary?: string };
       convLog.logToolResult(summary.summary ?? "");
     } else if (msg.type === "result") {
-      const result = msg as { session_id?: string };
+      const result = msg as {
+        session_id?: string;
+        total_cost_usd?: number;
+        duration_ms?: number;
+        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
+      };
       completed = true;
+      if (usage) {
+        usage.recordStage(reviseFeedback ? "planner-revision" : "planner", result as SDKResultFields);
+      }
       log("PLANNER", `Planning complete (session: ${result.session_id?.slice(0, 8)}...)`);
     }
   }

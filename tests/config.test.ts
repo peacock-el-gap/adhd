@@ -88,13 +88,34 @@ describe("parseCli", () => {
     expect(cli.quiet).toBe(false);
     expect(cli.debug).toBe(false);
   });
+
+  test("parses --editor flag", () => {
+    const cli = parseCli(["--editor", "code --wait", "test"]);
+    expect(cli.editor).toBe("code --wait");
+  });
+
+  test("parses --gate-timeout flag", () => {
+    const cli = parseCli(["--gate-timeout", "60", "test"]);
+    expect(cli.gateTimeout).toBe(60);
+  });
+
+  test("--gate-timeout 0 means skip gates", () => {
+    const cli = parseCli(["--gate-timeout", "0", "test"]);
+    expect(cli.gateTimeout).toBe(0);
+  });
+
+  test("editor and gateTimeout default to undefined", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.editor).toBeUndefined();
+    expect(cli.gateTimeout).toBeUndefined();
+  });
 });
 
 // --- loadHarnessEnv ---
 
 describe("loadHarnessEnv", () => {
   const tmpDir = join(import.meta.dir, "__env_test_tmp");
-  const harnessDir = join(tmpDir, ".harness");
+  const harnessDir = join(tmpDir, ".adhd");
   const envPath = join(harnessDir, ".env");
 
   beforeEach(() => {
@@ -161,5 +182,71 @@ describe("resolveConfig", () => {
 
     const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true });
     expect(debug.logLevel).toBe("debug");
+  });
+
+  const baseCli = { prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false };
+
+  test("resolves editor from CLI flag", () => {
+    const config = resolveConfig({ ...baseCli, editor: "code --wait" });
+    expect(config.editor).toBe("code --wait");
+  });
+
+  test("resolves editor from ADHD_EDITOR env var", () => {
+    const prev = process.env.ADHD_EDITOR;
+    process.env.ADHD_EDITOR = "nano";
+    try {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.editor).toBe("nano");
+    } finally {
+      if (prev === undefined) delete process.env.ADHD_EDITOR;
+      else process.env.ADHD_EDITOR = prev;
+    }
+  });
+
+  test("CLI editor takes precedence over env var", () => {
+    const prev = process.env.ADHD_EDITOR;
+    process.env.ADHD_EDITOR = "nano";
+    try {
+      const config = resolveConfig({ ...baseCli, editor: "vim" });
+      expect(config.editor).toBe("vim");
+    } finally {
+      if (prev === undefined) delete process.env.ADHD_EDITOR;
+      else process.env.ADHD_EDITOR = prev;
+    }
+  });
+
+  test("resolves gateTimeout from CLI flag", () => {
+    const config = resolveConfig({ ...baseCli, gateTimeout: 0 });
+    expect(config.gateTimeout).toBe(0);
+  });
+
+  test("resolves gateTimeout from env var", () => {
+    const prev = process.env.ADHD_GATE_TIMEOUT;
+    process.env.ADHD_GATE_TIMEOUT = "60";
+    try {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.gateTimeout).toBe(60);
+    } finally {
+      if (prev === undefined) delete process.env.ADHD_GATE_TIMEOUT;
+      else process.env.ADHD_GATE_TIMEOUT = prev;
+    }
+  });
+
+  test("editor and gateTimeout default to undefined", () => {
+    const prevEditor = process.env.ADHD_EDITOR;
+    const prevTimeout = process.env.ADHD_GATE_TIMEOUT;
+    const prevSysEditor = process.env.EDITOR;
+    delete process.env.ADHD_EDITOR;
+    delete process.env.ADHD_GATE_TIMEOUT;
+    delete process.env.EDITOR;
+    try {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.editor).toBeUndefined();
+      expect(config.gateTimeout).toBeUndefined();
+    } finally {
+      if (prevEditor !== undefined) process.env.ADHD_EDITOR = prevEditor;
+      if (prevTimeout !== undefined) process.env.ADHD_GATE_TIMEOUT = prevTimeout;
+      if (prevSysEditor !== undefined) process.env.EDITOR = prevSysEditor;
+    }
   });
 });

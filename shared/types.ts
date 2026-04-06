@@ -12,12 +12,15 @@ export interface HarnessConfig {
   isResume?: boolean;
   logLevel?: LogLevel;
   interactive?: boolean;
-  harnessDir?: string; // resolved path to .harness/
+  harnessDir?: string; // resolved path to .adhd/
   // Phase 2 additions (optional for backward compat)
   tzDisplay?: string; // IANA timezone for terminal display (e.g. "Europe/Warsaw")
   langfusePublicKey?: string;
   langfuseSecretKey?: string;
   langfuseBaseUrl?: string;
+  // Phase A additions
+  editor?: string; // resolved from --editor / ADHD_EDITOR / $EDITOR
+  gateTimeout?: number; // override all gate timeouts (seconds). 0 = skip all gates.
 }
 
 export interface SprintContract {
@@ -46,7 +49,7 @@ export interface EvalResult {
 }
 
 export interface HarnessProgress {
-  status: "planning" | "negotiating" | "building" | "evaluating" | "complete" | "failed";
+  status: "planning" | "spec-review" | "negotiating" | "building" | "evaluating" | "complete" | "failed";
   currentSprint: number;
   totalSprints: number;
   completedSprints: number;
@@ -54,6 +57,8 @@ export interface HarnessProgress {
   // Phase 1 additions (optional for backward compat)
   lastPassedCommitSha?: string;
   sprintResults?: SprintResult[];
+  // Phase A additions
+  specApproved?: boolean;
 }
 
 export type CommitSource = "agent" | "resume" | "fallback" | "none";
@@ -70,4 +75,26 @@ export interface HarnessResult {
   success: boolean;
   sprints: SprintResult[];
   totalDurationMs: number;
+}
+
+// --- A1: Per-stage cost tracking ---
+
+export interface StageUsage {
+  stage: string; // "planner", "sprint-1-contract-negotiation", "sprint-1-attempt-0-generator", etc.
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  costUsd: number;
+  durationMs: number;
+}
+
+export interface SessionUsage {
+  startedAt: string; // ISO 8601 UTC
+  stages: StageUsage[];
+  totalCostUsd: number;
+}
+
+export interface RunUsage {
+  sessions: SessionUsage[];
+  runTotalCostUsd: number;
 }

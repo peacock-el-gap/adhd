@@ -50,7 +50,7 @@ All commands below assume you're in the project directory. Use `--project <path>
 
 ### Enhance an Existing Project
 
-Go to your project directory and run the harness. It reads your codebase, makes changes in place, and stores metadata in `.harness/`.
+Go to your project directory and run the harness. It reads your codebase, makes changes in place, and stores metadata in `.adhd/`.
 
 ```bash
 cd ~/my-app
@@ -66,7 +66,7 @@ The planner may ask clarifying questions in the terminal (60-second timeout). Us
 
 ### Build a New Project
 
-Create a project directory, then run with `--greenfield`. The harness creates an `app/` subdirectory (with its own git repo) for the generated code, and `.harness/` for metadata.
+Create a project directory, then run with `--greenfield`. The harness creates an `app/` subdirectory (with its own git repo) for the generated code, and `.adhd/` for metadata.
 
 ```bash
 mkdir ~/projects/my-new-app
@@ -101,7 +101,7 @@ adhd --resume
 
 **Cost:** Uses Claude Opus by default. A full run with multiple sprints can consume significant API credits. Use `--model claude-sonnet-4-6` for lower cost, or `--max-sprints` to limit scope.
 
-**What happens to your files:** In existing-project mode, the generator makes changes directly and creates git commits. In greenfield mode, all code goes into `app/`. The `.harness/` directory stores metadata and logs -- add it to your `.gitignore`.
+**What happens to your files:** In existing-project mode, the generator makes changes directly and creates git commits. In greenfield mode, all code goes into `app/`. The `.adhd/` directory stores metadata and logs -- add it to your `.gitignore`.
 
 **Terminal output:** Timestamped status messages, tool calls, and sprint pass/fail results. Use `--verbose` for full agent output, `--quiet` for just results, or `--debug` for SDK-level tracing.
 
@@ -117,7 +117,7 @@ adhd --resume
 
 ## How It Works
 
-1. **Planning** -- The planner expands your prompt into a full product spec with features organized into sprints. Saved to `.harness/spec.md`.
+1. **Planning** -- The planner expands your prompt into a full product spec with features organized into sprints. Saved to `.adhd/spec.md`.
 
 2. **Contract Negotiation** -- For each sprint, the generator and evaluator negotiate a JSON contract defining exactly what "done" means. The evaluator adds edge cases and tightens criteria.
 
@@ -129,13 +129,13 @@ adhd --resume
 
 6. **Checkpoint** -- After each passing sprint, progress is saved. Safe to interrupt and resume.
 
-## The `.harness/` Directory
+## The `.adhd/` Directory
 
 ```
 your-project/
 ├── src/                       # Your existing code
 ├── app/                       # Generated code (greenfield mode only)
-├── .harness/                  # Harness metadata (add to .gitignore)
+├── .adhd/                     # Harness metadata (add to .gitignore)
 │   ├── .env                   # Optional: config overrides
 │   ├── progress.json          # Run state + checkpoint data
 │   ├── spec.md                # Product spec from the planner
@@ -149,8 +149,8 @@ your-project/
 
 ## Configuration
 
-Settings via CLI flags, environment variables, or `.harness/.env` in the project directory.
-Precedence: **CLI flag > env var > `.harness/.env` > default**.
+Settings via CLI flags, environment variables, or `.adhd/.env` in the project directory.
+Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 
 | Setting | CLI Flag | Env Var | Default |
 |---------|----------|---------|---------|
@@ -170,7 +170,7 @@ Precedence: **CLI flag > env var > `.harness/.env` > default**.
 | Langfuse base URL | -- | `LANGFUSE_BASEURL` | `https://cloud.langfuse.com` |
 
 ```env
-# Example .harness/.env file
+# Example .adhd/.env file
 CLAUDE_MODEL=claude-sonnet-4-6
 MAX_SPRINTS=6
 PASS_THRESHOLD=8
@@ -213,7 +213,7 @@ User Prompt
      |
      v
 +-----------+
-|  PLANNER  |  --> .harness/spec.md
+|  PLANNER  |  --> .adhd/spec.md
 +-----------+
      |
      v  (for each sprint)

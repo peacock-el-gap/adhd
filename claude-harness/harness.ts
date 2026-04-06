@@ -1,9 +1,11 @@
 import { execSync } from "node:child_process";
+import { readFile as readFileRaw } from "node:fs/promises";
 import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import {
+  harnessDir,
   initWorkspace,
   readProgress,
   readSpec,
@@ -12,6 +14,7 @@ import {
   writeProgress,
   writeSpec,
 } from "../shared/files.ts";
+import { promptGate, promptGateWithText } from "../shared/interaction.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog, summarize } from "../shared/logger.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
 import { initTracing, type Span, type Tracer } from "../shared/tracing.ts";
@@ -24,6 +27,7 @@ import type {
   SprintContract,
   SprintResult,
 } from "../shared/types.ts";
+import { createUsageTracker, type UsageTracker } from "../shared/usage.ts";
 import { runEvaluator } from "./evaluator.ts";
 import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
 import { runPlanner } from "./planner.ts";
@@ -40,8 +44,9 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     setDisplayTimezone(config.tzDisplay);
   }
 
-  // Initialize tracing
+  // Initialize tracing and usage tracking
   const tracer = initTracing(config);
+  const usage = createUsageTracker(config.workDir);
 
   log("HARNESS", "Initializing Claude Agent SDK harness");
   log("HARNESS", `Work directory: ${config.workDir}`);
@@ -52,12 +57,18 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   // --- Resume path ---
   if (config.isResume) {
-    const result = await resumeHarness(config, model, isGreenfield, startTime, tracer);
+    const result = await resumeHarness(config, model, isGreenfield, startTime, tracer, usage);
     await tracer.flush();
     return result;
   }
 
   // --- Fresh run path ---
+
+  // A2: Pre-flight dirty-tree check (skip in greenfield mode — no existing repo)
+  if (!isGreenfield) {
+    await checkDirtyTree(config);
+  }
+
   logDebug("HARNESS", "Initializing workspace...");
   await initWorkspace(config.workDir, { greenfield: isGreenfield });
   logDebug("HARNESS", "Workspace initialized");
@@ -78,13 +89,20 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   const plannerSpan = tracer.startSpan("planner", { model });
   logDebug("HARNESS", "Calling runPlanner...");
-  const spec = await runPlanner(config, plannerSpan);
+  const spec = await runPlanner(config, plannerSpan, undefined, usage);
   logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
   await writeSpec(config.workDir, spec);
   log("HARNESS", "Product spec written");
 
-  // Count sprints from the spec (look for "Sprint N" patterns)
-  const sprintMatches = spec.match(/##\s*Sprint\s+\d+/gi);
+  // A3: Spec approval gate
+  progress.status = "spec-review";
+  await writeProgress(config.workDir, progress);
+  const approvedSpec = await specApprovalGate(config, spec, plannerSpan, usage);
+  progress.specApproved = true;
+  await writeProgress(config.workDir, progress);
+
+  // Count sprints from the (possibly edited) spec
+  const sprintMatches = approvedSpec.match(/##\s*Sprint\s+\d+/gi);
   const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
   progress.totalSprints = totalSprints;
 
@@ -92,13 +110,14 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     config,
     model,
     isGreenfield,
-    spec,
+    approvedSpec,
     progress,
     [],
     1,
     totalSprints,
     startTime,
     tracer,
+    usage,
   );
   await tracer.flush();
   return result;
@@ -110,6 +129,7 @@ async function resumeHarness(
   isGreenfield: boolean,
   startTime: number,
   tracer: Tracer,
+  usage: UsageTracker,
 ): Promise<HarnessResult> {
   log("HARNESS", "Resuming from checkpoint...");
 
@@ -120,15 +140,26 @@ async function resumeHarness(
   try {
     progress = await readProgress(config.workDir);
   } catch {
-    throw new Error("Nothing to resume. No .harness/progress.json found. Run without --resume first.");
+    throw new Error("Nothing to resume. No .adhd/progress.json found. Run without --resume first.");
   }
 
   if (progress.status === "complete") {
     throw new Error("All sprints already completed. Nothing to resume.");
   }
 
-  const spec = await readSpec(config.workDir);
+  let spec = await readSpec(config.workDir);
   log("HARNESS", `Loaded spec from disk. Completed sprints: ${progress.completedSprints}/${progress.totalSprints}`);
+
+  // If spec was written but not yet approved, show the gate
+  if (!progress.specApproved) {
+    log("HARNESS", "Spec exists but was not approved. Showing review gate.");
+    spec = await specApprovalGate(config, spec, tracer.startSpan("spec-review"), usage);
+    progress.specApproved = true;
+    await writeProgress(config.workDir, progress);
+    // Re-count sprints in case spec was edited
+    const sprintMatches = spec.match(/##\s*Sprint\s+\d+/gi);
+    progress.totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
+  }
 
   // Restore prior sprint results
   const results: SprintResult[] = progress.sprintResults ?? [];
@@ -150,6 +181,7 @@ async function resumeHarness(
     progress.totalSprints,
     startTime,
     tracer,
+    usage,
   );
 }
 
@@ -192,6 +224,7 @@ async function runSprintLoop(
   totalSprints: number,
   startTime: number,
   tracer: Tracer,
+  usage: UsageTracker,
 ): Promise<HarnessResult> {
   const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
   const logLevel = config.logLevel ?? "normal";
@@ -214,7 +247,7 @@ async function runSprintLoop(
     const negotiationSpan = sprintSpan.startChild("contract-negotiation", { sprint });
     try {
       contract = await withTransientRetry(
-        () => negotiateContract(config.workDir, spec, sprint, model, negotiationSpan),
+        () => negotiateContract(config.workDir, spec, sprint, model, negotiationSpan, usage),
         "contract negotiation",
       );
     } catch (err) {
@@ -258,6 +291,9 @@ async function runSprintLoop(
           "generator",
         );
         generatorSessionId = result.sessionId;
+        if (result.sdkResult) {
+          usage.recordStage(`sprint-${sprint}-attempt-${retry}-generator`, result.sdkResult);
+        }
       } catch (err) {
         generatorSpan.end({ error: String(err) });
         attemptSpan.end({ error: String(err) });
@@ -289,7 +325,7 @@ async function runSprintLoop(
 
       const evaluatorSpan = attemptSpan.startChild("evaluator", { model, sprint, attempt: retry });
       try {
-        lastEval = await withTransientRetry(
+        const evalWithUsage = await withTransientRetry(
           () =>
             runEvaluator(
               config.workDir,
@@ -303,6 +339,10 @@ async function runSprintLoop(
             ),
           "evaluator",
         );
+        if (evalWithUsage.sdkResult) {
+          usage.recordStage(`sprint-${sprint}-attempt-${retry}-evaluator`, evalWithUsage.sdkResult);
+        }
+        lastEval = evalWithUsage;
       } catch (err) {
         evaluatorSpan.end({ error: String(err) });
         attemptSpan.end({ error: String(err) });
@@ -386,6 +426,14 @@ async function runSprintLoop(
   log("HARNESS", `Harness ${allPassed ? "COMPLETED" : "FAILED"} in ${(totalDuration / 1000 / 60).toFixed(1)} minutes`);
   log("HARNESS", `Sprints: ${results.filter((r) => r.passed).length}/${results.length} passed`);
 
+  // A1: Print and save usage summary
+  usage.printSummary();
+  try {
+    await usage.save();
+  } catch {
+    // Non-critical — don't fail the run if usage save fails
+  }
+
   return { success: allPassed, sprints: results, totalDurationMs: totalDuration };
 }
 
@@ -452,6 +500,124 @@ async function handleFatalError(
   throw new HarnessFatalError(msg);
 }
 
+// --- Pre-flight checks ---
+
+async function checkDirtyTree(config: HarnessConfig): Promise<void> {
+  let status: string;
+  try {
+    status = execSync("git status --porcelain", { cwd: config.workDir, encoding: "utf-8" }).trim();
+  } catch {
+    // Not a git repo — nothing to check
+    return;
+  }
+  if (!status) return; // Clean tree
+
+  const lines = status.split("\n");
+  const modified = lines.filter((l) => l.startsWith(" M") || l.startsWith("M ") || l.startsWith("MM")).length;
+  const untracked = lines.filter((l) => l.startsWith("??")).length;
+  const other = lines.length - modified - untracked;
+
+  let summary = "";
+  if (modified > 0) summary += `${modified} modified file(s)`;
+  if (untracked > 0) summary += `${summary ? ", " : ""}${untracked} untracked file(s)`;
+  if (other > 0) summary += `${summary ? ", " : ""}${other} other change(s)`;
+
+  const result = await promptGate(
+    `Working tree is dirty:\n  - ${summary}\nGenerator will modify files and commit. Uncommitted changes may be mixed into its commits.`,
+    [
+      { key: "c", label: "Continue anyway", isDefault: true },
+      { key: "s", label: "Stash changes first (git stash), then continue", isDefault: false },
+      { key: "a", label: "Abort", isDefault: false },
+    ],
+    0, // No timeout — blocking pre-flight check
+    config.interactive ?? true,
+  );
+
+  if (result.key === "a") {
+    log("HARNESS", "Aborted by user.");
+    process.exit(0);
+  }
+  if (result.key === "s") {
+    execSync("git stash", { cwd: config.workDir, stdio: "pipe" });
+    log("HARNESS", "Changes stashed. Recover with: git stash pop");
+  }
+}
+
+// --- Spec approval gate (A3) ---
+
+async function specApprovalGate(
+  config: HarnessConfig,
+  spec: string,
+  plannerSpan: Span,
+  usage: UsageTracker,
+): Promise<string> {
+  const specPath = join(harnessDir(config.workDir), "spec.md");
+
+  // --gate-timeout 0 means "skip all gates, auto-approve"
+  if (config.gateTimeout === 0) {
+    log("HARNESS", "Spec gate skipped (--gate-timeout 0). Auto-approved.");
+    return spec;
+  }
+
+  // Non-interactive: auto-approve
+  if (!(config.interactive ?? true)) {
+    log("HARNESS", "Spec gate skipped (non-interactive mode). Auto-approved.");
+    return spec;
+  }
+
+  const timeoutSec = config.gateTimeout ?? 120;
+
+  // Build options — hide Edit if no editor configured
+  const options: import("../shared/interaction.ts").GateOption[] = [
+    { key: "a", label: "Approve — proceed to building", isDefault: false },
+    ...(config.editor ? [{ key: "e", label: `Edit — open in ${config.editor.split(" ")[0]}`, isDefault: false }] : []),
+    { key: "r", label: "Revise — give feedback, planner rewrites", isDefault: false },
+    { key: "x", label: "Abort", isDefault: true }, // Default on timeout = abort (safe)
+    { key: "w", label: "Wait — pause timer", isDefault: false },
+  ];
+
+  let currentSpec = spec;
+
+  while (true) {
+    const result = await promptGateWithText(
+      `Spec written to .adhd/spec.md`,
+      options,
+      timeoutSec,
+      config.interactive ?? true,
+      "r", // "revise" triggers free-text input
+    );
+
+    if (result.key === "a") {
+      return currentSpec;
+    }
+
+    if (result.key === "x" || result.timedOut) {
+      log("HARNESS", "Spec gate: aborted. Spec saved at .adhd/spec.md");
+      log("HARNESS", "To resume: adhd --resume");
+      process.exit(0);
+    }
+
+    if (result.key === "e" && config.editor) {
+      // Open editor, block until closed
+      execSync(`${config.editor} ${JSON.stringify(specPath)}`, { stdio: "inherit" });
+      // Read back the (possibly modified) spec
+      currentSpec = await readFileRaw(specPath, "utf-8");
+      await writeSpec(config.workDir, currentSpec);
+      log("HARNESS", `Spec updated (${currentSpec.length} chars). Re-reviewing.`);
+      continue;
+    }
+
+    if (result.key === "r" && result.freeText) {
+      // Re-run planner with feedback
+      log("HARNESS", "Re-running planner with your feedback...");
+      const revisedSpec = await runPlanner(config, plannerSpan, result.freeText, usage);
+      currentSpec = revisedSpec;
+      await writeSpec(config.workDir, currentSpec);
+      log("HARNESS", "Spec revised. Re-reviewing.");
+    }
+  }
+}
+
 // --- Contract negotiation ---
 
 async function negotiateContract(
@@ -460,6 +626,7 @@ async function negotiateContract(
   sprintNumber: number,
   model: string,
   parentSpan?: Span,
+  usage?: UsageTracker,
 ): Promise<SprintContract> {
   const startTime = new Date();
 
@@ -512,6 +679,13 @@ async function negotiateContract(
     } else if (msg.type === "tool_use_summary") {
       const summary = msg as { summary?: string };
       convLog.logToolResult(summary.summary ?? "");
+    } else if (msg.type === "result") {
+      const result = msg as {
+        total_cost_usd?: number;
+        duration_ms?: number;
+        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
+      };
+      usage?.recordStage(`sprint-${sprintNumber}-contract-proposal`, result);
     }
   }
 
@@ -562,6 +736,13 @@ async function negotiateContract(
     } else if (msg.type === "tool_use_summary") {
       const summary = msg as { summary?: string };
       convLog.logToolResult(summary.summary ?? "");
+    } else if (msg.type === "result") {
+      const result = msg as {
+        total_cost_usd?: number;
+        duration_ms?: number;
+        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
+      };
+      usage?.recordStage(`sprint-${sprintNumber}-contract-review`, result);
     }
   }
 

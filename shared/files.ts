@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { log } from "./logger.ts";
 import type { EvalResult, HarnessProgress, SprintContract } from "./types.ts";
 
-/** Resolve the .harness metadata directory for a given project root. */
+/** Resolve the .adhd metadata directory for a given project root. */
 export function harnessDir(workDir: string): string {
-  return join(workDir, ".harness");
+  return join(workDir, ".adhd");
 }
 
 /**
@@ -29,7 +29,7 @@ export async function initWorkspace(
 
   const hDir = harnessDir(workDir);
 
-  // Always ensure .harness/ structure exists
+  // Always ensure .adhd/ structure exists
   await mkdir(join(hDir, "contracts"), { recursive: true });
   await mkdir(join(hDir, "feedback"), { recursive: true });
   await mkdir(join(hDir, "logs"), { recursive: true });
@@ -53,16 +53,16 @@ export async function initWorkspace(
     }
   }
 
-  // Clean stale artifacts (only inside .harness/), but NOT on resume
+  // Clean stale artifacts (only inside .adhd/), but NOT on resume
   if (!resume) {
     await cleanHarnessArtifacts(hDir);
   }
 
-  // Advisory: check if .harness/ is in .gitignore
+  // Advisory: check if .adhd/ is in .gitignore
   checkGitignore(workDir);
 }
 
-/** Remove stale artifacts from .harness/ (contracts, feedback, spec, progress). */
+/** Remove stale artifacts from .adhd/ (contracts, feedback, spec, progress). */
 async function cleanHarnessArtifacts(hDir: string): Promise<void> {
   // Clean contracts/
   await cleanDirectory(join(hDir, "contracts"));
@@ -97,18 +97,18 @@ function checkGitignore(workDir: string): void {
   try {
     if (existsSync(gitignorePath)) {
       const content = readFileSync(gitignorePath, "utf-8");
-      if (!content.includes(".harness")) {
-        log("HARNESS", "Consider adding .harness/ to your .gitignore");
+      if (!content.includes(".adhd")) {
+        log("HARNESS", "Consider adding .adhd/ to your .gitignore");
       }
     } else {
-      log("HARNESS", "Consider adding .harness/ to your .gitignore");
+      log("HARNESS", "Consider adding .adhd/ to your .gitignore");
     }
   } catch {
     // Not critical — skip silently
   }
 }
 
-// --- File I/O: all paths go through .harness/ ---
+// --- File I/O: all paths go through .adhd/ ---
 
 export async function writeSpec(workDir: string, spec: string): Promise<void> {
   await writeFile(join(harnessDir(workDir), "spec.md"), spec, "utf-8");
