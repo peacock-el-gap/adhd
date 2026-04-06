@@ -3,6 +3,9 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "bin": {
+    "adhd": "claude-harness/index.ts"
+  },
   "scripts": {
     "start": "bun run claude-harness/index.ts",
     "start:codex": "bun run codex-harness/index.ts",

@@ -4,8 +4,16 @@
 
 ```bash
 bun install
+bun link                                     # Makes 'adhd' available globally
+
+# Run from any project directory:
+cd ~/my-project
+adhd "Your prompt here"
+adhd --greenfield --file spec.md
+
+# Or from the harness directory:
 bun run start -- "Your prompt here"         # Claude harness
-bun run start:codex -- "Your prompt here"    # Codex harness (frozen)
+bun run start:codex -- "Your prompt here"   # Codex harness (frozen)
 ```
 
 ## Architecture
