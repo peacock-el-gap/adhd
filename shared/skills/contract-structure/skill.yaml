@@ -1,0 +1,11 @@
+name: contract-structure
+description: Sprint contract JSON format for negotiation
+type: harness
+routing:
+  planner: exclude
+  generator:
+    tier: reference
+    files: [contract-format.md]
+  evaluator:
+    tier: reference
+    files: [contract-format.md]

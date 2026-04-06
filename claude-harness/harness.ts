@@ -18,6 +18,7 @@ import {
 import { promptGate, promptGateWithText } from "../shared/interaction.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog, summarize } from "../shared/logger.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
+import { resolveSkills, routeSkillsForAgent, warnIfOversized } from "../shared/skills.ts";
 import { initTracing, type Span, type Tracer } from "../shared/tracing.ts";
 import type {
   CommitSource,
@@ -28,6 +29,7 @@ import type {
   SprintContract,
   SprintResult,
 } from "../shared/types.ts";
+import type { AgentSkills } from "../shared/skills.ts";
 import { createUsageTracker, type UsageTracker } from "../shared/usage.ts";
 import { runEvaluator } from "./evaluator.ts";
 import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
@@ -81,6 +83,24 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   await initWorkspace(config.workDir, { greenfield: isGreenfield });
   logDebug("HARNESS", "Workspace initialized");
 
+  // B4: Resolve skills from 3 scopes
+  const harnessSkillsDir = join(import.meta.dir, "../shared/skills");
+  const userSkillsDir = join(process.env.HOME ?? "", ".adhd", "skills");
+  const projectSkillsDir = join(config.workDir, ".adhd", "skills");
+  const resolvedSkills = resolveSkills(harnessSkillsDir, userSkillsDir, projectSkillsDir, {
+    noBdd: config.noBdd,
+    noTdd: config.noTdd,
+  });
+  const plannerSkills = routeSkillsForAgent(resolvedSkills, "planner");
+  const generatorSkills = routeSkillsForAgent(resolvedSkills, "generator");
+  const evaluatorSkills = routeSkillsForAgent(resolvedSkills, "evaluator");
+  warnIfOversized(plannerSkills, "planner");
+  warnIfOversized(generatorSkills, "generator");
+  warnIfOversized(evaluatorSkills, "evaluator");
+  if (resolvedSkills.length > 0) {
+    log("HARNESS", `Skills loaded: ${resolvedSkills.length} (${resolvedSkills.map((s) => s.name).join(", ")})`);
+  }
+
   // Phase 1: Planning
   logDivider();
   log("HARNESS", "PHASE 1: PLANNING");
@@ -97,7 +117,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   const plannerSpan = tracer.startSpan("planner", { model });
   logDebug("HARNESS", "Calling runPlanner...");
-  const spec = await runPlanner(config, plannerSpan, undefined, usage);
+  const spec = await runPlanner(config, plannerSpan, undefined, usage, plannerSkills);
   logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
   await writeSpec(config.workDir, spec);
   log("HARNESS", "Product spec written");
@@ -105,7 +125,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   // A3: Spec approval gate
   progress.status = "spec-review";
   await writeProgress(config.workDir, progress);
-  const approvedSpec = await specApprovalGate(config, spec, plannerSpan, usage);
+  const approvedSpec = await specApprovalGate(config, spec, plannerSpan, usage, plannerSkills);
   progress.specApproved = true;
   await writeProgress(config.workDir, progress);
 
@@ -144,6 +164,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     startTime,
     tracer,
     usage,
+    { generator: generatorSkills, evaluator: evaluatorSkills },
   );
   await tracer.flush();
   return result;
@@ -162,6 +183,18 @@ async function resumeHarness(
   // Don't clean artifacts on resume
   await initWorkspace(config.workDir, { greenfield: isGreenfield, resume: true });
 
+  // B4: Resolve skills (same as fresh path)
+  const harnessSkillsDir = join(import.meta.dir, "../shared/skills");
+  const userSkillsDir = join(process.env.HOME ?? "", ".adhd", "skills");
+  const projectSkillsDir = join(config.workDir, ".adhd", "skills");
+  const resolvedSkills = resolveSkills(harnessSkillsDir, userSkillsDir, projectSkillsDir, {
+    noBdd: config.noBdd,
+    noTdd: config.noTdd,
+  });
+  const plannerSkills = routeSkillsForAgent(resolvedSkills, "planner");
+  const generatorSkills = routeSkillsForAgent(resolvedSkills, "generator");
+  const evaluatorSkills = routeSkillsForAgent(resolvedSkills, "evaluator");
+
   let progress: HarnessProgress;
   try {
     progress = await readProgress(config.workDir);
@@ -179,7 +212,7 @@ async function resumeHarness(
   // If spec was written but not yet approved, show the gate
   if (!progress.specApproved) {
     log("HARNESS", "Spec exists but was not approved. Showing review gate.");
-    spec = await specApprovalGate(config, spec, tracer.startSpan("spec-review"), usage);
+    spec = await specApprovalGate(config, spec, tracer.startSpan("spec-review"), usage, plannerSkills);
     progress.specApproved = true;
     await writeProgress(config.workDir, progress);
     // Re-count sprints in case spec was edited
@@ -222,6 +255,7 @@ async function resumeHarness(
     startTime,
     tracer,
     usage,
+    { generator: generatorSkills, evaluator: evaluatorSkills },
   );
 }
 
@@ -265,6 +299,7 @@ async function runSprintLoop(
   startTime: number,
   tracer: Tracer,
   usage: UsageTracker,
+  skills?: { generator: AgentSkills; evaluator: AgentSkills },
 ): Promise<HarnessResult> {
   const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
   const logLevel = config.logLevel ?? "normal";
@@ -358,6 +393,7 @@ async function runSprintLoop(
               generatorSpan,
               retry,
               config.noTdd,
+              skills?.generator,
             ),
           "generator",
         );
@@ -408,6 +444,7 @@ async function runSprintLoop(
               retry,
               evaluatorSpan,
               config.noBdd,
+              skills?.evaluator,
             ),
           "evaluator",
         );
@@ -679,6 +716,7 @@ async function specApprovalGate(
   spec: string,
   plannerSpan: Span,
   usage: UsageTracker,
+  plannerSkills?: AgentSkills,
 ): Promise<string> {
   const specPath = join(harnessDir(config.workDir), "spec.md");
 
@@ -739,7 +777,7 @@ async function specApprovalGate(
     if (result.key === "r" && result.freeText) {
       // Re-run planner with feedback
       log("HARNESS", "Re-running planner with your feedback...");
-      const revisedSpec = await runPlanner(config, plannerSpan, result.freeText, usage);
+      const revisedSpec = await runPlanner(config, plannerSpan, result.freeText, usage, plannerSkills);
       currentSpec = revisedSpec;
       await writeSpec(config.workDir, currentSpec);
       log("HARNESS", "Spec revised. Re-reviewing.");

@@ -7,6 +7,7 @@ import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
 import { buildPlannerPrompt } from "../shared/prompts.ts";
+import type { AgentSkills } from "../shared/skills.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { HarnessConfig } from "../shared/types.ts";
 import type { SDKResultFields, UsageTracker } from "../shared/usage.ts";
@@ -16,6 +17,7 @@ export async function runPlanner(
   span?: Span,
   reviseFeedback?: string,
   usage?: UsageTracker,
+  skills?: AgentSkills,
 ): Promise<string> {
   const { userPrompt, workDir } = config;
   const isGreenfield = config.isGreenfield ?? false;
@@ -32,6 +34,7 @@ export async function runPlanner(
     sourceDir: config.sourceDir,
     testDir: config.testDir,
     noBdd: config.noBdd,
+    skills,
   });
 
   if (!interactive) {
@@ -55,6 +58,7 @@ export async function runPlanner(
     model,
     maxTurns: CLAUDE_MAX_TURNS,
     persistSession: false,
+    ...(skills?.additionalDirs.length ? { additionalDirectories: skills.additionalDirs } : {}),
   };
 
   // HITL: handle AskUserQuestion via canUseTool

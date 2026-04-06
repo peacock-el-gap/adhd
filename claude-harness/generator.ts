@@ -5,6 +5,7 @@ import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logDebug, shouldLog, summarize } from "../shared/logger.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
+import type { AgentSkills } from "../shared/skills.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { CommitSource, EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
@@ -20,6 +21,7 @@ export async function runGenerator(
   span?: Span,
   attempt: number = 0,
   noTdd?: boolean,
+  skills?: AgentSkills,
 ): Promise<{ response: string; sessionId?: string; sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
@@ -28,7 +30,7 @@ export async function runGenerator(
     `Sprint ${sprint} (${previousFeedback ? "retry" : "initial"}) - Building: ${contract.features.join(", ")}`,
   );
 
-  const systemPrompt = buildGeneratorPrompt({ workDir, isGreenfield, noTdd });
+  const systemPrompt = buildGeneratorPrompt({ workDir, isGreenfield, noTdd, skills });
   const hDir = harnessDir(workDir);
 
   const codeDir = isGreenfield ? `${workDir}/app/` : workDir;
@@ -53,6 +55,7 @@ export async function runGenerator(
     model,
     maxTurns: CLAUDE_MAX_TURNS,
     persistSession: true,
+    ...(skills?.additionalDirs.length ? { additionalDirectories: skills.additionalDirs } : {}),
   };
 
   const startTime = new Date();

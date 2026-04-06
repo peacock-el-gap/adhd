@@ -207,7 +207,7 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Editor for spec | `--editor <cmd>` | `ADHD_EDITOR` or `EDITOR` | none |
 | Gate timeout | `--gate-timeout <sec>` | `ADHD_GATE_TIMEOUT` | varies by gate (0 = skip all) |
 | Langfuse tracing | -- | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` | disabled |
-| Langfuse base URL | -- | `LANGFUSE_BASEURL` | `https://cloud.langfuse.com` |
+| Langfuse base URL | -- | `LANGFUSE_BASE_URL` | `https://cloud.langfuse.com` |
 
 ```env
 # Example .adhd/.env file

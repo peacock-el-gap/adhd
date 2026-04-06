@@ -1,5 +1,19 @@
 // --- Dynamic prompt builders (used by claude-harness) ---
 
+import type { AgentSkills } from "./skills.ts";
+
+/** Append skills content (injected + reference manifest) to a prompt. */
+function appendSkills(prompt: string, skills?: AgentSkills): string {
+  if (!skills) return prompt;
+  if (skills.injected) {
+    prompt += `\n\n## Skills\n\n${skills.injected}`;
+  }
+  if (skills.referenceManifest) {
+    prompt += `\n\n## Reference Materials\n\n${skills.referenceManifest}`;
+  }
+  return prompt;
+}
+
 interface PromptContext {
   workDir: string;
   isGreenfield: boolean;
@@ -7,6 +21,7 @@ interface PromptContext {
   testDir?: string;
   noBdd?: boolean;
   noTdd?: boolean;
+  skills?: AgentSkills;
 }
 
 export function buildPlannerPrompt(ctx: PromptContext): string {
@@ -18,7 +33,7 @@ export function buildPlannerPrompt(ctx: PromptContext): string {
     ? "You are planning a brand-new project that will be created from scratch."
     : "You are planning improvements to an existing codebase. Read the existing code to understand the project before writing the spec.";
 
-  return `You are a product architect. Your job is to take a brief user description and produce a comprehensive product specification.
+  const prompt = `You are a product architect. Your job is to take a brief user description and produce a comprehensive product specification.
 
 ## Context
 
@@ -69,6 +84,8 @@ Organize features into sprints (3-6 sprints). Each sprint should:
 - Examine the existing project structure. If source and test directories already exist, document them in the spec. If the project is empty or has no established convention, use these defaults: source code in \`${ctx.sourceDir ?? "src"}\`, tests in \`${ctx.testDir ?? "tests"}\`.
 - Do NOT write any code. Only write the spec.
 - ${writeLocation}`;
+
+  return appendSkills(prompt, ctx.skills);
 }
 
 export function buildGeneratorPrompt(ctx: PromptContext): string {
@@ -76,7 +93,7 @@ export function buildGeneratorPrompt(ctx: PromptContext): string {
     ? `All code goes in the \`app/\` subdirectory of your working directory. Initialize the project there if it doesn't exist.`
     : `This is an existing codebase. Read and understand the existing code structure before making changes. Work in the project root directory.`;
 
-  return `You are an expert software engineer. Your job is to build features one at a time according to a sprint contract, writing production-quality code.
+  const prompt = `You are an expert software engineer. Your job is to build features one at a time according to a sprint contract, writing production-quality code.
 
 ## Your Responsibilities
 
@@ -107,12 +124,14 @@ When evaluation feedback is provided in your prompt:
 - Pay attention to file paths and line numbers in the feedback
 - Re-run and verify each fix before committing
 - Do not skip or dismiss any feedback item`;
+
+  return appendSkills(prompt, ctx.skills);
 }
 
 export function buildEvaluatorPrompt(ctx: PromptContext): string {
   const appLocation = ctx.isGreenfield ? `the \`app/\` directory` : `the project root directory`;
 
-  return `You are a skeptical QA engineer. Your job is to rigorously test an application against sprint contract criteria and produce honest, detailed scores.
+  const prompt = `You are a skeptical QA engineer. Your job is to rigorously test an application against sprint contract criteria and produce honest, detailed scores.
 
 ## Your Responsibilities
 
@@ -167,6 +186,8 @@ You MUST output your evaluation as a JSON object (and nothing else) with this ex
 
 A sprint PASSES only if ALL criteria score at or above the threshold (default: 7).
 If ANY criterion falls below the threshold, the sprint FAILS and work goes back to the generator.`;
+
+  return appendSkills(prompt, ctx.skills);
 }
 
 // --- Static prompt constants: consumed by codex-harness (frozen). ---

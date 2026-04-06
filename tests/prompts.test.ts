@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildPlannerPrompt, buildGeneratorPrompt, buildEvaluatorPrompt } from "../shared/prompts.ts";
+import type { AgentSkills } from "../shared/skills.ts";
 
 const baseCtx = {
   workDir: "/tmp/test-project",
@@ -94,5 +95,86 @@ describe("buildGeneratorPrompt — greenfield vs existing", () => {
   test("existing project prompt mentions project root", () => {
     const prompt = buildGeneratorPrompt({ ...baseCtx, isGreenfield: false });
     expect(prompt).toContain("project root directory");
+  });
+});
+
+// --- Skills injection into prompts ---
+
+const injectedSkills: AgentSkills = {
+  injected: "Always use snake_case for variables.",
+  referenceManifest: "",
+  additionalDirs: [],
+};
+
+const referenceSkills: AgentSkills = {
+  injected: "",
+  referenceManifest: "The following docs are available:\n- `/skills/api-guide.md` — API patterns",
+  additionalDirs: ["/skills"],
+};
+
+const bothSkills: AgentSkills = {
+  injected: "Use TDD for all features.",
+  referenceManifest: "Available:\n- `/ref/patterns.md`",
+  additionalDirs: ["/ref"],
+};
+
+describe("buildPlannerPrompt — skills injection", () => {
+  test("appends injected skill content under ## Skills", () => {
+    const prompt = buildPlannerPrompt({ ...baseCtx, skills: injectedSkills });
+    expect(prompt).toContain("## Skills");
+    expect(prompt).toContain("Always use snake_case for variables.");
+  });
+
+  test("appends reference manifest under ## Reference Materials", () => {
+    const prompt = buildPlannerPrompt({ ...baseCtx, skills: referenceSkills });
+    expect(prompt).toContain("## Reference Materials");
+    expect(prompt).toContain("`/skills/api-guide.md`");
+  });
+
+  test("appends both sections when skills have inject + reference", () => {
+    const prompt = buildPlannerPrompt({ ...baseCtx, skills: bothSkills });
+    expect(prompt).toContain("## Skills");
+    expect(prompt).toContain("Use TDD for all features.");
+    expect(prompt).toContain("## Reference Materials");
+    expect(prompt).toContain("`/ref/patterns.md`");
+  });
+
+  test("no skills sections when skills is undefined", () => {
+    const prompt = buildPlannerPrompt(baseCtx);
+    expect(prompt).not.toContain("## Skills");
+    expect(prompt).not.toContain("## Reference Materials");
+  });
+
+  test("no skills sections when skills has empty content", () => {
+    const emptySkills: AgentSkills = { injected: "", referenceManifest: "", additionalDirs: [] };
+    const prompt = buildPlannerPrompt({ ...baseCtx, skills: emptySkills });
+    expect(prompt).not.toContain("## Skills");
+    expect(prompt).not.toContain("## Reference Materials");
+  });
+});
+
+describe("buildGeneratorPrompt — skills injection", () => {
+  test("appends injected skill content", () => {
+    const prompt = buildGeneratorPrompt({ ...baseCtx, skills: injectedSkills });
+    expect(prompt).toContain("## Skills");
+    expect(prompt).toContain("Always use snake_case for variables.");
+  });
+
+  test("appends reference manifest", () => {
+    const prompt = buildGeneratorPrompt({ ...baseCtx, skills: referenceSkills });
+    expect(prompt).toContain("## Reference Materials");
+  });
+});
+
+describe("buildEvaluatorPrompt — skills injection", () => {
+  test("appends injected skill content", () => {
+    const prompt = buildEvaluatorPrompt({ ...baseCtx, skills: injectedSkills });
+    expect(prompt).toContain("## Skills");
+    expect(prompt).toContain("Always use snake_case for variables.");
+  });
+
+  test("appends reference manifest", () => {
+    const prompt = buildEvaluatorPrompt({ ...baseCtx, skills: referenceSkills });
+    expect(prompt).toContain("## Reference Materials");
   });
 });

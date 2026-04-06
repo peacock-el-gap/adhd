@@ -216,7 +216,7 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
   // Langfuse config
   const langfusePublicKey = process.env.LANGFUSE_PUBLIC_KEY || undefined;
   const langfuseSecretKey = process.env.LANGFUSE_SECRET_KEY || undefined;
-  const langfuseBaseUrl = process.env.LANGFUSE_BASEURL || undefined;
+  const langfuseBaseUrl = process.env.LANGFUSE_BASE_URL || undefined;
 
   // Phase B: per-agent model overrides
   const modelPlanner = cli.modelPlanner ?? process.env.MODEL_PLANNER ?? undefined;

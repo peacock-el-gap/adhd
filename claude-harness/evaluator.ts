@@ -3,6 +3,7 @@ import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
+import type { AgentSkills } from "../shared/skills.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
@@ -18,12 +19,13 @@ export async function runEvaluator(
   attempt?: number,
   span?: Span,
   noBdd?: boolean,
+  skills?: AgentSkills,
 ): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
   log("EVALUATOR", `Evaluating sprint ${sprint} against ${contract.criteria.length} criteria`);
 
-  const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield, noBdd });
+  const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield, noBdd, skills });
   const appLocation = isGreenfield ? `${workDir}/app/` : workDir;
 
   const prompt = `IMPORTANT: Your working directory is ${workDir}. The application code is in ${appLocation}. All file operations must be within ${workDir}.
@@ -49,6 +51,7 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
     model,
     maxTurns: CLAUDE_MAX_TURNS,
     persistSession: false,
+    ...(skills?.additionalDirs.length ? { additionalDirectories: skills.additionalDirs } : {}),
   };
 
   const startTime = new Date();

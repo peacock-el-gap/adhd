@@ -1,0 +1,9 @@
+name: evaluation-criteria
+description: How to score and report evaluation results
+type: harness
+routing:
+  planner: exclude
+  generator: exclude
+  evaluator:
+    tier: reference
+    files: [scoring-guide.md]

@@ -1,0 +1,9 @@
+name: spec-format
+description: How to write harness-compatible product specifications
+type: harness
+routing:
+  planner:
+    tier: inject
+    files: [spec-format.md]
+  generator: exclude
+  evaluator: exclude

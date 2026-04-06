@@ -33,6 +33,8 @@ export async function initWorkspace(
   await mkdir(join(hDir, "contracts"), { recursive: true });
   await mkdir(join(hDir, "feedback"), { recursive: true });
   await mkdir(join(hDir, "logs"), { recursive: true });
+  await mkdir(join(hDir, "skills", "installed"), { recursive: true });
+  await mkdir(join(hDir, "skills", "local"), { recursive: true });
 
   // Greenfield mode: create app/ with git init
   if (greenfield) {
