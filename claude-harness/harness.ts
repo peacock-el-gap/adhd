@@ -357,6 +357,7 @@ async function runSprintLoop(
               logLevel,
               generatorSpan,
               retry,
+              config.noTdd,
             ),
           "generator",
         );
@@ -406,6 +407,7 @@ async function runSprintLoop(
               logLevel,
               retry,
               evaluatorSpan,
+              config.noBdd,
             ),
           "evaluator",
         );

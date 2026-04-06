@@ -3,6 +3,10 @@
 interface PromptContext {
   workDir: string;
   isGreenfield: boolean;
+  sourceDir?: string;
+  testDir?: string;
+  noBdd?: boolean;
+  noTdd?: boolean;
 }
 
 export function buildPlannerPrompt(ctx: PromptContext): string {
@@ -49,6 +53,7 @@ For each feature, provide:
 - User story (As a user, I want to...)
 - High-level description of what it does
 - Which sprint it belongs to
+${ctx.noBdd ? "" : "- Acceptance scenarios using Given/When/Then format. These scenarios are the acceptance criteria."}
 
 ### Sprint Plan
 Organize features into sprints (3-6 sprints). Each sprint should:
@@ -61,6 +66,7 @@ Organize features into sprints (3-6 sprints). Each sprint should:
 - Be ambitious in scope. Push beyond the obvious.
 - Find opportunities to add creative, delightful features.
 - Do NOT specify implementation details like function names, file structure, or API routes. The generator decides those.
+- Examine the existing project structure. If source and test directories already exist, document them in the spec. If the project is empty or has no established convention, use these defaults: source code in \`${ctx.sourceDir ?? "src"}\`, tests in \`${ctx.testDir ?? "tests"}\`.
 - Do NOT write any code. Only write the spec.
 - ${writeLocation}`;
 }
@@ -90,6 +96,7 @@ ${workingDir}
 - Follow the tech stack specified in the spec exactly. Do NOT substitute frameworks or languages.
 - Write clean, well-structured code. Use proper error handling.
 - If this is a retry after evaluation feedback, read the feedback carefully. Decide whether to REFINE the current approach (if scores are trending upward) or PIVOT to an entirely different approach (if the current direction is fundamentally flawed).
+${ctx.noTdd ? "" : "- Write failing tests first based on the spec's acceptance scenarios, then implement until tests pass, then refactor. Commit tests and implementation together."}
 - When the sprint is complete, write a brief summary of what you built to stdout.
 
 ## On Receiving Feedback
@@ -133,6 +140,7 @@ export function buildEvaluatorPrompt(ctx: PromptContext): string {
 - CRITICAL: When you start any background process (servers, dev servers, uvicorn, etc.) to test the app, you MUST kill them before outputting your evaluation. Use \`kill %1\` or \`kill $(lsof -t -i:PORT)\` or \`pkill -f uvicorn\` etc. Leaving processes running will hang the harness. Start servers with \`&\` and always kill them when done testing.
 - Check edge cases, not just the happy path.
 - If the UI looks generic or uses obvious AI-generated patterns (purple gradients, stock layouts), note this.
+${ctx.noBdd ? "" : "- Verify that tests exist for each acceptance scenario in the spec, and that tests pass."}
 
 ## Output Format
 

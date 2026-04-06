@@ -19,6 +19,7 @@ export async function runGenerator(
   logLevel?: LogLevel,
   span?: Span,
   attempt: number = 0,
+  noTdd?: boolean,
 ): Promise<{ response: string; sessionId?: string; sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
@@ -27,7 +28,7 @@ export async function runGenerator(
     `Sprint ${sprint} (${previousFeedback ? "retry" : "initial"}) - Building: ${contract.features.join(", ")}`,
   );
 
-  const systemPrompt = buildGeneratorPrompt({ workDir, isGreenfield });
+  const systemPrompt = buildGeneratorPrompt({ workDir, isGreenfield, noTdd });
   const hDir = harnessDir(workDir);
 
   const codeDir = isGreenfield ? `${workDir}/app/` : workDir;

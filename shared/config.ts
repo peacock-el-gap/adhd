@@ -43,6 +43,12 @@ interface ParsedCli {
   modelEvaluator?: string;
   // Phase C additions
   branch?: string;
+  // WP2: directory conventions
+  sourceDir?: string;
+  testDir?: string;
+  // WP1: BDD/TDD flags
+  noBdd: boolean;
+  noTdd: boolean;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -71,6 +77,12 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "model-evaluator": { type: "string" },
       // Phase C
       branch: { type: "string" },
+      // WP2: directory conventions
+      "source-dir": { type: "string" },
+      "test-dir": { type: "string" },
+      // WP1: BDD/TDD flags
+      "no-bdd": { type: "boolean", default: false },
+      "no-tdd": { type: "boolean", default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -100,6 +112,12 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     modelEvaluator: values["model-evaluator"] as string | undefined,
     // Phase C
     branch: values.branch as string | undefined,
+    // WP2: directory conventions
+    sourceDir: values["source-dir"] as string | undefined,
+    testDir: values["test-dir"] as string | undefined,
+    // WP1: BDD/TDD flags
+    noBdd: values["no-bdd"] as boolean,
+    noTdd: values["no-tdd"] as boolean,
   };
 }
 
@@ -231,6 +249,12 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     modelEvaluator,
     // Phase C
     branch: cli.branch,
+    // WP2: directory conventions
+    sourceDir: cli.sourceDir ?? process.env.SOURCE_DIR ?? "src",
+    testDir: cli.testDir ?? process.env.TEST_DIR ?? "tests",
+    // WP1: BDD/TDD flags
+    noBdd: cli.noBdd || false,
+    noTdd: cli.noTdd || false,
   };
 
   // Validate

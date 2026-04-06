@@ -160,6 +160,36 @@ describe("parseCli", () => {
     const cli = parseCli(["test"]);
     expect(cli.branch).toBeUndefined();
   });
+
+  // WP1: BDD/TDD flags
+  test("parses --no-bdd flag", () => {
+    const cli = parseCli(["--no-bdd", "test"]);
+    expect(cli.noBdd).toBe(true);
+  });
+
+  test("parses --no-tdd flag", () => {
+    const cli = parseCli(["--no-tdd", "test"]);
+    expect(cli.noTdd).toBe(true);
+  });
+
+  test("--no-bdd and --no-tdd default to false", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.noBdd).toBe(false);
+    expect(cli.noTdd).toBe(false);
+  });
+
+  // WP2: directory convention flags
+  test("parses --source-dir and --test-dir flags", () => {
+    const cli = parseCli(["--source-dir", "lib", "--test-dir", "spec", "test"]);
+    expect(cli.sourceDir).toBe("lib");
+    expect(cli.testDir).toBe("spec");
+  });
+
+  test("--source-dir and --test-dir default to undefined", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.sourceDir).toBeUndefined();
+    expect(cli.testDir).toBeUndefined();
+  });
 });
 
 // --- loadHarnessEnv ---
@@ -215,27 +245,27 @@ describe("loadHarnessEnv", () => {
 
 describe("resolveConfig", () => {
   test("throws when no prompt and not resuming", () => {
-    expect(() => resolveConfig({ greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false })).toThrow("A prompt is required");
+    expect(() => resolveConfig({ greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false })).toThrow("A prompt is required");
   });
 
   test("allows missing prompt when resuming", () => {
-    const config = resolveConfig({ resume: true, greenfield: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false });
+    const config = resolveConfig({ resume: true, greenfield: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false });
     expect(config.isResume).toBe(true);
     expect(config.userPrompt).toBe("");
   });
 
   test("resolves log level from flags", () => {
-    const verbose = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: true, quiet: false, noInteractive: false, debug: false, dryRun: false });
+    const verbose = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: true, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false });
     expect(verbose.logLevel).toBe("verbose");
 
-    const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false, debug: false, dryRun: false });
+    const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false });
     expect(quiet.logLevel).toBe("quiet");
 
-    const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true, dryRun: false });
+    const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true, dryRun: false, noBdd: false, noTdd: false });
     expect(debug.logLevel).toBe("debug");
   });
 
-  const baseCli = { prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false };
+  const baseCli = { prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false };
 
   test("resolves editor from CLI flag", () => {
     const config = resolveConfig({ ...baseCli, editor: "code --wait" });
@@ -357,5 +387,69 @@ describe("resolveConfig", () => {
   test("branch defaults to undefined", () => {
     const config = resolveConfig({ ...baseCli });
     expect(config.branch).toBeUndefined();
+  });
+
+  // WP1: BDD/TDD config resolution
+  test("resolves noBdd and noTdd from CLI flags", () => {
+    const config = resolveConfig({ ...baseCli, noBdd: true, noTdd: true });
+    expect(config.noBdd).toBe(true);
+    expect(config.noTdd).toBe(true);
+  });
+
+  test("noBdd and noTdd default to false", () => {
+    const config = resolveConfig({ ...baseCli });
+    expect(config.noBdd).toBe(false);
+    expect(config.noTdd).toBe(false);
+  });
+
+  // WP2: directory convention config resolution
+  test("resolves sourceDir and testDir from CLI flags", () => {
+    const config = resolveConfig({ ...baseCli, sourceDir: "lib", testDir: "spec" });
+    expect(config.sourceDir).toBe("lib");
+    expect(config.testDir).toBe("spec");
+  });
+
+  test("sourceDir and testDir default to 'src' and 'tests'", () => {
+    const prevSrc = process.env.SOURCE_DIR;
+    const prevTest = process.env.TEST_DIR;
+    delete process.env.SOURCE_DIR;
+    delete process.env.TEST_DIR;
+    try {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.sourceDir).toBe("src");
+      expect(config.testDir).toBe("tests");
+    } finally {
+      if (prevSrc !== undefined) process.env.SOURCE_DIR = prevSrc;
+      if (prevTest !== undefined) process.env.TEST_DIR = prevTest;
+    }
+  });
+
+  test("resolves sourceDir and testDir from env vars", () => {
+    const prevSrc = process.env.SOURCE_DIR;
+    const prevTest = process.env.TEST_DIR;
+    process.env.SOURCE_DIR = "app";
+    process.env.TEST_DIR = "test";
+    try {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.sourceDir).toBe("app");
+      expect(config.testDir).toBe("test");
+    } finally {
+      if (prevSrc === undefined) delete process.env.SOURCE_DIR;
+      else process.env.SOURCE_DIR = prevSrc;
+      if (prevTest === undefined) delete process.env.TEST_DIR;
+      else process.env.TEST_DIR = prevTest;
+    }
+  });
+
+  test("CLI sourceDir/testDir takes precedence over env vars", () => {
+    const prevSrc = process.env.SOURCE_DIR;
+    process.env.SOURCE_DIR = "env-src";
+    try {
+      const config = resolveConfig({ ...baseCli, sourceDir: "cli-src" });
+      expect(config.sourceDir).toBe("cli-src");
+    } finally {
+      if (prevSrc === undefined) delete process.env.SOURCE_DIR;
+      else process.env.SOURCE_DIR = prevSrc;
+    }
   });
 });

@@ -26,7 +26,13 @@ export async function runPlanner(
 
   const model = config.modelPlanner ?? config.model ?? CLAUDE_MODEL;
   const greenfield = isGreenfield;
-  let systemPrompt = buildPlannerPrompt({ workDir, isGreenfield: greenfield });
+  let systemPrompt = buildPlannerPrompt({
+    workDir,
+    isGreenfield: greenfield,
+    sourceDir: config.sourceDir,
+    testDir: config.testDir,
+    noBdd: config.noBdd,
+  });
 
   if (!interactive) {
     systemPrompt +=

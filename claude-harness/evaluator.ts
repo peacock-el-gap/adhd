@@ -17,12 +17,13 @@ export async function runEvaluator(
   logLevel?: LogLevel,
   attempt?: number,
   span?: Span,
+  noBdd?: boolean,
 ): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
   log("EVALUATOR", `Evaluating sprint ${sprint} against ${contract.criteria.length} criteria`);
 
-  const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield });
+  const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield, noBdd });
   const appLocation = isGreenfield ? `${workDir}/app/` : workDir;
 
   const prompt = `IMPORTANT: Your working directory is ${workDir}. The application code is in ${appLocation}. All file operations must be within ${workDir}.

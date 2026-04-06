@@ -29,6 +29,12 @@ export interface HarnessConfig {
   modelEvaluator?: string;
   // Phase C additions
   branch?: string; // C3: opt-in branch creation before sprint loop
+  // WP2: Default directory conventions for greenfield projects
+  sourceDir?: string; // --source-dir / SOURCE_DIR, default "src"
+  testDir?: string; // --test-dir / TEST_DIR, default "tests"
+  // WP1: BDD/TDD prompt flags
+  noBdd?: boolean; // --no-bdd flag, disables BDD instructions in prompts
+  noTdd?: boolean; // --no-tdd flag, disables TDD instructions in prompts
 }
 
 export interface SprintContract {
