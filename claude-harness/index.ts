@@ -47,5 +47,6 @@ try {
   process.exit(result.success ? 0 : 1);
 } catch (error) {
   logError("HARNESS", `Fatal error: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
+  // Exit code 2 for infrastructure errors (distinguishes from test failure = 1)
+  process.exit(error instanceof Error && error.name === "HarnessFatalError" ? 2 : 1);
 }

@@ -16,9 +16,9 @@ export async function runGenerator(
   isGreenfield: boolean,
   logLevel?: LogLevel,
   span?: Span,
+  attempt: number = 0,
 ): Promise<{ response: string; sessionId?: string }> {
   const sprint = contract.sprintNumber;
-  const attempt = previousFeedback ? 1 : 0; // simplified: 0 for initial, 1+ for retry
   const level = logLevel ?? "normal";
   log("GENERATOR", `Sprint ${sprint} (${previousFeedback ? "retry" : "initial"}) - Building: ${contract.features.join(", ")}`);
 

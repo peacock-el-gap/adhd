@@ -122,7 +122,7 @@ function parseEvalResult(
   }
 
   // Strategy 2: Find the largest {...} block in the raw response
-  const braceMatch = response.match(/\{[\s\S]*"passed"[\s\S]*"feedback"[\s\S]*\}/);
+  const braceMatch = response.match(/\{[\s\S]*?"passed"[\s\S]*?"feedback"[\s\S]*?\}/);
   if (braceMatch) candidates.push(braceMatch[0]);
 
   // Strategy 3: Raw response as-is

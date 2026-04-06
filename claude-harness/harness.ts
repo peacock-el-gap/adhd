@@ -202,7 +202,7 @@ async function runSprintLoop(
     } catch (err) {
       negotiationSpan.end({ error: String(err) });
       sprintSpan.end({ error: String(err) });
-      return handleFatalError(err, config, progress, results, startTime);
+      return await handleFatalError(err, config, progress, results);
     }
     negotiationSpan.end({ criteria: contract.criteria.length, features: contract.features.length });
     await writeContract(config.workDir, contract);
@@ -225,14 +225,14 @@ async function runSprintLoop(
       const generatorSpan = attemptSpan.startChild("generator", { model, sprint, attempt: retry });
       try {
         await withTransientRetry(
-          () => runGenerator(config.workDir, spec, contract, lastEval, model, isGreenfield, logLevel, generatorSpan),
+          () => runGenerator(config.workDir, spec, contract, lastEval, model, isGreenfield, logLevel, generatorSpan, retry),
           "generator",
         );
       } catch (err) {
         generatorSpan.end({ error: String(err) });
         attemptSpan.end({ error: String(err) });
         sprintSpan.end({ error: String(err) });
-        return handleFatalError(err, config, progress, results, startTime);
+        return await handleFatalError(err, config, progress, results);
       }
 
       // Evaluate
@@ -249,7 +249,7 @@ async function runSprintLoop(
         evaluatorSpan.end({ error: String(err) });
         attemptSpan.end({ error: String(err) });
         sprintSpan.end({ error: String(err) });
-        return handleFatalError(err, config, progress, results, startTime);
+        return await handleFatalError(err, config, progress, results);
       }
       await writeFeedback(config.workDir, sprint, retry, lastEval);
 
@@ -291,20 +291,22 @@ async function runSprintLoop(
       } catch {
         // No git repo or no commits — skip SHA capture
       }
-      progress.sprintResults = results.map(({ sprintNumber, passed, attempts }) => ({
+      progress.sprintResults = results.map(({ sprintNumber, passed, attempts, evalResult }) => ({
         sprintNumber,
         passed,
         attempts,
+        evalResult,
       }));
       await writeProgress(config.workDir, progress);
 
       log("HARNESS", `Sprint ${sprint} PASSED — checkpoint saved. To resume later: bun run claude-harness/index.ts --resume`);
     } else {
       progress.status = "failed";
-      progress.sprintResults = results.map(({ sprintNumber, passed, attempts }) => ({
+      progress.sprintResults = results.map(({ sprintNumber, passed, attempts, evalResult }) => ({
         sprintNumber,
         passed,
         attempts,
+        evalResult,
       }));
       await writeProgress(config.workDir, progress);
       logError("HARNESS", `Harness stopped: sprint ${sprint} could not pass evaluation`);
@@ -355,28 +357,37 @@ async function withTransientRetry<T>(fn: () => Promise<T>, label: string): Promi
   throw new Error("Unreachable");
 }
 
-function handleFatalError(
+class HarnessFatalError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HarnessFatalError";
+  }
+}
+
+async function handleFatalError(
   err: unknown,
   config: HarnessConfig,
   progress: HarnessProgress,
   results: SprintResult[],
-  startTime: number,
-): HarnessResult {
+): Promise<never> {
   const msg = err instanceof Error ? err.message : String(err);
   logError("HARNESS", msg);
 
-  // Save checkpoint before exiting
-  progress.sprintResults = results.map(({ sprintNumber, passed, attempts }) => ({
+  // Save checkpoint before throwing
+  progress.sprintResults = results.map(({ sprintNumber, passed, attempts, evalResult }) => ({
     sprintNumber,
     passed,
     attempts,
+    evalResult,
   }));
-  writeProgress(config.workDir, progress).catch(() => {});
+  try {
+    await writeProgress(config.workDir, progress);
+    log("HARNESS", "Progress saved. Resume with: bun run claude-harness/index.ts --resume");
+  } catch {
+    logError("HARNESS", "Failed to save progress checkpoint");
+  }
 
-  log("HARNESS", "Progress saved. Resume with: bun run claude-harness/index.ts --resume");
-
-  // Exit with code 2 to distinguish from test failure (code 1)
-  process.exit(2);
+  throw new HarnessFatalError(msg);
 }
 
 // --- Contract negotiation ---
@@ -477,7 +488,7 @@ function parseContract(text: string, sprintNumber: number): SprintContract {
   for (const match of codeBlocks.reverse()) {
     if (match[1]) candidates.push(match[1].trim());
   }
-  const braceMatch = text.match(/\{[\s\S]*"criteria"[\s\S]*\}/);
+  const braceMatch = text.match(/\{[\s\S]*?"criteria"[\s\S]*?\}/);
   if (braceMatch) candidates.push(braceMatch[0]);
   candidates.push(text.trim());
 
