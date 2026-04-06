@@ -41,6 +41,8 @@ interface ParsedCli {
   modelPlanner?: string;
   modelGenerator?: string;
   modelEvaluator?: string;
+  // Phase C additions
+  branch?: string;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -67,6 +69,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "model-planner": { type: "string" },
       "model-generator": { type: "string" },
       "model-evaluator": { type: "string" },
+      // Phase C
+      branch: { type: "string" },
     },
     allowPositionals: true,
     strict: true,
@@ -94,6 +98,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     modelPlanner: values["model-planner"] as string | undefined,
     modelGenerator: values["model-generator"] as string | undefined,
     modelEvaluator: values["model-evaluator"] as string | undefined,
+    // Phase C
+    branch: values.branch as string | undefined,
   };
 }
 
@@ -223,6 +229,8 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     modelPlanner,
     modelGenerator,
     modelEvaluator,
+    // Phase C
+    branch: cli.branch,
   };
 
   // Validate

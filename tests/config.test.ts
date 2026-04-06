@@ -149,6 +149,17 @@ describe("parseCli", () => {
     expect(cli.modelGenerator).toBeUndefined();
     expect(cli.modelEvaluator).toBeUndefined();
   });
+
+  // Phase C CLI tests
+  test("parses --branch flag", () => {
+    const cli = parseCli(["--branch", "feature/foo", "test"]);
+    expect(cli.branch).toBe("feature/foo");
+  });
+
+  test("--branch defaults to undefined", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.branch).toBeUndefined();
+  });
 });
 
 // --- loadHarnessEnv ---
@@ -335,5 +346,16 @@ describe("resolveConfig", () => {
       if (prev === undefined) delete process.env.MODEL_GENERATOR;
       else process.env.MODEL_GENERATOR = prev;
     }
+  });
+
+  // Phase C resolveConfig tests
+  test("resolves branch from CLI flag", () => {
+    const config = resolveConfig({ ...baseCli, branch: "feature/my-branch" });
+    expect(config.branch).toBe("feature/my-branch");
+  });
+
+  test("branch defaults to undefined", () => {
+    const config = resolveConfig({ ...baseCli });
+    expect(config.branch).toBeUndefined();
   });
 });

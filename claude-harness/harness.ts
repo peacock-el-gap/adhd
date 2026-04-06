@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readFile as readFileRaw } from "node:fs/promises";
 import { join } from "node:path";
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
@@ -117,6 +118,15 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     return { success: true, sprints: [], totalDurationMs: Date.now() - startTime };
   }
 
+  // C3: Create branch if --branch specified
+  if (config.branch) {
+    const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
+    execSync(`git checkout -b ${config.branch}`, { cwd: gitDir, stdio: "pipe" });
+    log("HARNESS", `Created branch: ${config.branch}`);
+    progress.branch = config.branch;
+    await writeProgress(config.workDir, progress);
+  }
+
   // Count sprints from the (possibly edited) spec
   const sprintMatches = approvedSpec.match(/##\s*Sprint\s+\d+/gi);
   const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
@@ -175,6 +185,20 @@ async function resumeHarness(
     // Re-count sprints in case spec was edited
     const sprintMatches = spec.match(/##\s*Sprint\s+\d+/gi);
     progress.totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
+  }
+
+  // C3: Resume branch check — warn if HEAD is on a different branch
+  if (progress.branch) {
+    const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
+    try {
+      const currentBranch = execSync("git branch --show-current", { cwd: gitDir, encoding: "utf-8" }).trim();
+      if (currentBranch !== progress.branch) {
+        log("HARNESS", `Warning: previous run used branch "${progress.branch}" but HEAD is on "${currentBranch}".`);
+        log("HARNESS", `Consider: git checkout ${progress.branch}`);
+      }
+    } catch {
+      // Not a git repo — skip
+    }
   }
 
   // Restore prior sprint results
@@ -277,6 +301,23 @@ async function runSprintLoop(
     negotiationSpan.end({ criteria: contract.criteria.length, features: contract.features.length });
     await writeContract(config.workDir, contract);
     log("HARNESS", `Contract agreed: ${contract.criteria.length} criteria for ${contract.features.length} features`);
+
+    // C2: Contract Preview gate
+    if ((config.interactive ?? true) && config.gateTimeout !== 0) {
+      const gate = await promptGate(
+        `Sprint ${sprint} contract:\n  Features: ${contract.features.join(", ")}\n  Criteria: ${contract.criteria.length}`,
+        [
+          { key: "a", label: "Accept", isDefault: true },
+          { key: "x", label: "Abort", isDefault: false },
+        ],
+        config.gateTimeout ?? 15,
+        config.interactive ?? true,
+      );
+      if (gate.key === "x") {
+        log("HARNESS", "Aborted by user at contract preview.");
+        process.exit(0);
+      }
+    }
 
     // Phase 3-4: Build-Evaluate Loop
     let passed = false;
@@ -390,6 +431,27 @@ async function runSprintLoop(
         break;
       }
 
+      // C1: Evaluator Override — let user force PASS on false negatives
+      if ((config.interactive ?? true) && config.gateTimeout !== 0 && retry < config.maxRetriesPerSprint) {
+        const minScore = Math.min(...Object.values(lastEval.scores));
+        const gate = await promptGate(
+          `Evaluator scored ${minScore}/10 (threshold: ${config.passThreshold}). Override?`,
+          [
+            { key: "n", label: "Accept score — retry", isDefault: true },
+            { key: "p", label: "Force PASS — proceed to next sprint", isDefault: false },
+          ],
+          config.gateTimeout ?? 15,
+          config.interactive ?? true,
+        );
+        if (gate.key === "p") {
+          lastEval.passed = true;
+          lastEval.overridden = true;
+          passed = true;
+          log("HARNESS", `Sprint ${sprint} PASSED (user override) on attempt ${attempts}`);
+          break;
+        }
+      }
+
       if (retry < config.maxRetriesPerSprint) {
         if (shouldLog("normal", logLevel)) {
           log("HARNESS", `Sprint ${sprint} failed attempt ${attempts}, retrying...`);
@@ -431,6 +493,42 @@ async function runSprintLoop(
         "HARNESS",
         `Sprint ${sprint} PASSED — checkpoint saved. To resume later: bun run claude-harness/index.ts --resume`,
       );
+
+      // C4: Mid-run steering (between sprints, not after the last one)
+      if ((config.interactive ?? true) && config.gateTimeout !== 0 && sprint < totalSprints) {
+        const steerOptions: import("../shared/interaction.ts").GateOption[] = [
+          { key: "c", label: "Continue", isDefault: true },
+          ...(config.editor ? [{ key: "e", label: "Edit spec", isDefault: false }] : []),
+          { key: "s", label: `Skip sprint ${sprint + 1}`, isDefault: false },
+          { key: "x", label: "Abort", isDefault: false },
+        ];
+
+        const gate = await promptGate(
+          `Sprint ${sprint}/${totalSprints} complete. Next: Sprint ${sprint + 1}`,
+          steerOptions,
+          config.gateTimeout ?? 15,
+          config.interactive ?? true,
+        );
+
+        if (gate.key === "x") {
+          log("HARNESS", "Aborted by user at mid-run steering.");
+          process.exit(0);
+        }
+        if (gate.key === "s") {
+          results.push({ sprintNumber: sprint + 1, passed: true, attempts: 0, skipped: true });
+          progress.completedSprints++;
+          sprint++; // Advance past the skipped sprint
+          continue; // Loop increment makes sprint = skip+2
+        }
+        if (gate.key === "e" && config.editor) {
+          const specPath = join(harnessDir(config.workDir), "spec.md");
+          execSync(`${config.editor} ${JSON.stringify(specPath)}`, { stdio: "inherit" });
+          spec = readFileSync(specPath, "utf-8");
+          // Re-count sprints
+          const newMatches = spec.match(/##\s*Sprint\s+\d+/gi);
+          if (newMatches) totalSprints = Math.min(newMatches.length, config.maxSprints);
+        }
+      }
     } else {
       progress.status = "failed";
       progress.sprintResults = results.map(({ sprintNumber, passed, attempts, evalResult }) => ({

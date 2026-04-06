@@ -27,6 +27,8 @@ export interface HarnessConfig {
   modelPlanner?: string; // B3: per-agent model overrides
   modelGenerator?: string;
   modelEvaluator?: string;
+  // Phase C additions
+  branch?: string; // C3: opt-in branch creation before sprint loop
 }
 
 export interface SprintContract {
@@ -52,6 +54,8 @@ export interface EvalResult {
   scores: Record<string, number>;
   feedback: EvalScore[];
   overallSummary: string;
+  // Phase C additions
+  overridden?: boolean; // C1: user forced PASS via evaluator override gate
 }
 
 export interface HarnessProgress {
@@ -65,6 +69,8 @@ export interface HarnessProgress {
   sprintResults?: SprintResult[];
   // Phase A additions
   specApproved?: boolean;
+  // Phase C additions
+  branch?: string; // C3: branch created for this run
 }
 
 export type CommitSource = "agent" | "resume" | "fallback" | "none";
@@ -75,6 +81,8 @@ export interface SprintResult {
   attempts: number;
   evalResult?: EvalResult;
   commitSource?: CommitSource;
+  // Phase C additions
+  skipped?: boolean; // C4: sprint skipped via mid-run steering
 }
 
 export interface HarnessResult {
