@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { access, mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { log } from "./logger.ts";
 import type { EvalResult, HarnessProgress, SprintContract } from "./types.ts";
 
 /** Resolve the .harness metadata directory for a given project root. */
@@ -97,10 +98,10 @@ function checkGitignore(workDir: string): void {
     if (existsSync(gitignorePath)) {
       const content = readFileSync(gitignorePath, "utf-8");
       if (!content.includes(".harness")) {
-        console.log("[HARNESS] Consider adding .harness/ to your .gitignore");
+        log("HARNESS", "Consider adding .harness/ to your .gitignore");
       }
     } else {
-      console.log("[HARNESS] Consider adding .harness/ to your .gitignore");
+      log("HARNESS", "Consider adding .harness/ to your .gitignore");
     }
   } catch {
     // Not critical — skip silently

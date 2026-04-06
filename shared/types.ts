@@ -1,4 +1,4 @@
-export type LogLevel = "quiet" | "normal" | "verbose";
+export type LogLevel = "quiet" | "normal" | "verbose" | "debug";
 
 export interface HarnessConfig {
   userPrompt: string;

@@ -103,7 +103,7 @@ adhd --resume
 
 **What happens to your files:** In existing-project mode, the generator makes changes directly and creates git commits. In greenfield mode, all code goes into `app/`. The `.harness/` directory stores metadata and logs -- add it to your `.gitignore`.
 
-**Terminal output:** Timestamped status messages, tool calls, and sprint pass/fail results. Use `--verbose` for full agent output or `--quiet` for just results.
+**Terminal output:** Timestamped status messages, tool calls, and sprint pass/fail results. Use `--verbose` for full agent output, `--quiet` for just results, or `--debug` for SDK-level tracing.
 
 **Automatic retries:** Transient errors (rate limits, server errors) are retried with backoff (30s, 60s, 120s). Non-transient errors (auth failures, quota) trigger a checkpoint and exit.
 
@@ -162,7 +162,7 @@ Precedence: **CLI flag > env var > `.harness/.env` > default**.
 | Max sprints | `--max-sprints <n>` | `MAX_SPRINTS` | `10` |
 | Max retries/sprint | `--max-retries <n>` | `MAX_RETRIES` | `3` |
 | Pass threshold | `--threshold <n>` | `PASS_THRESHOLD` | `7` |
-| Log level | `--verbose` / `--quiet` | `LOG_LEVEL` | `normal` |
+| Log level | `--verbose` / `--quiet` / `--debug` | `LOG_LEVEL` | `normal` |
 | Timezone display | -- | `TZ_DISPLAY` | system local |
 | Non-interactive | `--no-interactive` | -- | interactive |
 | Resume mode | `--resume` | -- | off |
@@ -185,6 +185,7 @@ TZ_DISPLAY=Europe/Warsaw
 | `quiet` | Sprint pass/fail, errors only |
 | `normal` | Tool names, scores, status messages (default) |
 | `verbose` | Everything above + assistant text + tool input summaries |
+| `debug` | Everything above + config details, SDK call tracing, message types |
 
 ### Langfuse Tracing
 

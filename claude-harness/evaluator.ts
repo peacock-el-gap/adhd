@@ -1,7 +1,7 @@
 import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
-import { log, logError, shouldLog } from "../shared/logger.ts";
+import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
@@ -75,6 +75,20 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
           if (shouldLog("normal", level)) {
             log("EVALUATOR", `  Tool: ${block.name}`);
           }
+        }
+      }
+    } else if (msg.type === "system") {
+      const sysMsg = msg as { message?: string; session_id?: string };
+      logDebug("EVALUATOR", `System: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
+    } else if (msg.type === "user") {
+      const userMsg = msg as {
+        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
+      };
+      for (const block of userMsg.message.content) {
+        if (block.type === "tool_result" && block.tool_use_id) {
+          logDebug("EVALUATOR", `Tool result for ${block.tool_use_id}: ${summarize(block.content ?? "")}`);
+          convLog.logToolResult(block.content ?? "");
+          span?.logMessage("user", `tool_result: ${summarize(block.content ?? "")}`);
         }
       }
     } else if (msg.type === "tool_use_summary") {

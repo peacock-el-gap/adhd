@@ -4,7 +4,7 @@ import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
-import { log, logError, shouldLog } from "../shared/logger.ts";
+import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
 import { buildPlannerPrompt } from "../shared/prompts.ts";
 import type { Span } from "../shared/tracing.ts";
 import type { HarnessConfig } from "../shared/types.ts";
@@ -88,7 +88,11 @@ export async function runPlanner(config: HarnessConfig, span?: Span): Promise<st
   let fullResponse = "";
   let completed = false;
 
+  logDebug("PLANNER", `Calling query() with model: ${options.model} tools: ${options.tools}`);
+  logDebug("PLANNER", `Prompt: ${fullPrompt.length} chars, systemPrompt: ${systemPrompt.length} chars`);
+
   for await (const msg of query({ prompt: fullPrompt, options })) {
+    logDebug("PLANNER", `Received message type: ${msg.type}`);
     if (msg.type === "assistant") {
       const message = msg as {
         message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
@@ -107,6 +111,20 @@ export async function runPlanner(config: HarnessConfig, span?: Span): Promise<st
           if (shouldLog("normal", logLevel)) {
             log("PLANNER", `  Tool: ${block.name}`);
           }
+        }
+      }
+    } else if (msg.type === "system") {
+      const sysMsg = msg as { message?: string; session_id?: string };
+      logDebug("PLANNER", `System: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
+    } else if (msg.type === "user") {
+      const userMsg = msg as {
+        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
+      };
+      for (const block of userMsg.message.content) {
+        if (block.type === "tool_result" && block.tool_use_id) {
+          logDebug("PLANNER", `Tool result for ${block.tool_use_id}: ${summarize(block.content ?? "")}`);
+          convLog.logToolResult(block.content ?? "");
+          span?.logMessage("user", `tool_result: ${summarize(block.content ?? "")}`);
         }
       }
     } else if (msg.type === "tool_use_summary") {

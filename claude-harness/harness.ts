@@ -12,7 +12,7 @@ import {
   writeProgress,
   writeSpec,
 } from "../shared/files.ts";
-import { log, logDivider, logError, setDisplayTimezone, shouldLog } from "../shared/logger.ts";
+import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog, summarize } from "../shared/logger.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
 import { initTracing, type Span, type Tracer } from "../shared/tracing.ts";
 import type {
@@ -33,7 +33,6 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   const startTime = Date.now();
   const model = config.model ?? CLAUDE_MODEL;
   const isGreenfield = config.isGreenfield ?? false;
-  const _logLevel = config.logLevel ?? "normal";
 
   // Configure timezone display for terminal
   if (config.tzDisplay) {
@@ -58,7 +57,9 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   }
 
   // --- Fresh run path ---
+  logDebug("HARNESS", "Initializing workspace...");
   await initWorkspace(config.workDir, { greenfield: isGreenfield });
+  logDebug("HARNESS", "Workspace initialized");
 
   // Phase 1: Planning
   logDivider();
@@ -75,7 +76,9 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   await writeProgress(config.workDir, progress);
 
   const plannerSpan = tracer.startSpan("planner", { model });
+  logDebug("HARNESS", "Calling runPlanner...");
   const spec = await runPlanner(config, plannerSpan);
+  logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
   await writeSpec(config.workDir, spec);
   log("HARNESS", "Product spec written");
 
@@ -210,7 +213,7 @@ async function runSprintLoop(
     const negotiationSpan = sprintSpan.startChild("contract-negotiation", { sprint });
     try {
       contract = await withTransientRetry(
-        () => negotiateContract(config.workDir, spec, sprint, model, logLevel, negotiationSpan),
+        () => negotiateContract(config.workDir, spec, sprint, model, negotiationSpan),
         "contract negotiation",
       );
     } catch (err) {
@@ -425,10 +428,8 @@ async function negotiateContract(
   spec: string,
   sprintNumber: number,
   model: string,
-  logLevel: string,
   parentSpan?: Span,
 ): Promise<SprintContract> {
-  const _level = (logLevel ?? "normal") as "quiet" | "normal" | "verbose";
   const startTime = new Date();
 
   // Generator proposes contract
@@ -439,7 +440,7 @@ async function negotiateContract(
     systemPrompt: CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    tools: ["Read"],
+    tools: ["Read", "Glob"],
     model,
     maxTurns: 10,
     persistSession: false,
@@ -463,6 +464,20 @@ async function negotiateContract(
           parentSpan?.logToolCall(block.name, block.input);
         }
       }
+    } else if (msg.type === "system") {
+      const sysMsg = msg as { message?: string; session_id?: string };
+      logDebug("HARNESS", `Contract proposal system: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
+    } else if (msg.type === "user") {
+      const userMsg = msg as {
+        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
+      };
+      for (const block of userMsg.message.content) {
+        if (block.type === "tool_result" && block.tool_use_id) {
+          logDebug("HARNESS", `Contract proposal tool result: ${summarize(block.content ?? "")}`);
+          convLog.logToolResult(block.content ?? "");
+          parentSpan?.logMessage("user:generator", `tool_result: ${summarize(block.content ?? "")}`);
+        }
+      }
     } else if (msg.type === "tool_use_summary") {
       const summary = msg as { summary?: string };
       convLog.logToolResult(summary.summary ?? "");
@@ -477,7 +492,7 @@ async function negotiateContract(
     systemPrompt: CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    tools: ["Read"],
+    tools: ["Read", "Glob"],
     model,
     maxTurns: 10,
     persistSession: false,
@@ -497,6 +512,20 @@ async function negotiateContract(
         } else if (block.type === "tool_use" && block.name) {
           convLog.logToolUse(block.name, block.input);
           parentSpan?.logToolCall(block.name, block.input);
+        }
+      }
+    } else if (msg.type === "system") {
+      const sysMsg = msg as { message?: string; session_id?: string };
+      logDebug("HARNESS", `Contract review system: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
+    } else if (msg.type === "user") {
+      const userMsg = msg as {
+        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
+      };
+      for (const block of userMsg.message.content) {
+        if (block.type === "tool_result" && block.tool_use_id) {
+          logDebug("HARNESS", `Contract review tool result: ${summarize(block.content ?? "")}`);
+          convLog.logToolResult(block.content ?? "");
+          parentSpan?.logMessage("user:evaluator", `tool_result: ${summarize(block.content ?? "")}`);
         }
       }
     } else if (msg.type === "tool_use_summary") {

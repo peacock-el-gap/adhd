@@ -96,7 +96,7 @@ harness/
 │   ├── types.ts                   # TypeScript interfaces (HarnessConfig, contracts, eval)
 │   ├── config.ts                  # CLI parsing, env loading, config resolution
 │   ├── prompts.ts                 # Agent system prompts (dynamic builders + static constants)
-│   ├── logger.ts                  # Colored console output with timezone support
+│   ├── logger.ts                  # Leveled logging (quiet/normal/verbose/debug) with timezone support
 │   ├── files.ts                   # File I/O for .harness/ metadata
 │   ├── conversation-logger.ts     # Markdown conversation log writer
 │   └── tracing.ts                 # Langfuse tracing (no-op when disabled)
@@ -128,5 +128,5 @@ Both harnesses share the same types, config defaults, file I/O, and logging. The
 bun run typecheck    # Type checking (tsc --noEmit)
 bun run lint         # Biome lint + format check
 bun run lint:fix     # Auto-fix lint/format issues
-bun run test         # Unit tests (64 tests across 6 files)
+bun run test         # Unit tests
 ```

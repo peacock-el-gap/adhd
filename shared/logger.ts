@@ -10,13 +10,20 @@ const COLORS: Record<AgentRole, string> = {
 };
 
 const RESET = "\x1b[0m";
-const DIM = "\x1b[2m";
+const GRAY = "\x1b[90m";
+const RED = "\x1b[31m";
 
 let configuredTimezone: string | undefined;
+let configuredLogLevel: LogLevel = "normal";
 
 /** Set the timezone used for terminal timestamps. Call once at startup. */
 export function setDisplayTimezone(tz?: string): void {
   configuredTimezone = tz;
+}
+
+/** Set the global log level. Call once at startup. */
+export function setLogLevel(level: LogLevel): void {
+  configuredLogLevel = level;
 }
 
 function timestamp(): string {
@@ -37,20 +44,31 @@ function timestamp(): string {
   }
 }
 
-function formatMessage(role: AgentRole, message: string): string {
-  return `${DIM}${timestamp()}${RESET} ${COLORS[role]}[${role}]${RESET} ${message}`;
+function formatMessage(role: AgentRole, timestampColor: string, message: string): string {
+  return `${timestampColor}${timestamp()}${RESET} ${COLORS[role]}[${role}]${RESET} ${message}`;
 }
 
 export function log(role: AgentRole, message: string): void {
-  console.log(formatMessage(role, message));
+  console.log(formatMessage(role, "", message));
 }
 
 export function logError(role: AgentRole, message: string): void {
-  console.error(formatMessage(role, `\x1b[31m${message}${RESET}`));
+  console.error(formatMessage(role, RED, `${RED}${message}${RESET}`));
+}
+
+/** Debug-level log. Only emits when log level is "debug". Gray timestamp and message, colored role tag. */
+export function logDebug(role: AgentRole, message: string): void {
+  if (!shouldLog("debug", configuredLogLevel)) return;
+  console.error(formatMessage(role, GRAY, `${GRAY}${message}${RESET}`));
 }
 
 export function logDivider(): void {
-  console.log(`\n${DIM}${"─".repeat(60)}${RESET}\n`);
+  console.log(`\n${GRAY}${"─".repeat(60)}${RESET}\n`);
+}
+
+/** Collapse multiline content into a single line, truncated for debug output. */
+export function summarize(text: string, maxLen = 200): string {
+  return text.replace(/\n/g, "\\n").slice(0, maxLen);
 }
 
 /**
@@ -58,6 +76,6 @@ export function logDivider(): void {
  * given the configured log level.
  */
 export function shouldLog(messageLevel: LogLevel, configLevel: LogLevel): boolean {
-  const order: LogLevel[] = ["quiet", "normal", "verbose"];
+  const order: LogLevel[] = ["quiet", "normal", "verbose", "debug"];
   return order.indexOf(messageLevel) <= order.indexOf(configLevel);
 }

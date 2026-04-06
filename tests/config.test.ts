@@ -76,12 +76,17 @@ describe("parseCli", () => {
     expect(parseCli(["--quiet", "test"]).quiet).toBe(true);
   });
 
+  test("parses --debug", () => {
+    expect(parseCli(["--debug", "test"]).debug).toBe(true);
+  });
+
   test("defaults boolean flags to false", () => {
     const cli = parseCli(["test"]);
     expect(cli.greenfield).toBe(false);
     expect(cli.resume).toBe(false);
     expect(cli.verbose).toBe(false);
     expect(cli.quiet).toBe(false);
+    expect(cli.debug).toBe(false);
   });
 });
 
@@ -138,20 +143,23 @@ describe("loadHarnessEnv", () => {
 
 describe("resolveConfig", () => {
   test("throws when no prompt and not resuming", () => {
-    expect(() => resolveConfig({ greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false })).toThrow("A prompt is required");
+    expect(() => resolveConfig({ greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false })).toThrow("A prompt is required");
   });
 
   test("allows missing prompt when resuming", () => {
-    const config = resolveConfig({ resume: true, greenfield: false, verbose: false, quiet: false, noInteractive: false });
+    const config = resolveConfig({ resume: true, greenfield: false, verbose: false, quiet: false, noInteractive: false, debug: false });
     expect(config.isResume).toBe(true);
     expect(config.userPrompt).toBe("");
   });
 
   test("resolves log level from flags", () => {
-    const verbose = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: true, quiet: false, noInteractive: false });
+    const verbose = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: true, quiet: false, noInteractive: false, debug: false });
     expect(verbose.logLevel).toBe("verbose");
 
-    const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false });
+    const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false, debug: false });
     expect(quiet.logLevel).toBe("quiet");
+
+    const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true });
+    expect(debug.logLevel).toBe("debug");
   });
 });

@@ -1,5 +1,6 @@
+#!/usr/bin/env bun
 import { loadHarnessEnv, parseCli, resolveConfig } from "../shared/config.ts";
-import { log, logDivider, logError, setDisplayTimezone } from "../shared/logger.ts";
+import { log, logDebug, logDivider, logError, setDisplayTimezone, setLogLevel } from "../shared/logger.ts";
 import { runHarness } from "./harness.ts";
 
 try {
@@ -11,10 +12,19 @@ try {
 
   const config = resolveConfig(cli);
 
-  // Configure timezone for terminal display
+  // Configure logger early so debug output works from here on
+  setLogLevel(config.logLevel ?? "normal");
   if (config.tzDisplay) {
     setDisplayTimezone(config.tzDisplay);
   }
+
+  logDebug("HARNESS", `CLI flags: ${JSON.stringify(cli)}`);
+  logDebug("HARNESS", `Project dir: ${projectDir}`);
+  logDebug("HARNESS", `ANTHROPIC_API_KEY set? ${!!process.env.ANTHROPIC_API_KEY}`);
+  logDebug(
+    "HARNESS",
+    `Config: workDir=${config.workDir} prompt=${config.userPrompt.length} chars model=${config.model}`,
+  );
 
   logDivider();
   log("HARNESS", "ADHD - Claude Agent SDK Harness");
@@ -27,6 +37,7 @@ try {
   }
   logDivider();
 
+  logDebug("HARNESS", "Calling runHarness...");
   const result = await runHarness(config);
 
   logDivider();

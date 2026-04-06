@@ -32,6 +32,7 @@ interface ParsedCli {
   verbose: boolean;
   quiet: boolean;
   noInteractive: boolean;
+  debug: boolean;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -49,6 +50,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       verbose: { type: "boolean", default: false },
       quiet: { type: "boolean", default: false },
       "no-interactive": { type: "boolean", default: false },
+      debug: { type: "boolean", default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -67,6 +69,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     verbose: values.verbose as boolean,
     quiet: values.quiet as boolean,
     noInteractive: values["no-interactive"] as boolean,
+    debug: values.debug as boolean,
   };
 }
 
@@ -140,11 +143,12 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
 
   // Determine log level
   let logLevel: LogLevel = "normal";
-  if (cli.verbose) logLevel = "verbose";
+  if (cli.debug) logLevel = "debug";
+  else if (cli.verbose) logLevel = "verbose";
   else if (cli.quiet) logLevel = "quiet";
   else if (process.env.LOG_LEVEL) {
     const envLevel = process.env.LOG_LEVEL.toLowerCase();
-    if (envLevel === "quiet" || envLevel === "verbose" || envLevel === "normal") {
+    if (envLevel === "quiet" || envLevel === "verbose" || envLevel === "normal" || envLevel === "debug") {
       logLevel = envLevel;
     }
   }
