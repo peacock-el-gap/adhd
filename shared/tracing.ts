@@ -91,29 +91,48 @@ export function initTracing(config: HarnessConfig): Tracer {
     // Capture the arize-patched query, then wrap it to fix cache token reporting.
     // The arize instrumentation only reports input_tokens/output_tokens, missing
     // cache_read_input_tokens entirely — which makes Langfuse show wrong costs.
+    //
+    // Approach: patchedQuery pushes cache usage to a FIFO queue when it sees a
+    // result message. CacheTokenEnricher (a SpanProcessor) pops from the queue
+    // in onEnd() for ClaudeAgent.query spans, setting langfuse.observation.usage_details.
+    // This works because query() calls are sequential — queue entries match spans 1:1.
+    const cacheUsageQueue: Record<string, number>[] = [];
+
     const arizeQuery = mutableSDK.query;
     activeQuery = (async function* patchedQuery(params: any): any {
       for await (const msg of arizeQuery(params)) {
         if (msg.type === "result" && msg.usage) {
-          const span = otelApi.trace.getActiveSpan?.();
-          if (span) {
-            span.setAttribute(
-              "langfuse.observation.usage_details",
-              JSON.stringify({
-                input: msg.usage.input_tokens ?? 0,
-                output: msg.usage.output_tokens ?? 0,
-                cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
-                cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
-              }),
-            );
-          }
+          cacheUsageQueue.push({
+            input: msg.usage.input_tokens ?? 0,
+            output: msg.usage.output_tokens ?? 0,
+            cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
+            cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
+          });
         }
         yield msg;
       }
     }) as typeof originalQuery;
 
+    // SpanProcessor that enriches ClaudeAgent.query spans with cache token data
+    // before they reach the Langfuse exporter. Must be registered BEFORE the
+    // LangfuseSpanProcessor in the chain so it runs first on onEnd().
+    const cacheTokenEnricher = {
+      onStart() {},
+      onEnd(span: { name: string; spanContext(): { spanId: string }; attributes: Record<string, unknown> }) {
+        if (span.name === "ClaudeAgent.query" && cacheUsageQueue.length > 0) {
+          const data = cacheUsageQueue.shift();
+          if (data) {
+            span.attributes["langfuse.observation.usage_details"] = JSON.stringify(data);
+          }
+        }
+      },
+      async forceFlush() {},
+      async shutdown() {},
+    };
+
     const sdk = new NodeSDK({
       spanProcessors: [
+        cacheTokenEnricher,
         new LangfuseSpanProcessor({
           shouldExportSpan: ({ otelSpan }: { otelSpan: { instrumentationScope: { name: string } } }) =>
             isDefaultExportSpan(otelSpan) ||
@@ -163,7 +182,13 @@ function createOtelSpan(
   traceName?: string,
 ): Span {
   const activeCtx = parentCtx ?? otelApi.context.active();
-  const otelSpan = otelTracer.startSpan(name, { attributes: flattenMetadata(metadata) }, activeCtx);
+  const attrs: Record<string, unknown> = flattenMetadata(metadata);
+  // Set trace name directly on the root span so LangfuseSpanProcessor picks it up
+  // even if propagateAttributes context doesn't survive Bun's async boundaries
+  if (traceName) {
+    attrs["langfuse.trace.name"] = traceName;
+  }
+  const otelSpan = otelTracer.startSpan(name, { attributes: attrs }, activeCtx);
   const spanCtx = otelApi.trace.setSpan(activeCtx, otelSpan);
 
   return {

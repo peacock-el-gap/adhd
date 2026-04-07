@@ -57,6 +57,10 @@ try {
 
   process.exit(result.success ? 0 : 1);
 } catch (error) {
+  if (error instanceof Error && error.name === "UserAbortError") {
+    // User chose to abort at a gate — clean exit, not an error
+    process.exit(0);
+  }
   logError("HARNESS", `Fatal error: ${error instanceof Error ? error.message : String(error)}`);
   // Exit code 2 for infrastructure errors (distinguishes from test failure = 1)
   process.exit(error instanceof Error && error.name === "HarnessFatalError" ? 2 : 1);

@@ -37,6 +37,14 @@ import { runPlanner } from "./planner.ts";
 
 const TRANSIENT_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
 
+/** Thrown when the user aborts via a gate (spec review, contract preview, mid-run steering, dirty tree). */
+class UserAbortError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UserAbortError";
+  }
+}
+
 export async function runHarness(config: HarnessConfig): Promise<HarnessResult> {
   const startTime = Date.now();
   const model = config.model ?? CLAUDE_MODEL;
@@ -124,6 +132,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   // Wrap the entire run inside harnessSpan context so all query() calls nest under it
   return harnessSpan.run(async () => {
+  try {
   logDebug("HARNESS", "Calling runPlanner...");
   const plannerSpan = harnessSpan.startChild("planner", { model: config.modelPlanner ?? model });
   const spec = await plannerSpan.run(() => runPlanner(config, undefined, usage, plannerSkills));
@@ -144,8 +153,6 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     log("HARNESS", "Dry-run complete. Spec approved and saved.");
     usage.printSummary();
     await usage.save();
-    harnessSpan.end();
-    await tracer.flush();
     return { success: true, sprints: [], totalDurationMs: Date.now() - startTime };
   }
 
@@ -163,7 +170,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
   progress.totalSprints = totalSprints;
 
-  const result = await runSprintLoop(
+  return await runSprintLoop(
     config,
     model,
     isGreenfield,
@@ -177,9 +184,17 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     usage,
     { generator: generatorSkills, evaluator: evaluatorSkills },
   );
-  harnessSpan.end();
-  await tracer.flush();
-  return result;
+  } catch (err) {
+    if (err instanceof UserAbortError) {
+      usage.printSummary();
+      await usage.save();
+      return { success: false, sprints: [], totalDurationMs: Date.now() - startTime };
+    }
+    throw err;
+  } finally {
+    harnessSpan.end();
+    await tracer.flush();
+  }
   }); // end harnessSpan.run()
 }
 
@@ -377,7 +392,7 @@ async function runSprintLoop(
       );
       if (gate.key === "x") {
         log("HARNESS", "Aborted by user at contract preview.");
-        process.exit(0);
+        throw new UserAbortError("Contract preview aborted");
       }
     }
 
@@ -586,7 +601,7 @@ async function runSprintLoop(
 
         if (gate.key === "x") {
           log("HARNESS", "Aborted by user at mid-run steering.");
-          process.exit(0);
+          throw new UserAbortError("Mid-run steering aborted");
         }
         if (gate.key === "s") {
           results.push({ sprintNumber: sprint + 1, passed: true, attempts: 0, skipped: true });
@@ -736,7 +751,7 @@ async function checkDirtyTree(config: HarnessConfig): Promise<void> {
 
   if (result.key === "a") {
     log("HARNESS", "Aborted by user.");
-    process.exit(0);
+    throw new UserAbortError("Dirty tree check aborted");
   }
   if (result.key === "s") {
     execSync("git stash", { cwd: config.workDir, stdio: "pipe" });
@@ -796,7 +811,7 @@ async function specApprovalGate(
     if (result.key === "x" || result.timedOut) {
       log("HARNESS", "Spec gate: aborted. Spec saved at .adhd/spec.md");
       log("HARNESS", "To resume: adhd --resume");
-      process.exit(0);
+      throw new UserAbortError("Spec gate aborted");
     }
 
     if (result.key === "e" && config.editor) {
