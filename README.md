@@ -273,29 +273,3 @@ For design rationale, the GAN connection, and project structure, see [docs/INTER
 MIT License. See [LICENSE](LICENSE).
 
 This project was originally forked from [coleam00/adversarial-dev](https://github.com/coleam00/adversarial-dev) by Cole Medin. The initial three-agent adversarial architecture -- planner, generator, and evaluator -- comes from that work. This fork has since been substantially rewritten (shared config layer, contract negotiation, checkpoint/resume, interactive gates, Langfuse tracing, cost tracking, and more), but the core concept and original codebase are Cole's.
-
-![diagram](/images/adversarial-development-harness.png)
-
-```
-User Prompt
-     |
-     v
-+-----------+
-|  PLANNER  |  --> .adhd/spec.md
-+-----------+
-     |
-     v  (for each sprint)
-+---------------------+
-| CONTRACT NEGOTIATION |  Generator proposes,
-| Generator <-> Eval   |  Evaluator tightens
-+---------------------+
-     |
-     v
-+-----------+    fail + feedback    +------------+
-| GENERATOR | <-------------------- | EVALUATOR  |
-| (build)   | -------------------> | (attack)   |
-+-----------+    implementation     +------------+
-     |                                    |
-     v             pass                   |
-  Checkpoint + Next Sprint <--------------+
-```
