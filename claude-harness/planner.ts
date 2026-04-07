@@ -179,15 +179,18 @@ export async function runPlanner(
     throw new Error("Planner failed to produce output");
   }
 
-  // The planner may have written spec.md via the Write tool instead of returning text.
-  if (!fullResponse) {
-    try {
-      fullResponse = await readFile(join(hDir, "spec.md"), "utf-8");
-      log("PLANNER", "Read spec from file written by planner agent");
-    } catch {
+  // The planner writes spec.md via the Write tool — the file is the canonical output.
+  // fullResponse contains narration text ("Let me examine..."), not the spec itself.
+  // Always prefer the file on disk; fall back to fullResponse only if no file exists.
+  try {
+    fullResponse = await readFile(join(hDir, "spec.md"), "utf-8");
+    log("PLANNER", "Read spec from file written by planner agent");
+  } catch {
+    if (!fullResponse) {
       logError("PLANNER", "No text response and no spec.md on disk");
       throw new Error("Planner completed but produced no spec");
     }
+    log("PLANNER", "Using text response as spec (no file on disk)");
   }
 
   log("PLANNER", "Product specification generated");
