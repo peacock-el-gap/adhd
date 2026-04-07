@@ -8,7 +8,7 @@ A three-agent harness that separates **planning**, **building**, and **evaluatio
 | **Generator** | Builds one feature at a time, commits to git | Software engineer |
 | **Evaluator** | Actively tries to break what the generator built, scores ruthlessly | Adversarial QA |
 
-Based on Anthropic's [Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps). Initial version from [coleam00/adversarial-dev](https://github.com/coleam00/adversarial-dev).
+Based on Anthropic's [Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps). Originally forked from [coleam00/adversarial-dev](https://github.com/coleam00/adversarial-dev) by Cole Medin -- the initial architecture, three-agent design, and adversarial evaluation loop originate from that project.
 
 ## Install
 
@@ -267,6 +267,12 @@ bun run start:codex -- "Build a task manager with REST API and dashboard"
 ## Architecture
 
 For design rationale, the GAN connection, and project structure, see [docs/INTERNALS.md](docs/INTERNALS.md).
+
+## License & Attribution
+
+MIT License. See [LICENSE](LICENSE).
+
+This project was originally forked from [coleam00/adversarial-dev](https://github.com/coleam00/adversarial-dev) by Cole Medin. The initial three-agent adversarial architecture -- planner, generator, and evaluator -- comes from that work. This fork has since been substantially rewritten (shared config layer, contract negotiation, checkpoint/resume, interactive gates, Langfuse tracing, cost tracking, and more), but the core concept and original codebase are Cole's.
 
 ![diagram](/images/adversarial-development-harness.png)
 
