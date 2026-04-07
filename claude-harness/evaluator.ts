@@ -1,4 +1,4 @@
-import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import { type Options, query } from "../shared/tracing.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";

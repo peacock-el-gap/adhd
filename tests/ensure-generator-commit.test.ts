@@ -14,6 +14,11 @@ mock.module("@anthropic-ai/claude-agent-sdk", () => ({
   query: queryMock,
 }));
 
+mock.module("../shared/tracing.ts", () => ({
+  query: queryMock,
+  initTracing: () => ({ flush: async () => {} }),
+}));
+
 // Import after mocking so the module picks up the mocked dependencies
 const { ensureGeneratorCommit } = await import("../claude-harness/generator.ts");
 

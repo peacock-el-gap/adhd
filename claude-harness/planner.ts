@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import { type Options, query } from "../shared/tracing.ts";
 import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";

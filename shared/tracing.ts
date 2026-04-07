@@ -1,7 +1,11 @@
+import { query as originalQuery, type Options } from "@anthropic-ai/claude-agent-sdk";
 import { log, logDebug } from "./logger.ts";
 import type { HarnessConfig } from "./types.ts";
 
-// --- Public interfaces (used by harness for structural spans) ---
+// Re-export Options type so agents can import everything from here
+export type { Options };
+
+// --- Public interfaces ---
 
 export interface Tracer {
   startSpan(name: string, metadata?: Record<string, unknown>): Span;
@@ -9,6 +13,8 @@ export interface Tracer {
 }
 
 export interface Span {
+  /** Run a function within this span's OTEL context. Auto-instrumented query() calls inside will nest under this span. */
+  run<T>(fn: () => Promise<T>): Promise<T>;
   startChild(name: string, metadata?: Record<string, unknown>): Span;
   end(metadata?: Record<string, unknown>): void;
 }
@@ -16,6 +22,7 @@ export interface Span {
 // --- No-op implementations ---
 
 const noopSpan: Span = {
+  run: <T>(fn: () => Promise<T>) => fn(),
   startChild() {
     return noopSpan;
   },
@@ -29,15 +36,19 @@ const noopTracer: Tracer = {
   async flush() {},
 };
 
+// --- Instrumented query ---
+//
+// When Langfuse is enabled, initTracing() replaces this with a version that:
+// 1. Auto-captures prompts, responses, and tool use (arize instrumentation)
+// 2. Adds cache token counts to usage_details (fixes cost calculation)
+// When disabled, this stays as the original SDK query — zero overhead.
+
+let activeQuery: typeof originalQuery = originalQuery;
+
+/** The query function all agents should use. Instrumented when tracing is enabled. */
+export { activeQuery as query };
+
 // --- OTEL + Langfuse auto-instrumentation ---
-//
-// Uses the official Langfuse integration for the Claude Agent SDK:
-//   @arizeai/openinference-instrumentation-claude-agent-sdk
-//   @langfuse/otel
-//   @opentelemetry/sdk-node
-//
-// This auto-captures all query() calls with full prompts, responses, and tool use.
-// Harness-level spans (sprint, attempt, etc.) are structural only.
 
 let otelSdk: { shutdown(): Promise<void> } | null = null;
 
@@ -66,16 +77,48 @@ export function initTracing(config: HarnessConfig): Tracer {
     );
     // biome-ignore lint/style/noVar: dynamic require
     var ClaudeAgentSDKModule = require("@anthropic-ai/claude-agent-sdk");
+    // biome-ignore lint/style/noVar: dynamic require
+    var otelApi = require("@opentelemetry/api");
+    // biome-ignore lint/style/noVar: dynamic require
+    var { propagateAttributes } = require("@langfuse/core");
+
+    // Create a mutable copy — Bun's module namespace objects are frozen
+    const mutableSDK = { ...ClaudeAgentSDKModule };
 
     const instrumentation = new ClaudeAgentSDKInstrumentation();
-    instrumentation.manuallyInstrument({ ...ClaudeAgentSDKModule });
+    instrumentation.manuallyInstrument(mutableSDK);
+
+    // Capture the arize-patched query, then wrap it to fix cache token reporting.
+    // The arize instrumentation only reports input_tokens/output_tokens, missing
+    // cache_read_input_tokens entirely — which makes Langfuse show wrong costs.
+    const arizeQuery = mutableSDK.query;
+    activeQuery = (async function* patchedQuery(params: any): any {
+      for await (const msg of arizeQuery(params)) {
+        if (msg.type === "result" && msg.usage) {
+          const span = otelApi.trace.getActiveSpan?.();
+          if (span) {
+            span.setAttribute(
+              "langfuse.observation.usage_details",
+              JSON.stringify({
+                input: msg.usage.input_tokens ?? 0,
+                output: msg.usage.output_tokens ?? 0,
+                cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
+                cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
+              }),
+            );
+          }
+        }
+        yield msg;
+      }
+    }) as typeof originalQuery;
 
     const sdk = new NodeSDK({
       spanProcessors: [
         new LangfuseSpanProcessor({
           shouldExportSpan: ({ otelSpan }: { otelSpan: { instrumentationScope: { name: string } } }) =>
             isDefaultExportSpan(otelSpan) ||
-            otelSpan.instrumentationScope.name === "@arizeai/openinference-instrumentation-claude-agent-sdk",
+            otelSpan.instrumentationScope.name === "@arizeai/openinference-instrumentation-claude-agent-sdk" ||
+            otelSpan.instrumentationScope.name === "adhd-harness",
         }),
       ],
       instrumentations: [instrumentation],
@@ -86,9 +129,12 @@ export function initTracing(config: HarnessConfig): Tracer {
 
     log("HARNESS", `Langfuse tracing: enabled (${config.langfuseBaseUrl ?? "https://cloud.langfuse.com"})`);
 
+    // Get OTEL tracer for structural spans
+    const otelTracer = otelApi.trace.getTracer("adhd-harness");
+
     return {
-      startSpan() {
-        return noopSpan;
+      startSpan(name: string, metadata?: Record<string, unknown>): Span {
+        return createOtelSpan(otelTracer, otelApi, propagateAttributes, name, metadata, undefined, name);
       },
       async flush(): Promise<void> {
         try {
@@ -105,4 +151,50 @@ export function initTracing(config: HarnessConfig): Tracer {
     console.warn(`[TRACING] Failed to initialize Langfuse OTEL tracing, continuing without tracing: ${err}`);
     return noopTracer;
   }
+}
+
+function createOtelSpan(
+  otelTracer: any,
+  otelApi: any,
+  propagateAttrs: any,
+  name: string,
+  metadata?: Record<string, unknown>,
+  parentCtx?: any,
+  traceName?: string,
+): Span {
+  const activeCtx = parentCtx ?? otelApi.context.active();
+  const otelSpan = otelTracer.startSpan(name, { attributes: flattenMetadata(metadata) }, activeCtx);
+  const spanCtx = otelApi.trace.setSpan(activeCtx, otelSpan);
+
+  return {
+    run<T>(fn: () => Promise<T>): Promise<T> {
+      return otelApi.context.with(spanCtx, () =>
+        // Only set traceName on the root span; children inherit via OTEL context
+        traceName ? propagateAttrs({ traceName }, fn) : fn(),
+      );
+    },
+
+    startChild(childName: string, childMetadata?: Record<string, unknown>): Span {
+      return createOtelSpan(otelTracer, otelApi, propagateAttrs, childName, childMetadata, spanCtx);
+    },
+
+    end(endMetadata?: Record<string, unknown>): void {
+      if (endMetadata) {
+        otelSpan.setAttributes(flattenMetadata(endMetadata));
+      }
+      otelSpan.end();
+    },
+  };
+}
+
+/** Flatten metadata object to OTEL-compatible string attributes. */
+function flattenMetadata(metadata?: Record<string, unknown>): Record<string, string> {
+  if (!metadata) return {};
+  const attrs: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (value !== undefined && value !== null) {
+      attrs[`adhd.${key}`] = String(value);
+    }
+  }
+  return attrs;
 }
