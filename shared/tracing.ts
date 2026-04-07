@@ -134,6 +134,9 @@ export function initTracing(config: HarnessConfig): Tracer {
       spanProcessors: [
         cacheTokenEnricher,
         new LangfuseSpanProcessor({
+          timeout: 15,
+          flushAt: 10,
+          flushInterval: 15,
           shouldExportSpan: ({ otelSpan }: { otelSpan: { instrumentationScope: { name: string } } }) =>
             isDefaultExportSpan(otelSpan) ||
             otelSpan.instrumentationScope.name === "@arizeai/openinference-instrumentation-claude-agent-sdk" ||
