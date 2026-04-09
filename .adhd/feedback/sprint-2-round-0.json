@@ -1,0 +1,143 @@
+{
+  "passed": true,
+  "scores": {
+    "diff_computed_on_retry": 9,
+    "no_diff_on_first_attempt": 10,
+    "empty_diff_handled": 9,
+    "diff_truncation_at_8k": 9,
+    "diff_graceful_degradation": 10,
+    "sha_captured_before_generator": 9,
+    "diff_only_sent_to_evaluator": 10,
+    "quality_criteria_in_generator_prompt": 9,
+    "quality_criteria_enforced_by_evaluator_prompt": 9,
+    "quality_criteria_typed_as_implementation": 9,
+    "evaluator_scores_quality_criteria": 9,
+    "diff_unit_tests_exist": 9,
+    "quality_criteria_prompt_tests_exist": 8,
+    "existing_tests_still_pass": 10,
+    "type_safety_maintained": 10
+  },
+  "feedback": [
+    {
+      "criterion": "diff_computed_on_retry",
+      "score": 9,
+      "details": "harness.ts lines 575-579 correctly compute diff on retry > 0, appending to supplementaryContext. computeDiffSection in shared/diff.ts properly generates the '## Changes Since Last Attempt' section. The diff is appended after regression and static analysis sections without overwriting them."
+    },
+    {
+      "criterion": "no_diff_on_first_attempt",
+      "score": 10,
+      "details": "Double protection: harness.ts line 575 guards with `retry > 0`, and computeDiffSection itself returns undefined for attempt <= 0 (diff.ts line 17). No diff section appears on first attempt."
+    },
+    {
+      "criterion": "empty_diff_handled",
+      "score": 9,
+      "details": "diff.ts lines 35-37 detect empty/whitespace-only diff output and return '[No changes detected]' within the section header. Test in diff.test.ts line 62-71 verifies this behavior explicitly, including checking it's not whitespace-only."
+    },
+    {
+      "criterion": "diff_truncation_at_8k",
+      "score": 9,
+      "details": "MAX_DIFF_CHARS = 8000 defined at line 3 of diff.ts. Lines 41-42 truncate and append '[diff truncated — showing first 8000 chars of N total]'. Test at line 73-85 creates a large file and verifies truncation behavior."
+    },
+    {
+      "criterion": "diff_graceful_degradation",
+      "score": 10,
+      "details": "diff.ts catch block at line 29-32 returns undefined on any git failure. harness.ts lines 466-470 also catch git rev-parse failures gracefully. Tests cover no-git-repo (line 43-47) and invalid SHA (line 87-91) scenarios. Other supplementaryContext sections (regression, static analysis) are built independently before the diff section."
+    },
+    {
+      "criterion": "sha_captured_before_generator",
+      "score": 9,
+      "details": "harness.ts lines 465-470 capture beforeSha via `git rev-parse HEAD` before the generator runs (the generator invocation starts at line 480). The diff is computed after generator completes (line 575-579) but before evaluator runs (line 582+)."
+    },
+    {
+      "criterion": "diff_only_sent_to_evaluator",
+      "score": 10,
+      "details": "Grep of generator.ts confirms no references to diffSection, computeDiffSection, or 'Changes Since Last Attempt'. supplementaryContext is only constructed and passed to runEvaluator (harness.ts line 599). The generator only receives lastEval feedback."
+    },
+    {
+      "criterion": "quality_criteria_in_generator_prompt",
+      "score": 9,
+      "details": "CONTRACT_NEGOTIATION_GENERATOR_PROMPT (lines 394-421 of prompts.ts) explicitly mentions: 'naming conventions', 'code duplication', 'error handling patterns', 'maintainability', requires 'at least one criterion with type \"implementation\"', and specifies these as code quality criteria. Goes well beyond the generic 'code quality' that existed before."
+    },
+    {
+      "criterion": "quality_criteria_enforced_by_evaluator_prompt",
+      "score": 9,
+      "details": "CONTRACT_NEGOTIATION_EVALUATOR_PROMPT (lines 423-436) explicitly states: 'If the contract contains ONLY behavioral/functional criteria and no quality criteria, you MUST reject it and add appropriate quality criteria.' Also specifies checking for at least one quality-focused implementation criterion."
+    },
+    {
+      "criterion": "quality_criteria_typed_as_implementation",
+      "score": 9,
+      "details": "Both prompts specify quality criteria should use type 'implementation'. The evaluator prompt at line 435 states: 'Quality criteria (naming, duplication, error handling, maintainability) should use type \"implementation\" so they do not accumulate in the regression set across sprints.' regression.ts line 37 confirms only behavioral criteria are carried forward."
+    },
+    {
+      "criterion": "evaluator_scores_quality_criteria",
+      "score": 9,
+      "details": "buildEvaluatorPrompt includes a '## Quality Criteria' section (lines 198-204) stating quality criteria 'MUST be assessed with the same scoring rigor and threshold as behavioral/functional criteria. They are NOT optional or advisory.' Lists specific checks for naming, duplication, error handling, and maintainability."
+    },
+    {
+      "criterion": "diff_unit_tests_exist",
+      "score": 9,
+      "details": "tests/diff.test.ts covers all 5 required scenarios: (1) successful diff at line 49, (2) truncation at line 73, (3) graceful return undefined for no-git at line 43 and empty beforeSha at lines 33/38, (4) skipping on attempt 0 at line 28, (5) empty diff at line 62. Also includes invalid SHA test and attempt > 1 test. All 336 tests pass."
+    },
+    {
+      "criterion": "quality_criteria_prompt_tests_exist",
+      "score": 8,
+      "details": "tests/quality-criteria.test.ts verifies generator prompt contains 'naming conventions', 'duplication', 'error handling patterns', 'maintainability', and type 'implementation'. Evaluator prompt tests verify 'reject', 'quality criteria', 'at least one'. buildEvaluatorPrompt tests verify 'same scoring rigor' and 'NOT optional'. All pass."
+    },
+    {
+      "criterion": "existing_tests_still_pass",
+      "score": 10,
+      "details": "Running `bun test` produces 336 pass, 0 fail across 18 test files. No regressions detected."
+    },
+    {
+      "criterion": "type_safety_maintained",
+      "score": 10,
+      "details": "Running `bunx tsc --noEmit` shows 11 errors, all in files not modified by this sprint (shared/artifact-digest.ts, tests/config.test.ts, tests/skills.test.ts — all pre-existing from prior sprints). No new TypeScript errors introduced. shared/diff.ts has proper type annotations (string | undefined return type, typed parameters)."
+    }
+  ],
+  "overallSummary": "Sprint 2 is well-implemented. The diff-aware evaluation feature (Feature 1.3) is cleanly implemented in shared/diff.ts with proper integration in harness.ts. It handles all edge cases (first attempt, empty diff, truncation, git failures) gracefully. The quality criteria feature (Feature 1.4) properly updates both CONTRACT_NEGOTIATION_GENERATOR_PROMPT and CONTRACT_NEGOTIATION_EVALUATOR_PROMPT with specific quality criteria instructions and enforcement. The evaluator prompt includes a dedicated Quality Criteria section with rigorous scoring instructions. Tests are comprehensive and all pass. No new TypeScript errors or regressions were introduced.",
+  "sdkResult": {
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 154097,
+    "duration_api_ms": 146012,
+    "num_turns": 26,
+    "result": "Everything checks out. Let me now verify all the key aspects systematically:\n\n1. **diff_computed_on_retry**: ✅ Line 575-579 in harness.ts shows diff computed when retry > 0, appended to supplementaryContext\n2. **no_diff_on_first_attempt**: ✅ computeDiffSection returns undefined for attempt <= 0 (line 17 of diff.ts), AND harness.ts line 575 checks `retry > 0`\n3. **empty_diff_handled**: ✅ diff.ts lines 35-37 return \"[No changes detected]\"\n4. **diff_truncation_at_8k**: ✅ diff.ts lines 41-42 truncate at 8000 chars with warning\n5. **diff_graceful_degradation**: ✅ diff.ts catch block returns undefined, harness.ts beforeSha capture also catches\n6. **sha_captured_before_generator**: ✅ harness.ts lines 465-470\n7. **diff_only_sent_to_evaluator**: ✅ No diff in generator.ts, supplementaryContext only passed to evaluator\n8. **quality_criteria_in_generator_prompt**: ✅ CONTRACT_NEGOTIATION_GENERATOR_PROMPT mentions naming conventions, duplication, error handling patterns, maintainability\n9. **quality_criteria_enforced_by_evaluator_prompt**: ✅ CONTRACT_NEGOTIATION_EVALUATOR_PROMPT mentions rejecting contracts without quality criteria\n10. **quality_criteria_typed_as_implementation**: ✅ Both prompts specify implementation type for quality criteria\n11. **evaluator_scores_quality_criteria**: ✅ buildEvaluatorPrompt includes Quality Criteria section with \"same scoring rigor\", \"NOT optional\"\n12. **diff_unit_tests_exist**: ✅ All 5 scenarios covered in diff.test.ts\n13. **quality_criteria_prompt_tests_exist**: ✅ quality-criteria.test.ts covers both generator and evaluator prompts\n14. **existing_tests_still_pass**: ✅ 336 pass, 0 fail\n15. **type_safety_maintained**: ✅ No new TS errors (all 11 errors pre-existing)\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"diff_computed_on_retry\": 9,\n    \"no_diff_on_first_attempt\": 10,\n    \"empty_diff_handled\": 9,\n    \"diff_truncation_at_8k\": 9,\n    \"diff_graceful_degradation\": 10,\n    \"sha_captured_before_generator\": 9,\n    \"diff_only_sent_to_evaluator\": 10,\n    \"quality_criteria_in_generator_prompt\": 9,\n    \"quality_criteria_enforced_by_evaluator_prompt\": 9,\n    \"quality_criteria_typed_as_implementation\": 9,\n    \"evaluator_scores_quality_criteria\": 9,\n    \"diff_unit_tests_exist\": 9,\n    \"quality_criteria_prompt_tests_exist\": 8,\n    \"existing_tests_still_pass\": 10,\n    \"type_safety_maintained\": 10\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"diff_computed_on_retry\",\n      \"score\": 9,\n      \"details\": \"harness.ts lines 575-579 correctly compute diff on retry > 0, appending to supplementaryContext. computeDiffSection in shared/diff.ts properly generates the '## Changes Since Last Attempt' section. The diff is appended after regression and static analysis sections without overwriting them.\"\n    },\n    {\n      \"criterion\": \"no_diff_on_first_attempt\",\n      \"score\": 10,\n      \"details\": \"Double protection: harness.ts line 575 guards with `retry > 0`, and computeDiffSection itself returns undefined for attempt <= 0 (diff.ts line 17). No diff section appears on first attempt.\"\n    },\n    {\n      \"criterion\": \"empty_diff_handled\",\n      \"score\": 9,\n      \"details\": \"diff.ts lines 35-37 detect empty/whitespace-only diff output and return '[No changes detected]' within the section header. Test in diff.test.ts line 62-71 verifies this behavior explicitly, including checking it's not whitespace-only.\"\n    },\n    {\n      \"criterion\": \"diff_truncation_at_8k\",\n      \"score\": 9,\n      \"details\": \"MAX_DIFF_CHARS = 8000 defined at line 3 of diff.ts. Lines 41-42 truncate and append '[diff truncated — showing first 8000 chars of N total]'. Test at line 73-85 creates a large file and verifies truncation behavior.\"\n    },\n    {\n      \"criterion\": \"diff_graceful_degradation\",\n      \"score\": 10,\n      \"details\": \"diff.ts catch block at line 29-32 returns undefined on any git failure. harness.ts lines 466-470 also catch git rev-parse failures gracefully. Tests cover no-git-repo (line 43-47) and invalid SHA (line 87-91) scenarios. Other supplementaryContext sections (regression, static analysis) are built independently before the diff section.\"\n    },\n    {\n      \"criterion\": \"sha_captured_before_generator\",\n      \"score\": 9,\n      \"details\": \"harness.ts lines 465-470 capture beforeSha via `git rev-parse HEAD` before the generator runs (the generator invocation starts at line 480). The diff is computed after generator completes (line 575-579) but before evaluator runs (line 582+).\"\n    },\n    {\n      \"criterion\": \"diff_only_sent_to_evaluator\",\n      \"score\": 10,\n      \"details\": \"Grep of generator.ts confirms no references to diffSection, computeDiffSection, or 'Changes Since Last Attempt'. supplementaryContext is only constructed and passed to runEvaluator (harness.ts line 599). The generator only receives lastEval feedback.\"\n    },\n    {\n      \"criterion\": \"quality_criteria_in_generator_prompt\",\n      \"score\": 9,\n      \"details\": \"CONTRACT_NEGOTIATION_GENERATOR_PROMPT (lines 394-421 of prompts.ts) explicitly mentions: 'naming conventions', 'code duplication', 'error handling patterns', 'maintainability', requires 'at least one criterion with type \\\"implementation\\\"', and specifies these as code quality criteria. Goes well beyond the generic 'code quality' that existed before.\"\n    },\n    {\n      \"criterion\": \"quality_criteria_enforced_by_evaluator_prompt\",\n      \"score\": 9,\n      \"details\": \"CONTRACT_NEGOTIATION_EVALUATOR_PROMPT (lines 423-436) explicitly states: 'If the contract contains ONLY behavioral/functional criteria and no quality criteria, you MUST reject it and add appropriate quality criteria.' Also specifies checking for at least one quality-focused implementation criterion.\"\n    },\n    {\n      \"criterion\": \"quality_criteria_typed_as_implementation\",\n      \"score\": 9,\n      \"details\": \"Both prompts specify quality criteria should use type 'implementation'. The evaluator prompt at line 435 states: 'Quality criteria (naming, duplication, error handling, maintainability) should use type \\\"implementation\\\" so they do not accumulate in the regression set across sprints.' regression.ts line 37 confirms only behavioral criteria are carried forward.\"\n    },\n    {\n      \"criterion\": \"evaluator_scores_quality_criteria\",\n      \"score\": 9,\n      \"details\": \"buildEvaluatorPrompt includes a '## Quality Criteria' section (lines 198-204) stating quality criteria 'MUST be assessed with the same scoring rigor and threshold as behavioral/functional criteria. They are NOT optional or advisory.' Lists specific checks for naming, duplication, error handling, and maintainability.\"\n    },\n    {\n      \"criterion\": \"diff_unit_tests_exist\",\n      \"score\": 9,\n      \"details\": \"tests/diff.test.ts covers all 5 required scenarios: (1) successful diff at line 49, (2) truncation at line 73, (3) graceful return undefined for no-git at line 43 and empty beforeSha at lines 33/38, (4) skipping on attempt 0 at line 28, (5) empty diff at line 62. Also includes invalid SHA test and attempt > 1 test. All 336 tests pass.\"\n    },\n    {\n      \"criterion\": \"quality_criteria_prompt_tests_exist\",\n      \"score\": 8,\n      \"details\": \"tests/quality-criteria.test.ts verifies generator prompt contains 'naming conventions', 'duplication', 'error handling patterns', 'maintainability', and type 'implementation'. Evaluator prompt tests verify 'reject', 'quality criteria', 'at least one'. buildEvaluatorPrompt tests verify 'same scoring rigor' and 'NOT optional'. All pass.\"\n    },\n    {\n      \"criterion\": \"existing_tests_still_pass\",\n      \"score\": 10,\n      \"details\": \"Running `bun test` produces 336 pass, 0 fail across 18 test files. No regressions detected.\"\n    },\n    {\n      \"criterion\": \"type_safety_maintained\",\n      \"score\": 10,\n      \"details\": \"Running `bunx tsc --noEmit` shows 11 errors, all in files not modified by this sprint (shared/artifact-digest.ts, tests/config.test.ts, tests/skills.test.ts — all pre-existing from prior sprints). No new TypeScript errors introduced. shared/diff.ts has proper type annotations (string | undefined return type, typed parameters).\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 2 is well-implemented. The diff-aware evaluation feature (Feature 1.3) is cleanly implemented in shared/diff.ts with proper integration in harness.ts. It handles all edge cases (first attempt, empty diff, truncation, git failures) gracefully. The quality criteria feature (Feature 1.4) properly updates both CONTRACT_NEGOTIATION_GENERATOR_PROMPT and CONTRACT_NEGOTIATION_EVALUATOR_PROMPT with specific quality criteria instructions and enforcement. The evaluator prompt includes a dedicated Quality Criteria section with rigorous scoring instructions. Tests are comprehensive and all pass. No new TypeScript errors or regressions were introduced.\"\n}\n```",
+    "stop_reason": "end_turn",
+    "session_id": "7c4a5739-8052-43ab-aa6b-32b9153913f0",
+    "total_cost_usd": 0.5930814999999999,
+    "usage": {
+      "input_tokens": 20,
+      "cache_creation_input_tokens": 25502,
+      "cache_read_input_tokens": 605088,
+      "output_tokens": 5242,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 25502,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-4-6": {
+        "inputTokens": 20,
+        "outputTokens": 5242,
+        "cacheReadInputTokens": 605088,
+        "cacheCreationInputTokens": 25502,
+        "webSearchRequests": 0,
+        "costUSD": 0.5930814999999999,
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000
+      }
+    },
+    "permission_denials": [],
+    "fast_mode_state": "off",
+    "uuid": "e6f76667-f53e-4533-b6b2-95e61eb545c6"
+  }
+}

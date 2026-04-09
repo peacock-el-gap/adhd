@@ -1,0 +1,87 @@
+{
+  "sprintNumber": 3,
+  "features": [
+    "Sprint Selection (--sprint N) CLI flag",
+    "Sprint-specific entry path that skips planning and loads existing spec/contracts",
+    "Contract reuse vs fresh negotiation logic for targeted sprint",
+    "Mutual exclusion validation with --resume flag",
+    "Warning for missing prior checkpoints"
+  ],
+  "criteria": [
+    {
+      "name": "cli_sprint_flag_parsing",
+      "description": "The --sprint CLI flag is defined in parseCli() with type 'string', parsed to a number, and exposed as 'sprint' on ParsedCli. Running with '--sprint 3' sets the value to 3; omitting it leaves it undefined.",
+      "threshold": 7
+    },
+    {
+      "name": "config_sprint_field",
+      "description": "HarnessConfig in shared/types.ts includes a 'sprint?: number' field. resolveConfig() maps the parsed CLI value to this field.",
+      "threshold": 7
+    },
+    {
+      "name": "sprint_resume_mutual_exclusion",
+      "description": "When both --sprint and --resume are passed, the harness throws an error with a message containing 'Cannot use --sprint and --resume together' before any workspace initialization or LLM calls occur.",
+      "threshold": 7
+    },
+    {
+      "name": "sprint_requires_existing_spec",
+      "description": "When --sprint N is passed but no .adhd/spec.md exists, the harness exits with an error message containing 'No spec found' and does not attempt planning or LLM invocation.",
+      "threshold": 7
+    },
+    {
+      "name": "sprint_skips_planning_phase",
+      "description": "When --sprint N is passed with a valid spec on disk, the harness does NOT invoke runPlanner(). It loads the spec from .adhd/spec.md and proceeds directly to the sprint loop for sprint N only.",
+      "threshold": 7
+    },
+    {
+      "name": "sprint_skips_earlier_sprints",
+      "description": "When --sprint 3 is passed for a 5-sprint spec, the sprint loop starts at sprint 3 and ends after sprint 3. Sprints 1, 2, 4, and 5 are not executed. The harness log contains 'SPRINT 3' but not 'SPRINT 1', 'SPRINT 2', 'SPRINT 4', or 'SPRINT 5'.",
+      "threshold": 7
+    },
+    {
+      "name": "contract_reuse_when_exists",
+      "description": "When --sprint 3 is passed and .adhd/contracts/sprint-3.json already exists, the harness loads the existing contract via readContract() and does NOT run contract negotiation for sprint 3.",
+      "threshold": 7
+    },
+    {
+      "name": "contract_negotiation_when_missing",
+      "description": "When --sprint 3 is passed and no .adhd/contracts/sprint-3.json exists, the harness runs contract negotiation (negotiateContract) for sprint 3 before entering the build-evaluate loop.",
+      "threshold": 7
+    },
+    {
+      "name": "missing_checkpoint_warning",
+      "description": "When --sprint 3 is passed but no progress.json shows sprint 2 completed (or no progress.json exists at all), the harness logs a warning containing 'No checkpoint for sprint 2' or equivalent, but continues execution without error.",
+      "threshold": 7
+    },
+    {
+      "name": "sprint_flag_validation",
+      "description": "When --sprint is passed with a non-positive integer (0, -1) or a non-numeric value, the harness throws a clear validation error. When --sprint exceeds the detected total sprints, a warning is logged.",
+      "threshold": 7
+    },
+    {
+      "name": "no_prompt_required_for_sprint_mode",
+      "description": "When --sprint N is passed without a positional prompt or --file argument, the harness does NOT error with 'A prompt is required'. Sprint mode, like --resume, operates without a user prompt since it reads the spec from disk.",
+      "threshold": 7
+    },
+    {
+      "name": "workspace_not_cleaned_in_sprint_mode",
+      "description": "When --sprint N is passed, existing .adhd/ artifacts (contracts, feedback, progress, regression.json) are NOT cleaned. The harness calls initWorkspace with resume-like behavior that preserves existing files.",
+      "threshold": 7
+    },
+    {
+      "name": "regression_criteria_loaded_in_sprint_mode",
+      "description": "When --sprint 3 is passed and .adhd/regression.json contains accumulated behavioral criteria from sprints 1-2, those regression criteria are injected into the evaluator prompt for sprint 3 (assuming --no-bdd is not set).",
+      "threshold": 7
+    },
+    {
+      "name": "tests_cover_sprint_selection",
+      "description": "Unit tests exist that verify: CLI parsing of --sprint, mutual exclusion with --resume, error when spec is missing, contract reuse vs negotiation, sprint range enforcement, and missing checkpoint warning. Tests pass with 'bun test'.",
+      "threshold": 7
+    },
+    {
+      "name": "clean_startup_and_type_safety",
+      "description": "The project compiles without type errors (bun build or tsc --noEmit succeeds). The new sprint field is properly typed as optional throughout HarnessConfig, ParsedCli, and all call sites. No runtime crashes on startup paths (fresh run, --resume, --sprint).",
+      "threshold": 7
+    }
+  ]
+}
