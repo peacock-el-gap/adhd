@@ -40,6 +40,8 @@ export interface HarnessConfig {
   modelDocumenter?: string; // --model-documenter, per-agent model override for documenter
   // Phase 1 Deepen: Static Analysis
   lintGate?: boolean; // --lint-gate flag, makes lint/typecheck failure a hard gate
+  // Phase 1 Deepen: Sprint Selection
+  sprint?: number; // --sprint N flag, run a specific sprint only
 }
 
 export interface SprintContract {

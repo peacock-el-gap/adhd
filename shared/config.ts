@@ -54,6 +54,8 @@ interface ParsedCli {
   modelDocumenter?: string;
   // Phase 1 Deepen: Static Analysis
   lintGate?: boolean;
+  // Phase 1 Deepen: Sprint Selection
+  sprint?: number;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -93,6 +95,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "model-documenter": { type: "string" },
       // Phase 1 Deepen: Static Analysis
       "lint-gate": { type: "boolean", default: false },
+      // Phase 1 Deepen: Sprint Selection
+      sprint: { type: "string" },
     },
     allowPositionals: true,
     strict: true,
@@ -133,6 +137,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     modelDocumenter: values["model-documenter"] as string | undefined,
     // Phase 1 Deepen: Static Analysis
     lintGate: values["lint-gate"] as boolean,
+    // Phase 1 Deepen: Sprint Selection
+    sprint: values.sprint ? parseInt(values.sprint as string, 10) : undefined,
   };
 }
 
@@ -174,6 +180,18 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
   // Resolve project directory
   const projectDir = cli.project ? resolve(cli.project) : process.cwd();
 
+  // Sprint selection: mutual exclusion with --resume
+  if (cli.sprint !== undefined && cli.resume) {
+    throw new Error("Cannot use --sprint and --resume together.");
+  }
+
+  // Sprint selection: validate sprint number
+  if (cli.sprint !== undefined) {
+    if (!Number.isInteger(cli.sprint) || cli.sprint < 1) {
+      throw new Error(`Invalid --sprint value: ${cli.sprint}. Must be a positive integer.`);
+    }
+  }
+
   // Resolve user prompt
   let userPrompt = "";
   if (cli.file) {
@@ -181,8 +199,8 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
   } else if (cli.prompt) {
     userPrompt = cli.prompt;
   }
-  // --resume doesn't require a prompt (it reads spec from disk)
-  if (!userPrompt && !cli.resume) {
+  // --resume and --sprint don't require a prompt (they read spec from disk)
+  if (!userPrompt && !cli.resume && cli.sprint === undefined) {
     throw new Error("A prompt is required. Provide one as a positional argument, with --file, or use --resume.");
   }
 
@@ -277,6 +295,8 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     modelDocumenter,
     // Phase 1 Deepen: Static Analysis
     lintGate: cli.lintGate || false,
+    // Phase 1 Deepen: Sprint Selection
+    sprint: cli.sprint,
   };
 
   // Validate

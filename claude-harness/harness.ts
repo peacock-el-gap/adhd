@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile as readFileRaw } from "node:fs/promises";
 import { join } from "node:path";
 import { type Options, query } from "../shared/tracing.ts";
@@ -8,6 +8,7 @@ import { createConversationLog } from "../shared/conversation-logger.ts";
 import {
   harnessDir,
   initWorkspace,
+  readContract,
   readProgress,
   readSpec,
   writeContract,
@@ -81,6 +82,13 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   // --- Resume path ---
   if (config.isResume) {
     const result = await resumeHarness(config, model, isGreenfield, startTime, tracer, usage);
+    await tracer.flush();
+    return result;
+  }
+
+  // --- Sprint selection path ---
+  if (config.sprint !== undefined) {
+    const result = await sprintSelectionHarness(config, model, isGreenfield, startTime, tracer, usage);
     await tracer.flush();
     return result;
   }
@@ -353,6 +361,114 @@ async function resumeHarness(
   return result;
 }
 
+async function sprintSelectionHarness(
+  config: HarnessConfig,
+  model: string,
+  isGreenfield: boolean,
+  startTime: number,
+  tracer: Tracer,
+  usage: UsageTracker,
+): Promise<HarnessResult> {
+  const sprintN = config.sprint!;
+  log("HARNESS", `Sprint selection mode: targeting sprint ${sprintN}`);
+
+  // Check spec exists
+  const specPath = join(harnessDir(config.workDir), "spec.md");
+  if (!existsSync(specPath)) {
+    throw new Error("No spec found. Run the planner first or provide a spec.");
+  }
+
+  // Don't clean artifacts — preserve existing state (resume-like)
+  await initWorkspace(config.workDir, { greenfield: isGreenfield, resume: true });
+
+  // Resolve skills
+  const harnessSkillsDir = join(import.meta.dir, "../shared/skills");
+  const userSkillsDir = join(process.env.HOME ?? "", ".adhd", "skills");
+  const projectSkillsDir = join(config.workDir, ".adhd", "skills");
+  const resolvedSkills = resolveSkills(harnessSkillsDir, userSkillsDir, projectSkillsDir, {
+    noBdd: config.noBdd,
+    noTdd: config.noTdd,
+  });
+  const generatorSkills = routeSkillsForAgent(resolvedSkills, "generator");
+  const evaluatorSkills = routeSkillsForAgent(resolvedSkills, "evaluator");
+  const documenterSkills = routeSkillsForAgent(resolvedSkills, "documenter");
+
+  // Load spec
+  const spec = await readSpec(config.workDir);
+  log("HARNESS", "Loaded spec from disk");
+
+  // Count total sprints from spec
+  const sprintMatches = spec.match(/##\s*Sprint\s+\d+/gi);
+  const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
+
+  // Warn if sprint exceeds total
+  if (sprintN > totalSprints) {
+    log("HARNESS", `Warning: --sprint ${sprintN} exceeds detected sprint count (${totalSprints}).`);
+  }
+
+  // Check for prior sprint checkpoint (warn if missing)
+  if (sprintN > 1) {
+    let hasPriorCheckpoint = false;
+    try {
+      const progress = await readProgress(config.workDir);
+      hasPriorCheckpoint = progress.completedSprints >= sprintN - 1;
+    } catch {
+      // No progress file
+    }
+    if (!hasPriorCheckpoint) {
+      log("HARNESS", `Warning: No checkpoint for sprint ${sprintN - 1}. Ensure the codebase is in the expected state.`);
+    }
+  }
+
+  // Build progress (minimal, for the sprint loop)
+  const progress: HarnessProgress = {
+    status: "building",
+    currentSprint: sprintN,
+    totalSprints,
+    completedSprints: sprintN - 1, // assume prior sprints completed
+    retryCount: 0,
+  };
+
+  // Try to load existing progress to preserve sprintResults
+  try {
+    const existingProgress = await readProgress(config.workDir);
+    if (existingProgress.sprintResults) {
+      progress.sprintResults = existingProgress.sprintResults;
+    }
+    if (existingProgress.lastPassedCommitSha) {
+      progress.lastPassedCommitSha = existingProgress.lastPassedCommitSha;
+    }
+  } catch {
+    // No existing progress — fine
+  }
+
+  const harnessSpan = tracer.startSpan(`harness-sprint-${sprintN}-${new Date().toISOString().replace(/[:.]/g, "-")}`, {
+    model,
+    workDir: config.workDir,
+    isGreenfield,
+    targetSprint: sprintN,
+  });
+
+  const result = await harnessSpan.run(() =>
+    runSprintLoop(
+      config,
+      model,
+      isGreenfield,
+      spec,
+      progress,
+      [],
+      sprintN,
+      sprintN, // endSprint = startSprint (run only this sprint)
+      startTime,
+      harnessSpan,
+      usage,
+      { generator: generatorSkills, evaluator: evaluatorSkills, documenter: documenterSkills },
+    ),
+  );
+  harnessSpan.end();
+  return result;
+}
+
 async function revertToCheckpoint(workDir: string, isGreenfield: boolean, progress: HarnessProgress): Promise<void> {
   const gitDir = isGreenfield ? join(workDir, "app") : workDir;
   const sha = progress.lastPassedCommitSha!;
@@ -415,24 +531,36 @@ async function runSprintLoop(
 
     const sprintSpan = parentSpan.startChild(`sprint-${sprint}`, { sprintNumber: sprint });
 
-    log("HARNESS", "Negotiating sprint contract...");
-    let contract: SprintContract;
-    const negotiationSpan = sprintSpan.startChild("contract-negotiation", { sprint });
-    try {
-      contract = await negotiationSpan.run(() =>
-        withTransientRetry(
-          () => negotiateContract(config.workDir, spec, sprint, generatorModel, evaluatorModel, usage),
-          "contract negotiation",
-        ),
-      );
-    } catch (err) {
-      negotiationSpan.end({ error: String(err) });
-      sprintSpan.end({ error: String(err) });
-      return await handleFatalError(err, config, progress, results);
+    // Try to reuse existing contract (especially in --sprint mode)
+    let contract: SprintContract | undefined;
+    if (config.sprint !== undefined) {
+      try {
+        contract = await readContract(config.workDir, sprint);
+        log("HARNESS", `Loaded existing contract for sprint ${sprint}: ${contract.criteria.length} criteria for ${contract.features.length} features`);
+      } catch {
+        // No existing contract — will negotiate below
+      }
     }
-    negotiationSpan.end({ criteria: contract.criteria.length, features: contract.features.length });
-    await writeContract(config.workDir, contract);
-    log("HARNESS", `Contract agreed: ${contract.criteria.length} criteria for ${contract.features.length} features`);
+
+    if (!contract) {
+      log("HARNESS", "Negotiating sprint contract...");
+      const negotiationSpan = sprintSpan.startChild("contract-negotiation", { sprint });
+      try {
+        contract = await negotiationSpan.run(() =>
+          withTransientRetry(
+            () => negotiateContract(config.workDir, spec, sprint, generatorModel, evaluatorModel, usage),
+            "contract negotiation",
+          ),
+        );
+      } catch (err) {
+        negotiationSpan.end({ error: String(err) });
+        sprintSpan.end({ error: String(err) });
+        return await handleFatalError(err, config, progress, results);
+      }
+      negotiationSpan.end({ criteria: contract.criteria.length, features: contract.features.length });
+      await writeContract(config.workDir, contract);
+      log("HARNESS", `Contract agreed: ${contract.criteria.length} criteria for ${contract.features.length} features`);
+    }
 
     // C2: Contract Preview gate
     if ((config.interactive ?? true) && config.gateTimeout !== 0) {
