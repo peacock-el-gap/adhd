@@ -20,6 +20,7 @@ export async function runEvaluator(
   skills?: AgentSkills,
   sourceDir?: string,
   testDir?: string,
+  supplementaryContext?: string,
 ): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
   const sprint = contract.sprintNumber;
   const level = logLevel ?? "normal";
@@ -37,6 +38,7 @@ ${JSON.stringify(contract, null, 2)}
 ## Pass Threshold
 
 Each criterion must score at least ${passThreshold}/10 to pass.
+${supplementaryContext ?? ""}
 
 ## Instructions
 

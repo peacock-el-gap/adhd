@@ -15,6 +15,8 @@ import {
   writeProgress,
   writeSpec,
 } from "../shared/files.ts";
+import { accumulateRegressionCriteria, buildRegressionSection, readRegressionCriteria } from "../shared/regression.ts";
+import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
 import { promptGate, promptGateWithText } from "../shared/interaction.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog, summarize } from "../shared/logger.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
@@ -528,6 +530,46 @@ async function runSprintLoop(
       progress.status = "evaluating";
       await writeProgress(config.workDir, progress);
 
+      // Build supplementary context for the evaluator
+      let supplementaryContext = "";
+
+      // Regression criteria injection (Feature 1.1)
+      if (!config.noBdd && sprint > 1) {
+        try {
+          const regressionCriteria = await readRegressionCriteria(config.workDir);
+          const regressionSection = buildRegressionSection(regressionCriteria);
+          if (regressionSection) {
+            supplementaryContext += regressionSection;
+          }
+        } catch {
+          // Graceful degradation — proceed without regression criteria
+        }
+      }
+
+      // Static analysis injection (Feature 1.2)
+      const staticAnalysisResult = await runStaticAnalysis(config, isGreenfield);
+      if (staticAnalysisResult.output) {
+        // Hard gate: if --lint-gate and any command failed, skip evaluator
+        if (config.lintGate && staticAnalysisResult.failed) {
+          log("HARNESS", "Lint gate: static analysis failed, skipping evaluator");
+          lastEval = {
+            passed: false,
+            scores: {},
+            feedback: contract.criteria.map((c) => ({
+              criterion: c.name,
+              score: 0,
+              details: "Evaluator skipped due to --lint-gate: static analysis failed",
+            })),
+            overallSummary: `Static analysis failed (--lint-gate). Output:\n${staticAnalysisResult.output}`,
+          };
+          await writeFeedback(config.workDir, sprint, retry, lastEval);
+          attemptSpan.end({ passed: false, lintGate: true });
+          continue;
+        }
+
+        supplementaryContext += `\n\n## Static Analysis Results\n\n${staticAnalysisResult.output}`;
+      }
+
       const evaluatorSpan = attemptSpan.startChild("evaluator", { model: evaluatorModel, sprint, attempt: retry });
       try {
         const evalWithUsage = await evaluatorSpan.run(() =>
@@ -545,6 +587,7 @@ async function runSprintLoop(
                 skills?.evaluator,
                 config.sourceDir,
                 config.testDir,
+                supplementaryContext || undefined,
               ),
             "evaluator",
           ),
@@ -614,6 +657,15 @@ async function runSprintLoop(
 
     if (passed) {
       progress.completedSprints++;
+
+      // Feature 1.1: Accumulate behavioral regression criteria after passing sprint
+      if (!config.noBdd) {
+        try {
+          await accumulateRegressionCriteria(config.workDir, contract);
+        } catch (err) {
+          logError("HARNESS", `Failed to accumulate regression criteria: ${err}`);
+        }
+      }
 
       // Checkpoint: save commit SHA and sprint results
       try {
@@ -800,6 +852,62 @@ async function runDocumenterPhase(
     log("HARNESS", `WARNING: Documenter failed: ${err instanceof Error ? err.message : String(err)}. Documentation generation skipped.`);
     // docsGenerated remains false/undefined so resume can re-attempt
   }
+}
+
+// --- Static Analysis (Feature 1.2) ---
+
+interface StaticAnalysisResult {
+  output: string;
+  failed: boolean;
+}
+
+async function runStaticAnalysis(
+  config: HarnessConfig,
+  isGreenfield: boolean,
+): Promise<StaticAnalysisResult> {
+  const projectDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
+  let commands: Awaited<ReturnType<typeof detectStaticAnalysisCommands>>;
+  try {
+    commands = await detectStaticAnalysisCommands(projectDir);
+  } catch {
+    return { output: "", failed: false };
+  }
+
+  if (commands.length === 0) {
+    return { output: "", failed: false };
+  }
+
+  let combinedOutput = "";
+  let anyFailed = false;
+
+  for (const cmd of commands) {
+    try {
+      const result = Bun.spawnSync(["sh", "-c", cmd.script], {
+        cwd: projectDir,
+        env: { ...process.env },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdout = result.stdout.toString();
+      const stderr = result.stderr.toString();
+      const exitCode = result.exitCode;
+
+      if (exitCode !== 0) anyFailed = true;
+
+      combinedOutput += `### ${cmd.name} (exit code: ${exitCode})\n`;
+      if (stdout) combinedOutput += stdout;
+      if (stderr) combinedOutput += stderr;
+      combinedOutput += "\n";
+    } catch (err) {
+      combinedOutput += `### ${cmd.name} (execution error)\n${err}\n`;
+      anyFailed = true;
+    }
+  }
+
+  return {
+    output: truncateStaticAnalysisOutput(combinedOutput.trim()),
+    failed: anyFailed,
+  };
 }
 
 // --- Error handling ---

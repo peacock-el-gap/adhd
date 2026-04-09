@@ -38,6 +38,8 @@ export interface HarnessConfig {
   // OPP-13-A: Documenter agent
   noDocs?: boolean; // --no-docs flag, disables post-run documentation generation
   modelDocumenter?: string; // --model-documenter, per-agent model override for documenter
+  // Phase 1 Deepen: Static Analysis
+  lintGate?: boolean; // --lint-gate flag, makes lint/typecheck failure a hard gate
 }
 
 export interface SprintContract {
@@ -50,6 +52,14 @@ export interface SprintCriterion {
   name: string;
   description: string;
   threshold: number;
+  type?: "behavioral" | "implementation";
+}
+
+export interface RegressionCriterion {
+  name: string;
+  description: string;
+  threshold: number;
+  sprintNumber: number;
 }
 
 export interface EvalScore {

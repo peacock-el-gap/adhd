@@ -394,7 +394,8 @@ Output a JSON object with this structure:
     {
       "name": "criterion_name",
       "description": "Specific, testable description of what must be true",
-      "threshold": 7
+      "threshold": 7,
+      "type": "behavioral"
     },
     ...
   ]
@@ -405,6 +406,9 @@ Rules:
 - Each criterion must be SPECIFIC and TESTABLE (not vague like "works well")
 - Include 5-15 criteria per sprint depending on complexity
 - Criteria should cover: functionality, error handling, code quality, user experience, and operational correctness (the app starts cleanly, infrastructure artifacts like migrations or schemas are consistent with the code, the system works end-to-end — not just in isolated tests)
+- Each criterion MUST include a "type" field set to either "behavioral" or "implementation":
+  - "behavioral": Observable behavior, user-facing functionality, API contracts, integration tests — things that must remain true across future sprints
+  - "implementation": Code quality, naming conventions, internal structure, duplication — things specific to this sprint's implementation
 - Output ONLY the JSON, no other text`;
 
 export const CONTRACT_NEGOTIATION_EVALUATOR_PROMPT = `You are reviewing a proposed sprint contract. Evaluate whether the criteria are specific enough, testable, and comprehensive.
@@ -417,4 +421,5 @@ Rules:
 - Criteria must be testable by reading code and running the app
 - Vague criteria like "works well" or "looks good" must be made specific
 - Ensure coverage of error handling and edge cases, not just happy paths
+- Every criterion MUST have a "type" field set to either "behavioral" or "implementation". Reject or fix any contract where criteria are missing the type field.
 - Output either "APPROVED" or the revised JSON contract, nothing else`;

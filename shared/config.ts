@@ -52,6 +52,8 @@ interface ParsedCli {
   // OPP-13-A: Documenter agent
   noDocs: boolean;
   modelDocumenter?: string;
+  // Phase 1 Deepen: Static Analysis
+  lintGate: boolean;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -89,6 +91,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       // OPP-13-A: Documenter agent
       "no-docs": { type: "boolean", default: false },
       "model-documenter": { type: "string" },
+      // Phase 1 Deepen: Static Analysis
+      "lint-gate": { type: "boolean", default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -127,6 +131,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     // OPP-13-A: Documenter agent
     noDocs: values["no-docs"] as boolean,
     modelDocumenter: values["model-documenter"] as string | undefined,
+    // Phase 1 Deepen: Static Analysis
+    lintGate: values["lint-gate"] as boolean,
   };
 }
 
@@ -269,6 +275,8 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     // OPP-13-A: Documenter agent
     noDocs: cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS),
     modelDocumenter,
+    // Phase 1 Deepen: Static Analysis
+    lintGate: cli.lintGate || false,
   };
 
   // Validate
