@@ -13,7 +13,125 @@
         }
       ],
       "totalCostUsd": 0.86631025
+    },
+    {
+      "startedAt": "2026-04-09T05:31:12.260Z",
+      "stages": [
+        {
+          "stage": "sprint-1-contract-proposal",
+          "inputTokens": 1530,
+          "outputTokens": 2215,
+          "cacheReadTokens": 74250,
+          "costUsd": 0.31273124999999996,
+          "durationMs": 47760
+        },
+        {
+          "stage": "sprint-1-contract-review",
+          "inputTokens": 3,
+          "outputTokens": 415,
+          "cacheReadTokens": 11569,
+          "costUsd": 0.02885575,
+          "durationMs": 9400
+        },
+        {
+          "stage": "sprint-1-attempt-0-generator",
+          "inputTokens": 1544,
+          "outputTokens": 11324,
+          "cacheReadTokens": 943858,
+          "costUsd": 1.1718115,
+          "durationMs": 212307
+        },
+        {
+          "stage": "sprint-1-attempt-0-evaluator",
+          "inputTokens": 2859,
+          "outputTokens": 4545,
+          "cacheReadTokens": 651491,
+          "costUsd": 0.7564654999999999,
+          "durationMs": 108305
+        },
+        {
+          "stage": "sprint-2-contract-proposal",
+          "inputTokens": 3977,
+          "outputTokens": 2664,
+          "cacheReadTokens": 173733,
+          "costUsd": 0.39775774999999997,
+          "durationMs": 60319
+        },
+        {
+          "stage": "sprint-2-contract-review",
+          "inputTokens": 1758,
+          "outputTokens": 4062,
+          "cacheReadTokens": 195424,
+          "costUsd": 0.4080895,
+          "durationMs": 91614
+        },
+        {
+          "stage": "sprint-2-attempt-0-generator",
+          "inputTokens": 5667,
+          "outputTokens": 16511,
+          "cacheReadTokens": 3219258,
+          "costUsd": 2.5804765,
+          "durationMs": 326343
+        },
+        {
+          "stage": "sprint-2-attempt-0-evaluator",
+          "inputTokens": 21,
+          "outputTokens": 6535,
+          "cacheReadTokens": 705585,
+          "costUsd": 0.86902875,
+          "durationMs": 154993
+        },
+        {
+          "stage": "sprint-2-attempt-1-generator",
+          "inputTokens": 1839,
+          "outputTokens": 3333,
+          "cacheReadTokens": 708869,
+          "costUsd": 0.8044045000000001,
+          "durationMs": 92444
+        },
+        {
+          "stage": "sprint-2-attempt-1-evaluator",
+          "inputTokens": 1618,
+          "outputTokens": 6494,
+          "cacheReadTokens": 838819,
+          "costUsd": 0.8527494999999999,
+          "durationMs": 157431
+        },
+        {
+          "stage": "sprint-3-contract-proposal",
+          "inputTokens": 1605,
+          "outputTokens": 2736,
+          "cacheReadTokens": 261988,
+          "costUsd": 0.47678775,
+          "durationMs": 64831
+        },
+        {
+          "stage": "sprint-3-contract-review",
+          "inputTokens": 3,
+          "outputTokens": 2156,
+          "cacheReadTokens": 11710,
+          "costUsd": 0.07233875,
+          "durationMs": 32891
+        },
+        {
+          "stage": "sprint-3-attempt-0-generator",
+          "inputTokens": 318,
+          "outputTokens": 16137,
+          "cacheReadTokens": 3397276,
+          "costUsd": 2.5715779999999997,
+          "durationMs": 323165
+        },
+        {
+          "stage": "sprint-3-attempt-0-evaluator",
+          "inputTokens": 2059,
+          "outputTokens": 6112,
+          "cacheReadTokens": 618690,
+          "costUsd": 0.7181150000000001,
+          "durationMs": 130957
+        }
+      ],
+      "totalCostUsd": 12.02119
     }
   ],
-  "runTotalCostUsd": 0.86631025
+  "runTotalCostUsd": 12.88750025
 }
