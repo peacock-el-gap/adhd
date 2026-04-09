@@ -1,0 +1,142 @@
+{
+  "passed": false,
+  "scores": {},
+  "feedback": [
+    {
+      "criterion": "orchestration_invocation_after_all_sprints_pass",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_invoked_on_resume_success",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_failure_does_not_fail_harness",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_tracing_span",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_usage_recorded",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_skipped_on_dry_run",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_skipped_on_sprint_failure",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "no_docs_cli_flag_parsed",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "no_docs_env_var_support",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "no_docs_config_in_harness_config",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "no_docs_prevents_documenter_invocation",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "model_documenter_cli_flag",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "model_documenter_fallback_to_base",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "model_documenter_env_var",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_git_commit_enforcement",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_agent_commit_detected",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "docs_commit_message_prefix",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    },
+    {
+      "criterion": "documenter_skills_routing",
+      "score": 0,
+      "details": "Evaluator failed to produce parseable output"
+    }
+  ],
+  "overallSummary": "Evaluation parsing failed. Raw response: Now let me check the test files:Now let me run the tests:All tests pass. Now let me verify the specific contract criteria by examining key code sections more closely:Now let me check a critical aspect - the `noDocs` CLI precedence issue. When `--no-docs` is passed, `cli.noDocs` is `true`. The config resolves as `cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS)`. This means CLI `true` always wins. But what about the reverse - when CLI is `false` (not passed) and env is `\"0\"` (falsy)? Let me verif",
+  "sdkResult": {
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 154993,
+    "duration_api_ms": 151219,
+    "num_turns": 26,
+    "result": "This is a pre-existing infrastructure issue (missing SDK dependency), not related to sprint 2.\n\nNow let me verify the `noDocs` precedence edge case more carefully. The contract says \"--no-docs CLI flag takes precedence.\" With the `||` operator: `cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS)`:\n\n- When `cli.noDocs` is `true` (flag passed), result is always `true` regardless of env ✓\n- When `cli.noDocs` is `false` (flag not passed), env var determines result ✓\n\nThe issue is: can you explicitly pass `--no-docs=false`? With `parseArgs` boolean type, you can't. So the behavior is correct for all practical cases.\n\nHowever, there's a subtle issue: the contract says \"The --no-docs CLI flag takes precedence: if --no-docs is explicitly passed, that value wins regardless of the env var.\" Since `--no-docs` is a boolean flag that can only be true when passed, and the `||` means env can override when CLI is false/not-passed, this could theoretically be wrong if someone passes `--no-docs` intending to force false. But `--no-docs` as a boolean flag means \"disable docs\", so passing it always means true. This is fine.\n\nLet me now verify the documenter tracing span name contains 'documenter':\n\nLine 647: `parentSpan.startChild(\"documenter\", ...)` — span name is exactly \"documenter\" ✓\n\nAnd it's a child of `parentSpan` which is the `parentSpan` passed to `runSprintLoop` ✓\n\nLet me verify the span is ended in both success and error paths:\n- Success: line 699 `documenterSpan.end()` ✓\n- Error: line 701 `documenterSpan.end({ error: String(err) })` ✓\n\nThe usage recording at line 672: `usage.recordStage(\"documenter\", docResult.sdkResult)` ✓\n\nThe commit enforcement logic (lines 676-697):\n- Captures `beforeDocsSha` before documenter runs (line 650-655) ✓\n- Compares `afterDocsSha` with `beforeDocsSha` (line 681) ✓\n- If SHA changed and no dirty files → agent committed (line 682) ✓\n- If dirty → fallback commit with `[docs]` prefix (line 686) ✓\n- Commit message: `\"[docs] Add project documentation\"` contains `[docs]` ✓\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"orchestration_invocation_after_all_sprints_pass\": 9,\n    \"documenter_invoked_on_resume_success\": 9,\n    \"documenter_failure_does_not_fail_harness\": 8,\n    \"documenter_tracing_span\": 9,\n    \"documenter_usage_recorded\": 9,\n    \"documenter_skipped_on_dry_run\": 9,\n    \"documenter_skipped_on_sprint_failure\": 9,\n    \"no_docs_cli_flag_parsed\": 9,\n    \"no_docs_env_var_support\": 8,\n    \"no_docs_config_in_harness_config\": 9,\n    \"no_docs_prevents_documenter_invocation\": 9,\n    \"model_documenter_cli_flag\": 9,\n    \"model_documenter_fallback_to_base\": 9,\n    \"model_documenter_env_var\": 9,\n    \"documenter_git_commit_enforcement\": 8,\n    \"documenter_agent_commit_detected\": 8,\n    \"docs_commit_message_prefix\": 9,\n    \"documenter_skills_routing\": 9\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"orchestration_invocation_after_all_sprints_pass\",\n      \"score\": 9,\n      \"details\": \"runDocumenter is called at line 658 inside runSprintLoop after allPassed check (line 646). All required args are passed: workDir, documenterModel (config.modelDocumenter ?? model), isGreenfield, logLevel, skills?.documenter, config.sourceDir, config.testDir, results. Tests verify this structurally in harness-documenter.test.ts.\"\n    },\n    {\n      \"criterion\": \"documenter_invoked_on_resume_success\",\n      \"score\": 9,\n      \"details\": \"Both fresh run (line 176) and resume (line 287) paths call runSprintLoop, which contains the single documenter invocation point at line 646. The documenter code is NOT in runHarness or resumeHarness individually. Test 'both fresh run and resume paths pass documenter skills to runSprintLoop' verifies both paths pass documenter skills.\"\n    },\n    {\n      \"criterion\": \"documenter_failure_does_not_fail_harness\",\n      \"score\": 8,\n      \"details\": \"Try/catch at line 700 catches documenter errors. Warning logged at line 702 contains 'WARNING' (case-insensitive match for 'warning'). The function continues to return success. Progress.json is written as 'complete' at line 643 before documenter runs, so it remains 'complete'. One minor note: progress.json status is set before the documenter runs, which means it will show 'complete' even if documenter hasn't run yet — but this matches the contract requirement.\"\n    },\n    {\n      \"criterion\": \"documenter_tracing_span\",\n      \"score\": 9,\n      \"details\": \"Span created at line 647: parentSpan.startChild('documenter', ...). 'documenter' is the span name. It's a child of parentSpan which is the span passed to runSprintLoop. Span is ended on success (line 699) and error (line 701) paths.\"\n    },\n    {\n      \"criterion\": \"documenter_usage_recorded\",\n      \"score\": 9,\n      \"details\": \"Line 672: usage.recordStage('documenter', docResult.sdkResult) records the documenter stage. Stage name is 'documenter'. Test in harness-documenter.test.ts verifies this string appears in the code.\"\n    },\n    {\n      \"criterion\": \"documenter_skipped_on_dry_run\",\n      \"score\": 9,\n      \"details\": \"Dry-run exits at line 155-159 in runHarness before runSprintLoop is called. The documenter code is inside runSprintLoop, so it's never reached. This is correct.\"\n    },\n    {\n      \"criterion\": \"documenter_skipped_on_sprint_failure\",\n      \"score\": 9,\n      \"details\": \"Line 641: allPassed = results.every(r => r.passed). Line 646: if (allPassed && !config.noDocs) gates the documenter. When sprints fail, allPassed is false and documenter is skipped. Progress shows 'failed' per line 642.\"\n    },\n    {\n      \"criterion\": \"no_docs_cli_flag_parsed\",\n      \"score\": 9,\n      \"details\": \"parseArgs option 'no-docs' with type 'boolean' and default false at line 90 in config.ts. Mapped to noDocs in ParsedCli at line 128. strict mode doesn't throw — verified by test. Multiple tests confirm this works.\"\n    },\n    {\n      \"criterion\": \"no_docs_env_var_support\",\n      \"score\": 8,\n      \"details\": \"Line 270: noDocs: cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS). isTruthy handles '1', 'true', 'yes'. When ADHD_NO_DOCS=1 and no CLI flag, noDocs is true. CLI flag (true) takes precedence via ||. Tests verify ADHD_NO_DOCS=1, ADHD_NO_DOCS=true, and precedence. Minor: the || operator means if CLI is false (not passed), env determines — which is correct behavior but technically CLI 'false' doesn't override env 'true'. Since --no-docs can only be true when passed, this is acceptable.\"\n    },\n    {\n      \"criterion\": \"no_docs_config_in_harness_config\",\n      \"score\": 9,\n      \"details\": \"HarnessConfig in types.ts line 39: noDocs?: boolean. resolveConfig populates it from CLI > env > default(false) at line 270. Tests verify the field exists and has correct type.\"\n    },\n    {\n      \"criterion\": \"no_docs_prevents_documenter_invocation\",\n      \"score\": 9,\n      \"details\": \"Line 646: if (allPassed && !config.noDocs) gates all documenter code including the span creation, invocation, and usage recording. When noDocs is true, entire block is skipped. Harness still returns success via normal path.\"\n    },\n    {\n      \"criterion\": \"model_documenter_cli_flag\",\n      \"score\": 9,\n      \"details\": \"parseArgs option 'model-documenter' with type 'string' at line 91 in config.ts. Mapped to modelDocumenter in ParsedCli at line 129. resolveConfig at line 235: modelDocumenter = cli.modelDocumenter ?? process.env.MODEL_DOCUMENTER ?? undefined. Follows same pattern as other per-agent models. Tests verify parsing and resolution.\"\n    },\n    {\n      \"criterion\": \"model_documenter_fallback_to_base\",\n      \"score\": 9,\n      \"details\": \"Line 353 in harness.ts: const documenterModel = config.modelDocumenter ?? model. When modelDocumenter is undefined, base model is used. This is passed to runDocumenter at line 660. Tests verify config.modelDocumenter defaults to undefined and the fallback pattern exists in code.\"\n    },\n    {\n      \"criterion\": \"model_documenter_env_var\",\n      \"score\": 9,\n      \"details\": \"Line 235 in config.ts: cli.modelDocumenter ?? process.env.MODEL_DOCUMENTER ?? undefined. Uses MODEL_DOCUMENTER (without ADHD_ prefix, matching MODEL_PLANNER etc convention). Tests verify env var is read and CLI takes precedence.\"\n    },\n    {\n      \"criterion\": \"documenter_git_commit_enforcement\",\n      \"score\": 8,\n      \"details\": \"Lines 650-655 capture beforeDocsSha. Lines 676-697 compare after. If dirty (line 683), fallback auto-commit with '[docs] Add project documentation' message (line 686). The implementation uses its own inline logic rather than reusing ensureGeneratorCommit, but achieves equivalent functionality. The contract says 'may reuse ensureGeneratorCommit or implement equivalent logic' so this is acceptable.\"\n    },\n    {\n      \"criterion\": \"documenter_agent_commit_detected\",\n      \"score\": 8,\n      \"details\": \"Line 681: if (afterDocsSha !== beforeDocsSha && !docsDirty) — detects agent commit. Line 682 logs 'Documenter commit source: agent'. No fallback commit is made in this path. The commit source is logged as required.\"\n    },\n    {\n      \"criterion\": \"docs_commit_message_prefix\",\n      \"score\": 9,\n      \"details\": \"Line 686: commit message is '[docs] Add project documentation'. Contains '[docs]' prefix distinguishing from '[sprint-N]' feature commits. Test verifies the exact string appears in code.\"\n    },\n    {\n      \"criterion\": \"documenter_skills_routing\",\n      \"score\": 9,\n      \"details\": \"Line 106: routeSkillsForAgent(resolvedSkills, 'documenter') in fresh run path. Line 228: same in resume path. Both pass documenterSkills to runSprintLoop. Line 663: skills?.documenter passed to runDocumenter. AgentRole type includes 'documenter' (skills.ts line 7). Test verifies routeSkillsForAgent accepts 'documenter' and returns valid AgentSkills.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 2 is well implemented. All four features (Harness Orchestration Integration, --no-docs CLI Flag, Per-Agent Model Override for Documenter, Documenter Git Commit) are correctly implemented with proper code structure. The documenter is invoked in runSprintLoop (not per-path), ensuring both fresh and resume flows trigger it. Error handling properly catches documenter failures with warning logs while preserving harness success. CLI parsing, env var support, and config resolution follow established patterns. Git commit enforcement captures SHA before/after and falls back with [docs] prefix. Skills routing includes documenter as a valid agent role. Tests cover config parsing, env vars, structural code verification, and edge cases. 246 of 247 tests pass (1 failure is pre-existing tracing SDK dependency issue unrelated to sprint 2).\"\n}",
+    "stop_reason": "end_turn",
+    "session_id": "806a9c0f-7269-45f2-b765-cb30ce2d7204",
+    "total_cost_usd": 0.86902875,
+    "usage": {
+      "input_tokens": 21,
+      "cache_creation_input_tokens": 56441,
+      "cache_read_input_tokens": 705585,
+      "output_tokens": 6535,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 56441,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-4-6": {
+        "inputTokens": 21,
+        "outputTokens": 6535,
+        "cacheReadInputTokens": 705585,
+        "cacheCreationInputTokens": 56441,
+        "webSearchRequests": 0,
+        "costUSD": 0.86902875,
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000
+      }
+    },
+    "permission_denials": [],
+    "fast_mode_state": "off",
+    "uuid": "eb0c2481-a643-4965-94e1-4df6d1f406df"
+  }
+}
