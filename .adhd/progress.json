@@ -1,7 +1,8 @@
 {
-  "status": "spec-review",
-  "currentSprint": 0,
-  "totalSprints": 0,
+  "status": "building",
+  "currentSprint": 1,
+  "totalSprints": 6,
   "completedSprints": 0,
-  "retryCount": 0
+  "retryCount": 0,
+  "specApproved": true
 }

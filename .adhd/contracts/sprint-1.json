@@ -1,0 +1,84 @@
+{
+  "sprintNumber": 1,
+  "features": [
+    "BDD Regression Accumulation Across Sprints",
+    "Static Analysis Soft Gate"
+  ],
+  "criteria": [
+    {
+      "name": "criterion_type_field_on_sprint_criterion",
+      "description": "The SprintCriterion interface in shared/types.ts includes an optional 'type' field with union type '\"behavioral\" | \"implementation\"'. Existing contracts without the field continue to work (backward compatible). The SprintContract interface is unchanged.",
+      "threshold": 7
+    },
+    {
+      "name": "contract_negotiation_prompts_classify_criteria",
+      "description": "The CONTRACT_NEGOTIATION_GENERATOR_PROMPT in shared/prompts.ts instructs the Generator to include a 'type' field on each criterion set to either 'behavioral' or 'implementation'. The CONTRACT_NEGOTIATION_EVALUATOR_PROMPT is updated to validate the presence of the type field. The static prompt constants (PLANNER_SYSTEM_PROMPT, GENERATOR_SYSTEM_PROMPT, EVALUATOR_SYSTEM_PROMPT) remain unchanged for codex-harness backward compatibility.",
+      "threshold": 7
+    },
+    {
+      "name": "regression_accumulation_after_passing_sprint",
+      "description": "After a sprint passes, all criteria with type 'behavioral' from that sprint's contract are appended to .adhd/regression.json. Criteria with type 'implementation' or no type field are excluded from the regression set. Criteria are deduplicated by name — if a criterion with the same name already exists in regression.json, the newer version (higher sprintNumber) replaces the older one.",
+      "threshold": 7
+    },
+    {
+      "name": "regression_file_format_and_persistence",
+      "description": "The .adhd/regression.json file contains a JSON array of accumulated behavioral criteria objects (each with at minimum name, description, threshold, and the originating sprintNumber). The file is created on first accumulation and appended to on subsequent sprints. The file survives cleanHarnessArtifacts() — it is NOT deleted on fresh (non-resume) runs, since it represents cross-sprint accumulated knowledge.",
+      "threshold": 7
+    },
+    {
+      "name": "regression_criteria_injected_into_evaluator",
+      "description": "When evaluating sprint N (N > 1) and regression.json exists and is non-empty, all accumulated behavioral criteria from previous sprints are included in the Evaluator's prompt under a '## Regression Criteria' section header, visually separated from the current sprint's criteria. The Evaluator must score both current and regression criteria. If regression.json does not exist or is empty, no regression section is added.",
+      "threshold": 7
+    },
+    {
+      "name": "no_bdd_flag_skips_regression",
+      "description": "When the --no-bdd flag is set (config.noBdd === true), regression accumulation is skipped entirely: no criteria are written to regression.json after a passing sprint, and no regression criteria are injected into the Evaluator prompt. The regression.json file is not deleted if it already exists — it is simply not read or written.",
+      "threshold": 7
+    },
+    {
+      "name": "static_analysis_command_detection",
+      "description": "The harness detects lint and typecheck commands by reading the target project's package.json 'scripts' field, looking for keys named 'lint', 'typecheck', or 'type-check'. If no package.json exists, package.json has no 'scripts' field, or no matching script keys exist, detection gracefully returns an empty array (no error thrown, no log error). Detection reads package.json from config.workDir (or app/ for greenfield).",
+      "threshold": 7
+    },
+    {
+      "name": "static_analysis_execution_and_injection",
+      "description": "Between Generator completion and Evaluator invocation (in the sprint attempt loop in harness.ts), detected lint/typecheck commands are executed via subprocess (e.g., 'npm run lint', 'npm run typecheck') in the project working directory. Their combined stdout/stderr output is injected into the Evaluator's prompt under a '## Static Analysis Results' section header. Non-zero exit codes from lint/typecheck do NOT prevent the Evaluator from running (soft gate behavior) unless --lint-gate is set.",
+      "threshold": 7
+    },
+    {
+      "name": "static_analysis_graceful_skip",
+      "description": "When no lint or typecheck commands are detected (no package.json, no matching scripts), the Evaluator runs normally with no '## Static Analysis Results' section in its prompt and no error or warning is logged. The harness proceeds as if static analysis does not exist.",
+      "threshold": 7
+    },
+    {
+      "name": "static_analysis_output_truncation",
+      "description": "When static analysis combined stdout/stderr output exceeds 4000 characters, it is truncated to the first 4000 characters and a message '[output truncated — showing first 4000 chars of N total]' is appended (where N is the actual total character count). The total injected content (truncated output + warning) may exceed 4000 chars slightly due to the appended message.",
+      "threshold": 7
+    },
+    {
+      "name": "lint_gate_hard_mode",
+      "description": "A new --lint-gate boolean CLI flag is parsed in shared/config.ts (following the existing parseArgs/parseCli pattern) and stored as 'lintGate?: boolean' on HarnessConfig. When set and any lint/typecheck command exits with non-zero, the Evaluator is skipped entirely for that attempt, the attempt is counted as failed, and the lint/typecheck output is included in the feedback string passed to the Generator's next retry. When --lint-gate is not set, non-zero exits are ignored (soft gate — output still injected into evaluator).",
+      "threshold": 7
+    },
+    {
+      "name": "tests_for_regression_accumulation",
+      "description": "Unit tests exist in the tests/ directory covering: (1) writing behavioral criteria to regression.json, (2) excluding implementation criteria and criteria with no type field, (3) reading and injecting accumulated criteria into an evaluator prompt string, (4) deduplication by criterion name, (5) respecting the --no-bdd flag (skipping read/write), and (6) regression.json not being deleted by cleanHarnessArtifacts. All tests pass with 'bun test'.",
+      "threshold": 7
+    },
+    {
+      "name": "tests_for_static_analysis",
+      "description": "Unit tests exist in the tests/ directory covering: (1) command detection from package.json scripts field (matching 'lint', 'typecheck', 'type-check' keys), (2) graceful return of empty array when no package.json or no matching scripts, (3) output truncation at 4000 chars with correct warning message, and (4) lint-gate behavior (evaluator skipped on non-zero exit when flag set, evaluator runs when flag unset). All tests pass with 'bun test'.",
+      "threshold": 7
+    },
+    {
+      "name": "existing_tests_still_pass",
+      "description": "All pre-existing test files in tests/ (config.test.ts, parse-eval-result.test.ts, prompts.test.ts, skills.test.ts, logger.test.ts, usage.test.ts, extract-balanced-json.test.ts, is-transient-error.test.ts, parse-contract.test.ts, documenter.test.ts, harness-documenter.test.ts, ensure-generator-commit.test.ts, tracing.test.ts, sprint3.test.ts) continue to pass. Running 'bun test' from the project root produces no new failures in these files.",
+      "threshold": 7
+    },
+    {
+      "name": "type_safety_and_code_quality",
+      "description": "New code is TypeScript strict mode compatible with no 'any' type assertions. Async/await is used consistently (matching shared/files.ts patterns). File operations use node:fs/promises (not sync variants) except where existing code uses sync. Subprocess operations are wrapped in try/catch. New exports from shared/ modules follow the existing named-export convention (no default exports).",
+      "threshold": 7
+    }
+  ]
+}
