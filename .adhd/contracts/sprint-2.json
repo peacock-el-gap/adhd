@@ -1,0 +1,99 @@
+{
+  "sprintNumber": 2,
+  "features": [
+    "Feature 1.3: Diff-Aware Evaluation on Retries",
+    "Feature 1.4: Quality Criteria in Contracts"
+  ],
+  "criteria": [
+    {
+      "name": "diff_computed_on_retry",
+      "description": "On retry attempts (attempt > 0), the harness computes `git diff <beforeSha>..HEAD` after the generator runs and includes the output in the Evaluator's supplementaryContext under a '## Changes Since Last Attempt' section header. The diff is appended to supplementaryContext alongside existing sections (regression criteria, static analysis) without overwriting them.",
+      "threshold": 7,
+      "type": "behavioral"
+    },
+    {
+      "name": "no_diff_on_first_attempt",
+      "description": "On attempt 0 (first attempt), no '## Changes Since Last Attempt' section is included in the Evaluator's supplementaryContext — the diff logic is skipped entirely",
+      "threshold": 10,
+      "type": "behavioral"
+    },
+    {
+      "name": "empty_diff_handled",
+      "description": "When the generator makes no changes (beforeSha equals HEAD after generator run), the '## Changes Since Last Attempt' section either includes a note like '[No changes detected]' or is omitted entirely — it must not include an empty or whitespace-only diff block",
+      "threshold": 7,
+      "type": "behavioral"
+    },
+    {
+      "name": "diff_truncation_at_8k",
+      "description": "When git diff output exceeds 8000 characters, it is truncated to 8000 characters and a warning like '[diff truncated — showing first 8000 chars of N total]' is appended to the section",
+      "threshold": 7,
+      "type": "behavioral"
+    },
+    {
+      "name": "diff_graceful_degradation",
+      "description": "When git diff fails (no git repo, beforeSha is empty string, git command throws), evaluation proceeds normally without a diff section — no error is thrown, no crash occurs, and the evaluator still receives all other supplementaryContext sections (regression, static analysis)",
+      "threshold": 10,
+      "type": "behavioral"
+    },
+    {
+      "name": "sha_captured_before_generator",
+      "description": "The beforeSha is captured via `git rev-parse HEAD` before each generator run (this already exists at harness.ts ~line 464). On retry, the diff `git diff <beforeSha>..HEAD` is computed after the generator completes but before the evaluator runs, showing exactly what the generator changed in the current attempt.",
+      "threshold": 7,
+      "type": "behavioral"
+    },
+    {
+      "name": "diff_only_sent_to_evaluator",
+      "description": "The diff section is only included in the evaluator's supplementaryContext. It is NOT passed to the generator prompt or any other agent. The generator continues to receive lastEval feedback only.",
+      "threshold": 10,
+      "type": "behavioral"
+    },
+    {
+      "name": "quality_criteria_in_generator_prompt",
+      "description": "The CONTRACT_NEGOTIATION_GENERATOR_PROMPT in shared/prompts.ts explicitly instructs the Generator to include at least one criterion covering code quality aspects: naming conventions, code duplication, error handling patterns, or maintainability. The prompt text must contain specific mention of these categories (not just the generic 'code quality' already present).",
+      "threshold": 7,
+      "type": "implementation"
+    },
+    {
+      "name": "quality_criteria_enforced_by_evaluator_prompt",
+      "description": "The CONTRACT_NEGOTIATION_EVALUATOR_PROMPT in shared/prompts.ts instructs the Evaluator to check that at least one quality-focused criterion (type 'implementation') is present and to reject or revise contracts that contain only behavioral/functional criteria",
+      "threshold": 7,
+      "type": "implementation"
+    },
+    {
+      "name": "quality_criteria_typed_as_implementation",
+      "description": "The prompt instructions specify that quality criteria (naming, duplication, error handling, maintainability) should use type 'implementation', ensuring they do not accumulate in the regression set across sprints (since regression.ts only carries forward 'behavioral' type criteria)",
+      "threshold": 7,
+      "type": "implementation"
+    },
+    {
+      "name": "evaluator_scores_quality_criteria",
+      "description": "The buildEvaluatorPrompt output includes instructions to assess quality criteria (naming, duplication, maintainability) with the same scoring rigor and threshold as behavioral/functional criteria — quality criteria are not treated as optional or advisory",
+      "threshold": 7,
+      "type": "implementation"
+    },
+    {
+      "name": "diff_unit_tests_exist",
+      "description": "Unit tests exist for the diff computation logic covering: (1) successful diff generation with known beforeSha, (2) truncation when output exceeds 8000 chars, (3) graceful return of empty/undefined when git is unavailable or beforeSha is empty, (4) skipping on attempt 0, (5) empty diff when no changes detected. Tests pass when run with `bun test`.",
+      "threshold": 7,
+      "type": "implementation"
+    },
+    {
+      "name": "quality_criteria_prompt_tests_exist",
+      "description": "Unit tests verify that CONTRACT_NEGOTIATION_GENERATOR_PROMPT contains keywords for quality criteria (at least 'naming' or 'duplication' or 'maintainability') and that CONTRACT_NEGOTIATION_EVALUATOR_PROMPT contains instructions to reject purely-functional contracts. Tests pass with `bun test`.",
+      "threshold": 7,
+      "type": "implementation"
+    },
+    {
+      "name": "existing_tests_still_pass",
+      "description": "All pre-existing tests in tests/*.test.ts continue to pass without modification — no regressions introduced by the new code. Verified by running `bun test` and confirming zero failures in files that existed before this sprint.",
+      "threshold": 10,
+      "type": "behavioral"
+    },
+    {
+      "name": "type_safety_maintained",
+      "description": "No new TypeScript type errors are introduced. Any new functions or interfaces have proper type annotations (no `any` types unless wrapping external untyped APIs). Running `bunx tsc --noEmit` produces no new errors.",
+      "threshold": 10,
+      "type": "implementation"
+    }
+  ]
+}

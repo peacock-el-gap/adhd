@@ -1,0 +1,143 @@
+{
+  "passed": true,
+  "scores": {
+    "criterion_type_field_on_sprint_criterion": 9,
+    "contract_negotiation_prompts_classify_criteria": 9,
+    "regression_accumulation_after_passing_sprint": 9,
+    "regression_file_format_and_persistence": 9,
+    "regression_criteria_injected_into_evaluator": 8,
+    "no_bdd_flag_skips_regression": 8,
+    "static_analysis_command_detection": 9,
+    "static_analysis_execution_and_injection": 8,
+    "static_analysis_graceful_skip": 9,
+    "static_analysis_output_truncation": 9,
+    "lint_gate_hard_mode": 8,
+    "tests_for_regression_accumulation": 8,
+    "tests_for_static_analysis": 7,
+    "existing_tests_still_pass": 10,
+    "type_safety_and_code_quality": 8
+  },
+  "feedback": [
+    {
+      "criterion": "criterion_type_field_on_sprint_criterion",
+      "score": 9,
+      "details": "SprintCriterion in shared/types.ts (line 55) has `type?: \"behavioral\" | \"implementation\"` — optional field with correct union type. SprintContract interface is unchanged. RegressionCriterion is a clean new interface. Backward compatible since type is optional."
+    },
+    {
+      "criterion": "contract_negotiation_prompts_classify_criteria",
+      "score": 9,
+      "details": "CONTRACT_NEGOTIATION_GENERATOR_PROMPT includes type field in JSON example and instructions to classify as 'behavioral' or 'implementation' (lines 386-412). CONTRACT_NEGOTIATION_EVALUATOR_PROMPT validates type field presence (lines 414-425). Static prompts (PLANNER_SYSTEM_PROMPT, GENERATOR_SYSTEM_PROMPT, EVALUATOR_SYSTEM_PROMPT) are unchanged."
+    },
+    {
+      "criterion": "regression_accumulation_after_passing_sprint",
+      "score": 9,
+      "details": "In harness.ts line 662, after a sprint passes, `accumulateRegressionCriteria` is called. The function in regression.ts filters for `c.type === 'behavioral'` (line 37), excluding implementation and untyped criteria. Deduplication by name with Map (lines 43-56), newer replaces older."
+    },
+    {
+      "criterion": "regression_file_format_and_persistence",
+      "score": 9,
+      "details": "regression.json is a JSON array of RegressionCriterion objects (name, description, threshold, sprintNumber). File created on first accumulation, appended on subsequent. cleanHarnessArtifacts (files.ts:68-76) only cleans contracts/, feedback/, spec.md, progress.json — regression.json is not touched."
+    },
+    {
+      "criterion": "regression_criteria_injected_into_evaluator",
+      "score": 8,
+      "details": "In harness.ts lines 537-546, for sprint > 1 when noBdd is false, regression criteria are read and buildRegressionSection produces a '## Regression Criteria' header. This is appended to supplementaryContext which is injected into the evaluator prompt (evaluator.ts line 41). Empty criteria produce empty string (no section). Minor note: the condition `sprint > 1` means sprint 1 never gets regression injection, which is correct."
+    },
+    {
+      "criterion": "no_bdd_flag_skips_regression",
+      "score": 8,
+      "details": "Both accumulation (harness.ts:662 `if (!config.noBdd)`) and injection (harness.ts:537 `if (!config.noBdd && sprint > 1)`) are guarded by noBdd flag. When noBdd is true, regression.json is not read, not written, and not deleted if it exists. Correct behavior."
+    },
+    {
+      "criterion": "static_analysis_command_detection",
+      "score": 9,
+      "details": "static-analysis.ts detects 'lint', 'typecheck', 'type-check' keys from package.json scripts (line 4). Gracefully returns empty array on no package.json, no scripts field, or no matching keys (try/catch on line 28-31, scripts check on line 20). Reads from projectDir which is config.workDir or app/ for greenfield (harness.ts:868)."
+    },
+    {
+      "criterion": "static_analysis_execution_and_injection",
+      "score": 8,
+      "details": "Commands are executed via Bun.spawnSync in harness.ts (line 885), between generator and evaluator. Output injected as '## Static Analysis Results' section (line 570). Non-zero exit codes don't prevent evaluator unless lintGate is set. Minor: uses Bun.spawnSync (sync) rather than async, but follows existing codebase patterns with execSync."
+    },
+    {
+      "criterion": "static_analysis_graceful_skip",
+      "score": 9,
+      "details": "When no commands detected, runStaticAnalysis returns {output: '', failed: false} (harness.ts:877). The empty output check on line 551 means no '## Static Analysis Results' section is added. No error or warning is logged."
+    },
+    {
+      "criterion": "static_analysis_output_truncation",
+      "score": 9,
+      "details": "truncateStaticAnalysisOutput in static-analysis.ts (lines 38-42) truncates at 4000 chars with correct message format: '[output truncated — showing first 4000 chars of N total]'. Output at or below 4000 chars is returned unchanged. Applied in harness.ts line 908."
+    },
+    {
+      "criterion": "lint_gate_hard_mode",
+      "score": 8,
+      "details": "--lint-gate flag parsed in config.ts (line 95) as boolean, stored as `lintGate?: boolean` on HarnessConfig (line 42). When set and lint fails, evaluator is skipped (harness.ts:553-567), attempt counted as failed with `continue`, feedback includes lint output in overallSummary which is passed to Generator on next retry via lastEval."
+    },
+    {
+      "criterion": "tests_for_regression_accumulation",
+      "score": 8,
+      "details": "regression.test.ts covers: (1) writing behavioral criteria, (2) excluding implementation criteria, (3) excluding no-type criteria, (4) deduplication by name, (5) reading/injecting via buildRegressionSection, (6) noBdd flag skipping (simulated conditional), (7) cleanHarnessArtifacts not deleting regression.json. All 6 describe blocks pass. The noBdd test is a simulation rather than integration but covers the pattern."
+    },
+    {
+      "criterion": "tests_for_static_analysis",
+      "score": 7,
+      "details": "static-analysis.test.ts covers: (1) command detection for lint/typecheck/type-check keys, (2) empty array for no package.json, no scripts, no matching keys, (3) truncation at 4000 chars with correct message, (4) lint-gate logic tests (boolean pattern simulation). The lint-gate tests (lines 124-147) test only boolean logic patterns rather than actual harness integration, which is weak but covers the essential behavior contract."
+    },
+    {
+      "criterion": "existing_tests_still_pass",
+      "score": 10,
+      "details": "All 311 tests pass across 16 files with 0 failures. All pre-existing test files (config, parse-eval-result, prompts, skills, logger, usage, extract-balanced-json, is-transient-error, parse-contract, documenter, harness-documenter, ensure-generator-commit, tracing, sprint3) continue to pass."
+    },
+    {
+      "criterion": "type_safety_and_code_quality",
+      "score": 8,
+      "details": "No 'any' type assertions in new code. Uses node:fs/promises (readFile, writeFile) in regression.ts. Static-analysis.ts uses readFile from node:fs/promises. Bun.spawnSync in harness is wrapped in try/catch (line 884-904). Named exports only, no default exports. Follows existing patterns consistently. The `as RegressionCriterion[]` cast on parsed JSON is reasonable and necessary."
+    }
+  ],
+  "overallSummary": "Sprint 1 is well-implemented. Both features (BDD Regression Accumulation and Static Analysis Soft Gate) are properly coded with correct integration in the harness loop. Types, prompts, config, regression logic, and static analysis detection/truncation are all solid. Tests are comprehensive (311 pass, 0 fail) with good coverage of the specified scenarios. The lint-gate tests are somewhat weak (testing boolean patterns rather than real integration) but cover the essential behavior. Code quality is clean with no 'any' assertions, proper error handling, and consistent style.",
+  "sdkResult": {
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 196928,
+    "duration_api_ms": 188917,
+    "num_turns": 37,
+    "result": "Good — only named exports.\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"criterion_type_field_on_sprint_criterion\": 9,\n    \"contract_negotiation_prompts_classify_criteria\": 9,\n    \"regression_accumulation_after_passing_sprint\": 9,\n    \"regression_file_format_and_persistence\": 9,\n    \"regression_criteria_injected_into_evaluator\": 8,\n    \"no_bdd_flag_skips_regression\": 8,\n    \"static_analysis_command_detection\": 9,\n    \"static_analysis_execution_and_injection\": 8,\n    \"static_analysis_graceful_skip\": 9,\n    \"static_analysis_output_truncation\": 9,\n    \"lint_gate_hard_mode\": 8,\n    \"tests_for_regression_accumulation\": 8,\n    \"tests_for_static_analysis\": 7,\n    \"existing_tests_still_pass\": 10,\n    \"type_safety_and_code_quality\": 8\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"criterion_type_field_on_sprint_criterion\",\n      \"score\": 9,\n      \"details\": \"SprintCriterion in shared/types.ts (line 55) has `type?: \\\"behavioral\\\" | \\\"implementation\\\"` — optional field with correct union type. SprintContract interface is unchanged. RegressionCriterion is a clean new interface. Backward compatible since type is optional.\"\n    },\n    {\n      \"criterion\": \"contract_negotiation_prompts_classify_criteria\",\n      \"score\": 9,\n      \"details\": \"CONTRACT_NEGOTIATION_GENERATOR_PROMPT includes type field in JSON example and instructions to classify as 'behavioral' or 'implementation' (lines 386-412). CONTRACT_NEGOTIATION_EVALUATOR_PROMPT validates type field presence (lines 414-425). Static prompts (PLANNER_SYSTEM_PROMPT, GENERATOR_SYSTEM_PROMPT, EVALUATOR_SYSTEM_PROMPT) are unchanged.\"\n    },\n    {\n      \"criterion\": \"regression_accumulation_after_passing_sprint\",\n      \"score\": 9,\n      \"details\": \"In harness.ts line 662, after a sprint passes, `accumulateRegressionCriteria` is called. The function in regression.ts filters for `c.type === 'behavioral'` (line 37), excluding implementation and untyped criteria. Deduplication by name with Map (lines 43-56), newer replaces older.\"\n    },\n    {\n      \"criterion\": \"regression_file_format_and_persistence\",\n      \"score\": 9,\n      \"details\": \"regression.json is a JSON array of RegressionCriterion objects (name, description, threshold, sprintNumber). File created on first accumulation, appended on subsequent. cleanHarnessArtifacts (files.ts:68-76) only cleans contracts/, feedback/, spec.md, progress.json — regression.json is not touched.\"\n    },\n    {\n      \"criterion\": \"regression_criteria_injected_into_evaluator\",\n      \"score\": 8,\n      \"details\": \"In harness.ts lines 537-546, for sprint > 1 when noBdd is false, regression criteria are read and buildRegressionSection produces a '## Regression Criteria' header. This is appended to supplementaryContext which is injected into the evaluator prompt (evaluator.ts line 41). Empty criteria produce empty string (no section). Minor note: the condition `sprint > 1` means sprint 1 never gets regression injection, which is correct.\"\n    },\n    {\n      \"criterion\": \"no_bdd_flag_skips_regression\",\n      \"score\": 8,\n      \"details\": \"Both accumulation (harness.ts:662 `if (!config.noBdd)`) and injection (harness.ts:537 `if (!config.noBdd && sprint > 1)`) are guarded by noBdd flag. When noBdd is true, regression.json is not read, not written, and not deleted if it exists. Correct behavior.\"\n    },\n    {\n      \"criterion\": \"static_analysis_command_detection\",\n      \"score\": 9,\n      \"details\": \"static-analysis.ts detects 'lint', 'typecheck', 'type-check' keys from package.json scripts (line 4). Gracefully returns empty array on no package.json, no scripts field, or no matching keys (try/catch on line 28-31, scripts check on line 20). Reads from projectDir which is config.workDir or app/ for greenfield (harness.ts:868).\"\n    },\n    {\n      \"criterion\": \"static_analysis_execution_and_injection\",\n      \"score\": 8,\n      \"details\": \"Commands are executed via Bun.spawnSync in harness.ts (line 885), between generator and evaluator. Output injected as '## Static Analysis Results' section (line 570). Non-zero exit codes don't prevent evaluator unless lintGate is set. Minor: uses Bun.spawnSync (sync) rather than async, but follows existing codebase patterns with execSync.\"\n    },\n    {\n      \"criterion\": \"static_analysis_graceful_skip\",\n      \"score\": 9,\n      \"details\": \"When no commands detected, runStaticAnalysis returns {output: '', failed: false} (harness.ts:877). The empty output check on line 551 means no '## Static Analysis Results' section is added. No error or warning is logged.\"\n    },\n    {\n      \"criterion\": \"static_analysis_output_truncation\",\n      \"score\": 9,\n      \"details\": \"truncateStaticAnalysisOutput in static-analysis.ts (lines 38-42) truncates at 4000 chars with correct message format: '[output truncated — showing first 4000 chars of N total]'. Output at or below 4000 chars is returned unchanged. Applied in harness.ts line 908.\"\n    },\n    {\n      \"criterion\": \"lint_gate_hard_mode\",\n      \"score\": 8,\n      \"details\": \"--lint-gate flag parsed in config.ts (line 95) as boolean, stored as `lintGate?: boolean` on HarnessConfig (line 42). When set and lint fails, evaluator is skipped (harness.ts:553-567), attempt counted as failed with `continue`, feedback includes lint output in overallSummary which is passed to Generator on next retry via lastEval.\"\n    },\n    {\n      \"criterion\": \"tests_for_regression_accumulation\",\n      \"score\": 8,\n      \"details\": \"regression.test.ts covers: (1) writing behavioral criteria, (2) excluding implementation criteria, (3) excluding no-type criteria, (4) deduplication by name, (5) reading/injecting via buildRegressionSection, (6) noBdd flag skipping (simulated conditional), (7) cleanHarnessArtifacts not deleting regression.json. All 6 describe blocks pass. The noBdd test is a simulation rather than integration but covers the pattern.\"\n    },\n    {\n      \"criterion\": \"tests_for_static_analysis\",\n      \"score\": 7,\n      \"details\": \"static-analysis.test.ts covers: (1) command detection for lint/typecheck/type-check keys, (2) empty array for no package.json, no scripts, no matching keys, (3) truncation at 4000 chars with correct message, (4) lint-gate logic tests (boolean pattern simulation). The lint-gate tests (lines 124-147) test only boolean logic patterns rather than actual harness integration, which is weak but covers the essential behavior contract.\"\n    },\n    {\n      \"criterion\": \"existing_tests_still_pass\",\n      \"score\": 10,\n      \"details\": \"All 311 tests pass across 16 files with 0 failures. All pre-existing test files (config, parse-eval-result, prompts, skills, logger, usage, extract-balanced-json, is-transient-error, parse-contract, documenter, harness-documenter, ensure-generator-commit, tracing, sprint3) continue to pass.\"\n    },\n    {\n      \"criterion\": \"type_safety_and_code_quality\",\n      \"score\": 8,\n      \"details\": \"No 'any' type assertions in new code. Uses node:fs/promises (readFile, writeFile) in regression.ts. Static-analysis.ts uses readFile from node:fs/promises. Bun.spawnSync in harness is wrapped in try/catch (line 884-904). Named exports only, no default exports. Follows existing patterns consistently. The `as RegressionCriterion[]` cast on parsed JSON is reasonable and necessary.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 1 is well-implemented. Both features (BDD Regression Accumulation and Static Analysis Soft Gate) are properly coded with correct integration in the harness loop. Types, prompts, config, regression logic, and static analysis detection/truncation are all solid. Tests are comprehensive (311 pass, 0 fail) with good coverage of the specified scenarios. The lint-gate tests are somewhat weak (testing boolean patterns rather than real integration) but cover the essential behavior. Code quality is clean with no 'any' assertions, proper error handling, and consistent style.\"\n}\n```",
+    "stop_reason": "end_turn",
+    "session_id": "5904974d-308f-49d3-8bec-5e1edf29c39c",
+    "total_cost_usd": 1.03588775,
+    "usage": {
+      "input_tokens": 6344,
+      "cache_creation_input_tokens": 52769,
+      "cache_read_input_tokens": 998673,
+      "output_tokens": 7001,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 52769,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-4-6": {
+        "inputTokens": 6344,
+        "outputTokens": 7001,
+        "cacheReadInputTokens": 998673,
+        "cacheCreationInputTokens": 52769,
+        "webSearchRequests": 0,
+        "costUSD": 1.03588775,
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000
+      }
+    },
+    "permission_denials": [],
+    "fast_mode_state": "off",
+    "uuid": "2341d4f1-f003-405f-997e-9eaa4c9a7762"
+  }
+}
