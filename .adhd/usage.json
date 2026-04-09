@@ -1,0 +1,19 @@
+{
+  "sessions": [
+    {
+      "startedAt": "2026-04-09T03:09:50.645Z",
+      "stages": [
+        {
+          "stage": "planner",
+          "inputTokens": 19,
+          "outputTokens": 6406,
+          "cacheReadTokens": 590543,
+          "costUsd": 0.86631025,
+          "durationMs": 154638
+        }
+      ],
+      "totalCostUsd": 0.86631025
+    }
+  ],
+  "runTotalCostUsd": 0.86631025
+}

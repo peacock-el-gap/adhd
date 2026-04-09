@@ -1,0 +1,85 @@
+{
+  "sprintNumber": 1,
+  "features": [
+    "Documenter Agent Module",
+    "Documenter System Prompt",
+    "Artifact Digest Construction"
+  ],
+  "criteria": [
+    {
+      "name": "documenter_module_exists",
+      "description": "A file `claude-harness/documenter.ts` exists and exports a `runDocumenter` async function that accepts workDir (string), model (string), isGreenfield (boolean), and optional parameters matching the pattern of runEvaluator/runGenerator (logLevel, skills, sourceDir, testDir).",
+      "threshold": 7
+    },
+    {
+      "name": "documenter_calls_query",
+      "description": "The `runDocumenter` function invokes the `query()` wrapper from `shared/tracing.ts` with an Options object containing: cwd set to workDir, a systemPrompt, permissionMode 'bypassPermissions', tools including Read/Write/Edit/Bash/Glob/Grep, the provided model, and maxTurns from CLAUDE_MAX_TURNS.",
+      "threshold": 7
+    },
+    {
+      "name": "documenter_conversation_logging",
+      "description": "The `runDocumenter` function creates a conversation log via `createConversationLog()` with agentRole 'Documenter' (or 'documenter'), logs assistant text, tool use, and tool results during the query loop, and calls `finalize()` with the elapsed duration. The resulting log file is written to `.adhd/logs/`.",
+      "threshold": 7
+    },
+    {
+      "name": "documenter_returns_sdk_result",
+      "description": "The `runDocumenter` function returns an object containing `sdkResult` (of type SDKResultFields or undefined) captured from the 'result' message type during the query loop, enabling the caller to record usage via UsageTracker.",
+      "threshold": 7
+    },
+    {
+      "name": "build_documenter_prompt_exists",
+      "description": "A `buildDocumenterPrompt` function is exported from `shared/prompts.ts` that accepts a PromptContext (or compatible object) and returns a string containing the system prompt for the Documenter agent.",
+      "threshold": 7
+    },
+    {
+      "name": "prompt_greenfield_awareness",
+      "description": "When `buildDocumenterPrompt` is called with `isGreenfield: true`, the returned prompt references `app/` as the documentation target directory. When called with `isGreenfield: false`, it references the project root.",
+      "threshold": 7
+    },
+    {
+      "name": "prompt_skills_integration",
+      "description": "The `buildDocumenterPrompt` function calls the existing `appendSkills()` helper to append skill content when skills are provided in the context, following the same pattern as buildGeneratorPrompt and buildEvaluatorPrompt.",
+      "threshold": 7
+    },
+    {
+      "name": "prompt_instructs_readme_changelog_api",
+      "description": "The Documenter system prompt instructs the agent to produce at minimum: a README.md (with overview, setup, usage, architecture sections) and a CHANGELOG.md (sprint-per-section format). It also instructs conditional creation of API documentation if the project has API endpoints.",
+      "threshold": 7
+    },
+    {
+      "name": "prompt_emphasizes_accuracy",
+      "description": "The Documenter system prompt explicitly instructs the agent to document what actually exists in the codebase (not what was planned), derive setup instructions from the actual project, and maintain a concise, developer-friendly tone.",
+      "threshold": 7
+    },
+    {
+      "name": "artifact_digest_function_exists",
+      "description": "A function (e.g., `buildArtifactDigest` or similar) exists that reads `.adhd/` artifacts and returns a structured string digest. It accepts the workDir and returns content including: the spec, sprint contracts from `.adhd/contracts/`, and final evaluation feedback from `.adhd/feedback/`.",
+      "threshold": 7
+    },
+    {
+      "name": "digest_includes_only_final_feedback",
+      "description": "When multiple feedback files exist for a sprint (e.g., multiple retry attempts), the artifact digest includes only the final passing feedback per sprint, not intermediate failure feedback. This is verified by the file-selection logic choosing the highest-numbered attempt file or the one corresponding to the passing attempt.",
+      "threshold": 7
+    },
+    {
+      "name": "digest_token_budget_truncation",
+      "description": "The artifact digest function accepts a configurable token/character budget parameter. When the combined artifact content exceeds this budget, contracts and feedback are truncated with a clear note indicating truncation occurred, rather than silently dropping content or exceeding the budget.",
+      "threshold": 7
+    },
+    {
+      "name": "digest_passed_to_documenter",
+      "description": "The `runDocumenter` function (or its caller) uses the artifact digest as part of the user prompt sent to `query()`, so the Documenter agent has full context about what was built and evaluated.",
+      "threshold": 7
+    },
+    {
+      "name": "tests_exist_and_pass",
+      "description": "Unit tests exist in `tests/` (e.g., `tests/documenter.test.ts` or `tests/prompts.test.ts` additions) covering: buildDocumenterPrompt greenfield/non-greenfield output, skills appending, and artifact digest construction (including truncation behavior). All tests pass with `bun test`.",
+      "threshold": 7
+    },
+    {
+      "name": "consistent_code_patterns",
+      "description": "The new code follows the existing codebase conventions: TypeScript with Bun runtime, imports use `.ts` extensions, types are imported from `shared/types.ts`, the module structure mirrors evaluator.ts/generator.ts patterns (query loop, message handling, conversation logging), and no new dependencies are introduced unnecessarily.",
+      "threshold": 7
+    }
+  ]
+}
