@@ -193,7 +193,15 @@ You MUST output your evaluation as a JSON object (and nothing else) with this ex
 \`\`\`
 
 A sprint PASSES only if ALL criteria score at or above the threshold (default: 7).
-If ANY criterion falls below the threshold, the sprint FAILS and work goes back to the generator.`;
+If ANY criterion falls below the threshold, the sprint FAILS and work goes back to the generator.
+
+## Quality Criteria
+
+Quality criteria (naming conventions, code duplication, error handling patterns, maintainability) MUST be assessed with the same scoring rigor and threshold as behavioral/functional criteria. They are NOT optional or advisory — a low score on a quality criterion fails the sprint just like a low score on a functional criterion. Check for:
+- Consistent, descriptive naming conventions across the codebase
+- Absence of copy-paste code duplication (DRY principle)
+- Proper error handling patterns (meaningful messages, no swallowed errors)
+- Maintainable code structure (appropriate abstractions, single-responsibility)`;
 
   return appendSkills(prompt, ctx.skills);
 }
@@ -409,6 +417,7 @@ Rules:
 - Each criterion MUST include a "type" field set to either "behavioral" or "implementation":
   - "behavioral": Observable behavior, user-facing functionality, API contracts, integration tests — things that must remain true across future sprints
   - "implementation": Code quality, naming conventions, internal structure, duplication — things specific to this sprint's implementation
+- You MUST include at least one criterion with type "implementation" covering code quality. Specifically, include criteria assessing one or more of: naming conventions (consistent, descriptive variable/function/class names), code duplication (no copy-paste patterns, DRY principle), error handling patterns (proper try/catch, meaningful error messages, no swallowed errors), and maintainability (readable code, appropriate abstractions, single-responsibility). These quality criteria ensure the code is production-grade, not just functional.
 - Output ONLY the JSON, no other text`;
 
 export const CONTRACT_NEGOTIATION_EVALUATOR_PROMPT = `You are reviewing a proposed sprint contract. Evaluate whether the criteria are specific enough, testable, and comprehensive.
@@ -422,4 +431,6 @@ Rules:
 - Vague criteria like "works well" or "looks good" must be made specific
 - Ensure coverage of error handling and edge cases, not just happy paths
 - Every criterion MUST have a "type" field set to either "behavioral" or "implementation". Reject or fix any contract where criteria are missing the type field.
+- The contract MUST include at least one quality-focused criterion with type "implementation" covering code quality aspects such as naming conventions, code duplication, error handling patterns, or maintainability. If the contract contains ONLY behavioral/functional criteria and no quality criteria, you MUST reject it and add appropriate quality criteria.
+- Quality criteria (naming, duplication, error handling, maintainability) should use type "implementation" so they do not accumulate in the regression set across sprints.
 - Output either "APPROVED" or the revised JSON contract, nothing else`;
