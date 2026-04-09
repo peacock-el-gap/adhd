@@ -20,8 +20,8 @@ Based on Anthropic's [Harness Design for Long-Running Application Development](h
 ### Setup
 
 ```bash
-git clone https://github.com/peacock-el-gap/harness
-cd harness
+git clone https://github.com/peacock-el-gap/adhd
+cd adhd
 bun install
 bun link        # Makes 'adhd' available as a global command
 ```
@@ -30,9 +30,9 @@ After `bun link`, you can run `adhd` from any directory -- it operates on the cu
 
 > **Alternative:** If you prefer not to use `bun link`, you can create a shell alias:
 > ```bash
-> alias adhd='bun run /path/to/harness/claude-harness/index.ts'
+> alias adhd='bun run /path/to/adhd/claude-harness/index.ts'
 > ```
-> Or run directly from the harness directory with `bun run start -- [flags]`.
+> Or run directly from the ADHD harness directory with `bun run start -- [flags]`.
 
 ## Usage
 

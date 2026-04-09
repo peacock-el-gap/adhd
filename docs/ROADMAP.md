@@ -14,17 +14,18 @@ The document is self-contained. No prior conversation context is required.
 
 ## Part 1: Inventory of Built-In Methodical Functionalities
 
-The harness encodes a rich set of SDLC practices across its three-agent adversarial architecture. Each functionality below is fully implemented and operational.
+The harness encodes a rich set of SDLC practices across its four-agent architecture. Each functionality below is fully implemented and operational.
 
 ### 1.1 GAN-Inspired Adversarial Architecture
 
-The foundational design pattern: **separate generation from evaluation, then pit them against each other**. Three specialized agents (Planner, Generator, Evaluator) communicate through files, not shared conversation history. This prevents **self-evaluation bias** — the quiet killer of single-agent coding tools where the model praises its own mediocre output.
+The foundational design pattern: **separate generation from evaluation, then pit them against each other**. Four specialized agents (Planner, Generator, Evaluator, Documenter) communicate through files, not shared conversation history. This prevents **self-evaluation bias** — the quiet killer of single-agent coding tools where the model praises its own mediocre output.
 
 - **Planner**: Creates product specification with sprint decomposition
 - **Generator**: Implements features with full tool access (Read, Write, Edit, Bash, Glob, Grep)
 - **Evaluator**: Tests and scores with read-only tools (Read, Bash, Glob, Grep — no Write/Edit)
+- **Documenter**: Synthesizes codebase + `.adhd/` artifacts into project documentation (README, API docs, CHANGELOG) after all sprints pass
 
-The asymmetry is intentional: the evaluator cannot fix problems, only report them. This forces the generator to produce genuinely working code.
+The asymmetry is intentional: the evaluator cannot fix problems, only report them. This forces the generator to produce genuinely working code. The documenter runs post-sprint as a synthesis step, not an adversarial one.
 
 ### 1.2 Sprint-Based Decomposition
 
@@ -125,12 +126,30 @@ Three layers, all operational:
 2. **Langfuse OTEL tracing** — Optional hierarchical span tree mirroring the harness structure. Fire-and-forget; zero impact on agent behavior.
 3. **Per-stage cost tracking** — Tokens, USD, duration per SDK call. Printed at session end, accumulated across resume sessions in `.adhd/usage.json`.
 
-### 1.12 Additional Operational Features
+### 1.12 Post-Run Documentation Generation
+
+After all sprints pass, a dedicated **Documenter** agent synthesizes the codebase and `.adhd/` artifacts (spec, contracts, evaluation feedback, BDD scenarios) into project documentation:
+
+- **README.md** — Overview, setup, usage, architecture, features
+- **CHANGELOG.md** — One section per sprint, derived from contract history
+- **API.md** — Conditional, only if API endpoints exist
+
+The Documenter reads the actual code (not just the spec) and uses an artifact digest (`shared/artifact-digest.ts`) with token-budget enforcement to stay within context limits. Advisory validation (`shared/doc-validation.ts`) warns if README or CHANGELOG are missing or too short.
+
+Key properties:
+- Runs once after all sprints pass (not per-sprint)
+- Disableable via `--no-docs` (or `ADHD_NO_DOCS` env var)
+- Per-agent model override via `--model-documenter`
+- Non-fatal: documentation failure does not fail the run
+- Resume-aware: re-attempts documentation if a previous run failed at this stage
+- Commit enforcement: Documenter commits with `[docs]` prefix, detected via git SHA comparison
+
+### 1.13 Additional Operational Features
 
 | Feature | Description |
 |---------|-------------|
 | **Dry-run mode** (`--dry-run`) | Run planner + spec approval only. Zero generation cost. |
-| **Multi-model strategy** | Per-agent model overrides (`--model-planner`, `--model-generator`, `--model-evaluator`) |
+| **Multi-model strategy** | Per-agent model overrides (`--model-planner`, `--model-generator`, `--model-evaluator`, `--model-documenter`) |
 | **Context injection** (`--context <file>`) | Feed API specs, schemas, design docs into planner prompt |
 | **Branch creation** (`--branch <name>`) | Create feature branch before sprint loop |
 | **Greenfield mode** (`--greenfield`) | Scaffold fresh `app/` with git init |
@@ -142,7 +161,7 @@ Three layers, all operational:
 
 ## Part 2: What's Missing — Opportunities
 
-Each opportunity is numbered OPP-01 through OPP-13. These IDs are referenced in Part 3's roadmap.
+Each opportunity is numbered OPP-01 through OPP-12. These IDs are referenced in Part 3's roadmap. (OPP-13, Documentation Generation, has been implemented — see §1.12.)
 
 ### OPP-01: BDD Regression Accumulation Across Sprints
 
@@ -332,36 +351,6 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Cons**: Requires run-ID or timestamp-based run identification; needs a storage convention for historical runs (currently each run overwrites the previous)
 - **Effort**: Medium
 
-### OPP-13: Documentation Generation
-
-**Problem**: The harness produces **zero documentation output**. The code is committed, but all knowledge *about* the code evaporates when the run ends. No README, no API docs, no changelog, no architecture notes.
-
-Yet the harness generates rich structured knowledge during a run:
-
-| Artifact | Contains | Persisted? |
-|----------|----------|------------|
-| `spec.md` | Product vision, features, BDD scenarios, sprint plan | Yes, but in `.adhd/` (gitignored) |
-| `contracts/sprint-N.json` | Testable criteria, feature descriptions | Yes, in `.adhd/` |
-| `feedback/sprint-N-round-M.json` | Quality assessments, what passed/failed | Yes, in `.adhd/` |
-| Evaluator summaries | What works, edge cases found | Only in conversation logs |
-| Generator commit messages | What was built per feature | In git history |
-
-A real project needs at minimum: a README (what this is, how to run it), API documentation (if endpoints were built), and a CHANGELOG (what was built per sprint — this is literally the contract history).
-
-**Opportunity**: Ensure the harness run produces project documentation, not just code.
-
-- **Option A — Post-run synthesis agent**: After all sprints pass, run a dedicated "Documenter" agent that reads codebase + `.adhd/` artifacts and writes project documentation. Read-only on `.adhd/`, write access to the project.
-  - Pros: Dedicated agent with focused prompt; can read actual code + spec + contracts; produces high-quality output
-  - Cons: Extra LLM cost; adds latency at end of run; new agent type to maintain
-- **Option B — Generator responsibility**: Extend the Generator prompt to include "write/update documentation after implementing features" as part of each sprint.
-  - Pros: No new agent; documentation stays current per sprint; Generator already knows what it just built
-  - Cons: Generator context already full; documentation quality may suffer as afterthought; adds criteria to every contract
-- **Option C — Skill + contract criterion**: A documentation skill injected to the Generator providing templates and conventions. Combined with a contract criterion like "README.md is updated with new features." Documentation becomes a quality criterion (pairs with OPP-06, Option B).
-  - Pros: Uses existing infrastructure; composable; developer controls the template; lightweight
-  - Cons: Generator may treat it as checkbox compliance rather than genuine documentation; quality depends on skill content
-- **Recommended**: **Option C** for Phase 1 (small, uses existing skills + contract criteria). Upgrade to **Option A** in a later phase if documentation quality from the Generator proves insufficient.
-- **Effort**: Option C is Small (content only). Option A is Medium.
-
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -388,8 +377,7 @@ These items use the existing skills system and contract negotiation prompts. The
 | # | Feature | Source | Effort | Deliverable |
 |---|---------|--------|--------|-------------|
 | CS-1 | **Policy skills + code-style template** | OPP-07 | S | Harness-level: `security-owasp`, `accessibility-wcag`, `api-design` skill directories with `skill.yaml` + `.md` content. Project-level: a `code-style` skeleton template with guidance questions for developers to fill in per project (placed in `.adhd/skills/local/`). |
-| CS-2 | **Documentation skill** | OPP-13-C | S | `documentation` skill with README/CHANGELOG templates, injected to Generator. Pairs with quality criteria (1.5 / OPP-06-B) to make documentation a contract requirement. |
-| CS-3 | **Codebase context guidance** | OPP-04-B | S | Documentation/template for creating project-local `.adhd/skills/local/codebase-context.md` skills. Not a harness skill itself — a guide for users. |
+| CS-2 | **Codebase context guidance** | OPP-04-B | S | Documentation/template for creating project-local `.adhd/skills/local/codebase-context.md` skills. Not a harness skill itself — a guide for users. |
 
 **Rationale**: These are the highest-leverage items relative to effort — they fill the content gap in an architecturally mature skills system. No PRs to review, no tests to write, no risk of regression.
 
@@ -397,7 +385,7 @@ These items use the existing skills system and contract negotiation prompts. The
 
 ### Phase 1: Deepen — Smarter Within Existing Architecture
 
-**Goal**: Address the highest-impact gaps. Most items work within the current three-agent model. One item (1.6) is a larger architectural investment included because it addresses a fundamental limitation of static specs.
+**Goal**: Address the highest-impact gaps. Most items work within the current four-agent model. One item (1.6) is a larger architectural investment included because it addresses a fundamental limitation of static specs.
 
 | # | Feature | Source | Effort | Justification |
 |---|---------|--------|--------|---------------|
@@ -407,11 +395,10 @@ These items use the existing skills system and contract negotiation prompts. The
 | 1.4 | **Sprint selection (`--sprint N`)** | OPP-08 | M | Major DX improvement. Targeted sprint re-run without full `--resume` from last checkpoint. |
 | 1.5 | **Quality criteria in contracts** | OPP-06-B | S | Extend contract negotiation prompts to include quality-focused criteria (naming, duplication, complexity, documentation). Tests whether quality awareness is the missing signal before investing in a separate Reviewer agent. |
 | 1.6 | **Progressive spec refinement (guarded)** | OPP-09 | L | Living spec that adapts after each sprint. **Guardrails**: only future sprints modified; user gate before applying changes; diff logged; accumulated BDD regression criteria (1.1 / OPP-01-A) remain unchanged. The largest item in Phase 1 but addresses a fundamental limitation. |
-| 1.7 | **Post-run documentation agent** | OPP-13-A | M | Dedicated Documenter agent that runs once after all sprints pass, synthesizing codebase + `.adhd/` artifacts (spec, contracts, evaluator feedback, BDD scenarios) into project documentation (README, API docs, CHANGELOG). One additional `query()` call — architecturally simple (same pattern as Evaluator). Produces a tangible deliverable the user can immediately evaluate. Complements CS-2 (OPP-13-C): the skill ensures the Generator writes minimal docs per sprint; the Documenter produces polished final documentation. |
 
-**Rationale for ordering**: Items 1.1-1.3 are the highest-leverage quick wins — they address quality gaps (cross-sprint regression, trivial failures, imprecise retry feedback) with minimal code. Item 1.4 is DX. Item 1.5 is a small prompt change with outsized impact on code quality. Item 1.6 is the most ambitious but directly addresses a real limitation: specs that can't adapt to reality. Item 1.7 ensures the harness produces production-ready output, not just working code.
+**Rationale for ordering**: Items 1.1-1.3 are the highest-leverage quick wins — they address quality gaps (cross-sprint regression, trivial failures, imprecise retry feedback) with minimal code. Item 1.4 is DX. Item 1.5 is a small prompt change with outsized impact on code quality. Item 1.6 is the most ambitious but directly addresses a real limitation: specs that can't adapt to reality.
 
-**Dependencies**: Item 1.6 benefits from 1.1 being in place first — accumulated BDD criteria provide the stable behavioral contract that persists even as the spec evolves around them. Item 1.7 benefits from all other Phase 1 items — richer contracts, quality criteria, and refined specs all improve the Documenter's source material.
+**Dependencies**: Item 1.6 benefits from 1.1 being in place first — accumulated BDD criteria provide the stable behavioral contract that persists even as the spec evolves around them.
 
 ---
 
@@ -424,7 +411,7 @@ These items use the existing skills system and contract negotiation prompts. The
 | 2.1 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Use cheaper model by default, escalate to stronger model on failed retry. Higher success rate on hard sprints without increasing baseline cost. Decomposition (attempt 3) deferred. |
 | 2.2 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
 | 2.3 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
-| 2.4 | **Code review agent (4th agent)** | OPP-06-A | L | Separate Reviewer agent for code quality. **Contingent**: only if Phase 1's quality criteria in contracts (1.5 / OPP-06-B) proves insufficient. If OPP-06-B works well, this item is dropped. |
+| 2.4 | **Code review agent (5th agent)** | OPP-06-A | L | Separate Reviewer agent for code quality. **Contingent**: only if Phase 1's quality criteria in contracts (1.5 / OPP-06-B) proves insufficient. If OPP-06-B works well, this item is dropped. |
 
 **Rationale**: Item 2.1 addresses a fundamental retry limitation. Items 2.2-2.3 are ecosystem and tooling. Item 2.4 is contingent — it's the escalation path if OPP-06-B doesn't deliver enough quality signal.
 
@@ -446,8 +433,7 @@ These items use the existing skills system and contract negotiation prompts. The
 | Stream / Phase | # | Feature | Source | Notes |
 |---|---|---|---|---|
 | **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills (security, a11y, API) + project-local template |
-| | CS-2 | Documentation skill + templates | OPP-13-C | Lightweight baseline for per-sprint docs |
-| | CS-3 | Codebase context guidance | OPP-04-B | User guide, not a harness skill |
+| | CS-2 | Codebase context guidance | OPP-04-B | User guide, not a harness skill |
 | --- | --- | --- | --- | --- |
 | **Phase 1**<br/>*Deepen (HIGH)* | 1.1 | BDD regression accumulation | OPP-01-A | #1 quality gap: cross-sprint behavioral regression |
 | | 1.2 | Static analysis gate (soft) | OPP-03-B | Inject lint/typecheck into Evaluator context |
@@ -455,22 +441,21 @@ These items use the existing skills system and contract negotiation prompts. The
 | | 1.4 | Sprint selection (`--sprint N`) | OPP-08 | Targeted re-run without full `--resume` |
 | | 1.5 | Quality criteria in contracts | OPP-06-B | Quality-focused criteria in contract negotiation |
 | | 1.6 | Progressive spec refinement (guarded) | OPP-09 | Living spec; depends on 1.1 for stable BDD floor |
-| | 1.7 | Post-run documentation agent | OPP-13-A | Synthesize `.adhd/` artifacts into project docs |
 | --- | --- | --- | --- | --- |
 | **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag |
 | | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
 | | 2.3 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
-| | 2.4 | Code review agent (4th agent) | OPP-06-A | **Contingent**: only if 1.5 (OPP-06-B) insufficient |
+| | 2.4 | Code review agent (5th agent) | OPP-06-A | **Contingent**: only if 1.5 (OPP-06-B) insufficient |
 | --- | --- | --- | --- | --- |
 | **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
 | | 3.2 | Web dashboard | OPP-12 | Requires stabilized CLI + data formats |
-
-**Opportunities not on the roadmap**: OPP-04 (Generator context priming) is addressed via CS-3 (OPP-04-B) as documentation/guidance — no code needed.
 
 ---
 
 ### Key Architectural Insight
 
-The harness's highest-leverage extension point is the **skills system**. It's a fully functional plugin architecture with per-agent routing, three scopes, and methodology-aware filtering — but only three built-in skills exist, all harness-internal. The Content Stream exploits this gap: policy skills, documentation templates, and codebase context guides can be authored independently of any engineering phase.
+The harness's highest-leverage extension point is the **skills system**. It's a fully functional plugin architecture with per-agent routing, three scopes, and methodology-aware filtering — but only three built-in skills exist, all harness-internal. The Content Stream exploits this gap: policy skills and codebase context guides can be authored independently of any engineering phase.
 
 The second insight is that **BDD scenarios are the natural regression mechanism**. They already exist as structured JSON in sprint contracts. They represent behavioral invariants, not implementation details. Accumulating them across sprints (OPP-01-A) turns the contract system from a per-sprint checklist into a growing behavioral specification of the entire system — and pairs naturally with progressive spec refinement (OPP-09) because the accumulated BDD criteria provide the stable contract floor that persists even as the spec evolves above them.
+
+**Opportunities not on the roadmap**: OPP-04 (Generator context priming) is addressed via CS-2 (OPP-04-B) as documentation/guidance — no code needed. OPP-13 (Documentation generation) has been implemented as the Documenter agent (see §1.12).

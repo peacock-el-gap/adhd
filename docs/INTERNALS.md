@@ -12,7 +12,7 @@ This architecture is inspired by **Generative Adversarial Networks** (GANs), whe
 |------|-------------|
 | Generator vs. discriminator | **Generator vs. evaluator** |
 | Gradient descent | **Hard pass/fail thresholds** |
-| Two networks | **Three agents** (adds planner) |
+| Two networks | **Four agents** (adds planner and documenter) |
 | Continuous training | **Sprint-based iteration** |
 | Zero-sum game | **Asymmetric adversarial** -- evaluator tries to break, generator tries to survive |
 
@@ -125,7 +125,7 @@ Each SDK call's token usage and cost is recorded by a `UsageTracker` (`shared/us
 
 ### Multi-Model Strategy
 
-Per-agent model overrides (`--model-planner`, `--model-generator`, `--model-evaluator`) let you use cheaper models for specific roles. For example, use Sonnet for planning and Opus for generation:
+Per-agent model overrides (`--model-planner`, `--model-generator`, `--model-evaluator`, `--model-documenter`) let you use cheaper models for specific roles. For example, use Sonnet for planning and Opus for generation:
 
 ```bash
 adhd --model-planner claude-sonnet-4-6 "Add authentication"
@@ -154,13 +154,16 @@ harness/
 │   ├── conversation-logger.ts     # Markdown conversation log writer
 │   ├── interaction.ts             # Interactive gate prompts (timed single-keypress input)
 │   ├── usage.ts                   # Per-stage cost tracking and usage.json persistence
-│   └── tracing.ts                 # Langfuse tracing (no-op when disabled)
+│   ├── tracing.ts                 # Langfuse tracing (no-op when disabled)
+│   ├── artifact-digest.ts         # Builds structured summary of .adhd/ artifacts for Documenter
+│   └── doc-validation.ts          # Advisory validation of generated documentation
 ├── claude-harness/                # Claude Agent SDK implementation (actively developed)
 │   ├── index.ts                   # CLI entry point
 │   ├── harness.ts                 # Orchestration loop (checkpoint, resume, retry, gates)
 │   ├── planner.ts                 # Planner agent (async generator + interactive mode)
 │   ├── generator.ts               # Generator agent (full tool access) + commit enforcement
-│   └── evaluator.ts               # Evaluator agent (read-only tools)
+│   ├── evaluator.ts               # Evaluator agent (read-only tools)
+│   └── documenter.ts              # Documenter agent (post-run documentation synthesis)
 ├── codex-harness/                 # Codex SDK implementation (frozen)
 │   ├── index.ts                   # CLI entry point
 │   ├── harness.ts                 # Orchestration loop
