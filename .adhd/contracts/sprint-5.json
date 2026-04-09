@@ -1,0 +1,96 @@
+{
+  "sprintNumber": 5,
+  "features": [
+    "Comprehensive unit tests for all Phase 1 Deepen modules (regression, static-analysis, diff, refinement)",
+    "Integration tests for cross-feature interactions (regression + refinement, lint-gate + diff-aware retries, sprint selection + contract reuse)",
+    "Edge case hardening and error path validation across all new CLI flags and runtime paths",
+    "End-to-end smoke test verifying the full harness lifecycle with Phase 1 features enabled"
+  ],
+  "criteria": [
+    {
+      "name": "regression_unit_tests",
+      "description": "Unit tests exist for shared/regression.ts covering: readRegressionCriteria returns empty array when file missing, accumulateRegressionCriteria filters only behavioral criteria, deduplication by name replaces older entries, buildRegressionSection produces correct markdown format with sprint numbers and thresholds. All tests pass via `bun test`.",
+      "threshold": 7
+    },
+    {
+      "name": "static_analysis_unit_tests",
+      "description": "Unit tests exist for shared/static-analysis.ts covering: detectStaticAnalysisCommands finds lint/typecheck/type-check scripts from package.json, returns empty array when no package.json exists, returns empty array when no matching scripts exist, truncateStaticAnalysisOutput truncates at 4000 chars with warning message, and passes through output under the limit unchanged. All tests pass.",
+      "threshold": 7
+    },
+    {
+      "name": "diff_unit_tests",
+      "description": "Unit tests exist for shared/diff.ts covering: computeDiffSection returns undefined on attempt 0, returns undefined when beforeSha is empty, returns undefined when git fails (non-zero exit code or thrown error), truncates diff at 8000 chars with correct warning format, returns formatted section with correct heading on valid diff. All tests pass.",
+      "threshold": 7
+    },
+    {
+      "name": "refinement_unit_tests",
+      "description": "Unit tests exist for shared/refinement.ts covering: extractSprintSection extracts correct section content, extractCompletedSprintSections returns map for sprints 1..N, freezeCompletedSprints replaces modified completed sections with originals, countSprints counts ## Sprint N headings correctly, computeSpecDiff returns null for identical specs and correct +/- prefixed lines for changes, buildRefinementPrompt includes completed and remaining sprint numbers. All tests pass.",
+      "threshold": 7
+    },
+    {
+      "name": "config_cli_flag_tests",
+      "description": "Unit tests exist for shared/config.ts covering: parseCli parses --lint-gate, --sprint N, --refine-spec, and --no-bdd flags correctly; resolveConfig throws when --sprint and --resume are both set with exact error message 'Cannot use --sprint and --resume together.'; resolveConfig throws when --sprint is given without a spec or prompt and no --resume; resolveConfig rejects --sprint 0 and --sprint -1 as invalid. All tests pass.",
+      "threshold": 7
+    },
+    {
+      "name": "regression_accumulation_integration",
+      "description": "An integration test simulates two passing sprints: sprint 1 contract has 2 behavioral and 1 implementation criterion, sprint 2 contract has 1 behavioral criterion. After accumulating both, regression.json contains exactly the 3 behavioral criteria (none of the implementation ones) with correct sprintNumber fields. The buildRegressionSection output for these criteria includes all 3 entries.",
+      "threshold": 7
+    },
+    {
+      "name": "noBdd_skips_regression",
+      "description": "A test verifies that when config.noBdd is true, the regression criteria injection path is skipped — specifically, readRegressionCriteria is not called and no '## Regression Criteria' section appears in supplementary context. This can be a unit test of the condition logic or a mock-based integration test.",
+      "threshold": 7
+    },
+    {
+      "name": "lint_gate_hard_mode_test",
+      "description": "A test verifies lint-gate hard mode behavior: when lintGate is true and static analysis returns a failed result, the evaluator is not invoked, the attempt is marked as failed with feedback details containing 'lint-gate', and the static analysis output is included in the overall summary of the EvalResult.",
+      "threshold": 7
+    },
+    {
+      "name": "diff_aware_retry_integration",
+      "description": "An integration test (or mock-based test) verifies that on attempt N > 0 with a valid beforeSha, the diff section is computed and included in the feedback/context passed to the next coding attempt. Also verifies that on attempt 0 or when beforeSha is absent, no diff section is included. The test must assert on the presence or absence of the diff heading string in the constructed prompt or context.",
+      "threshold": 7
+    },
+    {
+      "name": "sprint_selection_contract_reuse",
+      "description": "A test verifies that when --sprint N is used and a contract file exists at .adhd/contracts/sprint-N.json, the existing contract is loaded and used without invoking contract negotiation. The test also verifies that when no contract file exists for that sprint number, negotiation proceeds normally.",
+      "threshold": 7
+    },
+    {
+      "name": "refinement_freezes_completed_sprints",
+      "description": "A test provides a spec with sprints 1-4, marks sprints 1-2 as completed, and passes a proposed spec where sprint 1 content is modified. After freezeCompletedSprints, the sprint 1 and 2 sections in the output match the original exactly while sprint 3-4 sections reflect the proposed changes.",
+      "threshold": 7
+    },
+    {
+      "name": "spec_diff_computation_accuracy",
+      "description": "A test for computeSpecDiff with a known old spec and new spec verifies: additions are prefixed with '+ ', removals with '- ', unchanged lines are not in output, and returns null when old and new are identical.",
+      "threshold": 7
+    },
+    {
+      "name": "e2e_smoke_test",
+      "description": "An end-to-end smoke test exists that exercises the full harness lifecycle with Phase 1 features enabled: it invokes the main entry point (or its orchestrating function) with a minimal spec/prompt and config that includes --lint-gate, --sprint 1, and at least one regression criterion present. The test completes without throwing unhandled errors and produces an output structure containing the expected top-level fields (e.g., passed, attempts, summary). The test may use mocks for LLM calls and subprocess execution but must exercise real control flow through the orchestrator, contract loader, evaluator loop, and result assembly.",
+      "threshold": 8
+    },
+    {
+      "name": "tests_run_cleanly",
+      "description": "Running `bun test` from the project root executes all test files without crashes, import errors, or unresolved module errors. Exit code is 0. No test file has syntax errors or references to non-existent modules.",
+      "threshold": 8
+    },
+    {
+      "name": "no_regressions_in_source",
+      "description": "All existing source files (shared/*.ts, claude-harness/*.ts) still compile without TypeScript errors. Running `bunx tsc --noEmit` (or equivalent type check) produces no new errors compared to the pre-sprint state. No existing exports have been removed or renamed.",
+      "threshold": 8
+    },
+    {
+      "name": "test_file_organization",
+      "description": "Test files are colocated with their source files following the project convention (e.g., shared/regression.test.ts next to shared/regression.ts, shared/config.test.ts next to shared/config.ts). Each test file imports from its adjacent source file using relative paths. No test files are placed in a separate top-level test directory.",
+      "threshold": 7
+    },
+    {
+      "name": "minimum_test_coverage",
+      "description": "At least 8 distinct test files exist covering the Phase 1 Deepen modules: regression, static-analysis, diff, refinement, config (CLI flags), and at least 3 integration/cross-feature test files (covering regression+accumulation, lint-gate+diff-aware-retries, and e2e smoke). Each test file contains at least 3 test cases (describe/it blocks).",
+      "threshold": 7
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "passed": true,
+  "scores": {
+    "refine_spec_cli_flag": 7,
+    "planner_reinvocation_after_passing_sprint": 8,
+    "completed_sprint_freezing": 9,
+    "spec_diff_computation_and_logging": 8,
+    "user_gate_for_refinement_approval": 8,
+    "auto_accept_non_interactive": 8,
+    "no_refinement_without_flag": 9,
+    "regression_criteria_preserved_after_refinement": 8,
+    "sprint_count_recalculation": 8,
+    "reject_preserves_original_spec": 8,
+    "refinement_prompt_includes_codebase_context": 8,
+    "refinement_error_handling": 8,
+    "tests_for_refinement_logic": 8,
+    "type_safety_and_code_quality": 7,
+    "integration_with_sprint_loop": 8
+  },
+  "feedback": [
+    {
+      "criterion": "refine_spec_cli_flag",
+      "score": 7,
+      "details": "The --refine-spec flag is properly added to parseCli() (line 103) and resolveConfig() (line 307). It defaults to false and is stored as refineSpec on HarnessConfig (types.ts line 46). However, the contract states 'Running `bun run cli --help` (or equivalent) lists the flag' — there is no --help handler at all; running with --help throws 'Unknown option' error. The flag IS discoverable in the source code and tests verify it, but the help listing requirement is technically unmet. Giving 7 because the core functionality works correctly."
+    },
+    {
+      "criterion": "planner_reinvocation_after_passing_sprint",
+      "score": 8,
+      "details": "In harness.ts line 834-855, when config.refineSpec is true and sprint < totalSprints (not the last sprint), performSpecRefinement() is called. This invokes runPlanner with a refinement prompt (line 1117-1123). The condition correctly excludes the last sprint (sprint < totalSprints) and only runs in the passed block. Failed sprints don't trigger refinement since the code is inside the `if (passed)` block at line 802."
+    },
+    {
+      "criterion": "completed_sprint_freezing",
+      "score": 9,
+      "details": "Implemented with a belt-and-suspenders approach: (1) freezeCompletedSprints() in refinement.ts replaces modified completed sections with originals (line 1140), (2) a programmatic verification loop (lines 1143-1153) checks each completed section and force-repairs any that still differ. extractSprintSection, extractCompletedSprintSections, and freezeCompletedSprints all have unit tests verifying behavior."
+    },
+    {
+      "criterion": "spec_diff_computation_and_logging",
+      "score": 8,
+      "details": "computeSpecDiff() in refinement.ts implements a line-level diff with '+' and '-' prefixes. Returns null when strings are identical, handled at line 1157-1161 with a 'no changes proposed' message. The diff is displayed with color formatting (green for additions, red for removals) at lines 1164-1173. Tests verify null return for identical, '+' for additions, '-' for removals."
+    },
+    {
+      "criterion": "user_gate_for_refinement_approval",
+      "score": 8,
+      "details": "Uses the existing promptGate infrastructure (line 1187-1195) with Accept/Reject options. The gate prompt explicitly says 'Reject preserves original spec unchanged' and the reject option is labeled 'keep original spec (no changes)'. On rejection (line 1197-1201), the original spec is written back to disk and regression data is restored."
+    },
+    {
+      "criterion": "auto_accept_non_interactive",
+      "score": 8,
+      "details": "When not interactive (line 1176-1185), the spec is auto-accepted with a clear log line: 'Spec refinement auto-accepted (non-interactive mode).' The diff is still logged before this check (lines 1164-1173), ensuring auditability. The spec is written to disk and regression data is restored."
+    },
+    {
+      "criterion": "no_refinement_without_flag",
+      "score": 9,
+      "details": "The guard `if (config.refineSpec && sprint < totalSprints)` at line 835 means the entire refinement block is skipped (not called then short-circuited) when refineSpec is false. No log lines, no agent calls, no spec reads/writes beyond existing behavior. Test at refinement.test.ts line 221-240 verifies the config defaults."
+    },
+    {
+      "criterion": "regression_criteria_preserved_after_refinement",
+      "score": 8,
+      "details": "The regression.json content is read before refinement (readRegressionFileRaw at line 1101) and restored via restoreRegressionData in every code path: empty spec (1129), error (1135), no changes (1160), auto-accept (1182), rejection (1200), and acceptance (1207). This is thorough byte-level preservation."
+    },
+    {
+      "criterion": "sprint_count_recalculation",
+      "score": 8,
+      "details": "After refinement is accepted, countSprints() counts ## Sprint N headings in the revised spec (line 1183/1208). In the sprint loop (lines 847-851), if the count differs, it's capped by config.maxSprints and a log line reports 'Sprint count updated: X → Y'. Progress is also updated."
+    },
+    {
+      "criterion": "reject_preserves_original_spec",
+      "score": 8,
+      "details": "On rejection (lines 1197-1201): writeSpec writes the originalSpec back to disk, restoreRegressionData restores regression.json, the function returns specChanged: false with the original spec and original sprint count, and logs 'Spec refinement rejected. Original spec preserved.'"
+    },
+    {
+      "criterion": "refinement_prompt_includes_codebase_context",
+      "score": 8,
+      "details": "buildRefinementPrompt() includes: (1) full current spec content via template literal, (2) explicit lists of completed and remaining sprint numbers, (3) instruction 'Read the actual codebase to understand what was built so far', (4) instruction to preserve completed sprints verbatim and only modify not-yet-started sections. All four requirements are present. Tests at lines 244-276 verify each element."
+    },
+    {
+      "criterion": "refinement_error_handling",
+      "score": 8,
+      "details": "The try/catch at lines 1113-1137 handles Planner errors: empty/null output is caught (lines 1127-1131), exceptions are caught with a warning log (line 1133), original spec is written back, regression data is restored, and the function returns specChanged: false allowing the loop to continue. The harness does not crash."
+    },
+    {
+      "criterion": "tests_for_refinement_logic",
+      "score": 8,
+      "details": "refinement.test.ts has 27 tests covering: (a) extractSprintSection and freezeCompletedSprints (lines 88-164), (b) countSprints with add/remove edge cases (lines 168-190), (c) --refine-spec flag parsing present and absent (lines 14-59), (d) no-op behavior when flag absent (lines 221-240), (e) computeSpecDiff with +/- output (lines 194-217). Also includes buildRefinementPrompt tests (lines 244-276). All 27 tests pass."
+    },
+    {
+      "criterion": "type_safety_and_code_quality",
+      "score": 7,
+      "details": "No TypeScript errors in the new refinement.ts or the refinement-related sections of harness.ts (confirmed via tsc --noEmit grep). No `any` types in new code. refineSpec is properly typed as boolean? in HarnessConfig. RefinementResult interface is defined locally. The 11 tsc errors are all pre-existing in other files (artifact-digest.ts, skills.test.ts, config.test.ts). New types added to shared/types.ts where appropriate. Naming follows camelCase/PascalCase conventions."
+    },
+    {
+      "criterion": "integration_with_sprint_loop",
+      "score": 8,
+      "details": "Refinement is integrated at lines 834-855 of harness.ts, executing after sprint passes and checkpoint saves (line 827) and before mid-run steering (line 858). When refineSpec is false, the block is entirely skipped. It coexists with regression accumulation (line 806-812), checkpoint saving (lines 814-827), and mid-run steering (line 858+). The spec and totalSprints variables are updated in-place for the loop to use."
+    }
+  ],
+  "overallSummary": "Sprint 4 Feature 1.6 (Progressive Spec Refinement) is well-implemented. The core refinement logic in shared/refinement.ts is clean with good separation of concerns. Integration into the sprint loop is correct and non-invasive. All 391 tests pass, including 27 dedicated refinement tests. The only notable gap is the missing --help handler (the flag exists but --help throws an error), though this appears to be a pre-existing limitation of the CLI framework. Error handling, regression preservation, and completed sprint freezing are all thorough. Code quality is good with no TypeScript errors in new code and no `any` types.",
+  "sdkResult": {
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 175004,
+    "duration_api_ms": 166952,
+    "num_turns": 36,
+    "result": "`ParsedCli` interface itself is not exported (it's just `interface ParsedCli`, not `export interface ParsedCli`). But the functions using it are. This is fine for the contract.\n\nNow let me verify the last sprint check - does the code skip refinement on the final sprint?\n\nLooking at line 835: `if (config.refineSpec && sprint < totalSprints)` - Yes, the `sprint < totalSprints` ensures no refinement after the final sprint.\n\nAnd for failed sprints, refinement only runs inside the `if (passed)` block (line 802), so it won't run on failures.\n\nLet me verify the regression preservation more carefully:\n\nThe `performSpecRefinement` function:\n1. Reads original regression data (line 1101)\n2. Calls `restoreRegressionData` in all paths: empty spec (1129), error (1135), no changes (1160), non-interactive auto-accept (1182), rejection (1200), acceptance (1207)\n\nThis looks thorough.\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"refine_spec_cli_flag\": 7,\n    \"planner_reinvocation_after_passing_sprint\": 8,\n    \"completed_sprint_freezing\": 9,\n    \"spec_diff_computation_and_logging\": 8,\n    \"user_gate_for_refinement_approval\": 8,\n    \"auto_accept_non_interactive\": 8,\n    \"no_refinement_without_flag\": 9,\n    \"regression_criteria_preserved_after_refinement\": 8,\n    \"sprint_count_recalculation\": 8,\n    \"reject_preserves_original_spec\": 8,\n    \"refinement_prompt_includes_codebase_context\": 8,\n    \"refinement_error_handling\": 8,\n    \"tests_for_refinement_logic\": 8,\n    \"type_safety_and_code_quality\": 7,\n    \"integration_with_sprint_loop\": 8\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"refine_spec_cli_flag\",\n      \"score\": 7,\n      \"details\": \"The --refine-spec flag is properly added to parseCli() (line 103) and resolveConfig() (line 307). It defaults to false and is stored as refineSpec on HarnessConfig (types.ts line 46). However, the contract states 'Running `bun run cli --help` (or equivalent) lists the flag' — there is no --help handler at all; running with --help throws 'Unknown option' error. The flag IS discoverable in the source code and tests verify it, but the help listing requirement is technically unmet. Giving 7 because the core functionality works correctly.\"\n    },\n    {\n      \"criterion\": \"planner_reinvocation_after_passing_sprint\",\n      \"score\": 8,\n      \"details\": \"In harness.ts line 834-855, when config.refineSpec is true and sprint < totalSprints (not the last sprint), performSpecRefinement() is called. This invokes runPlanner with a refinement prompt (line 1117-1123). The condition correctly excludes the last sprint (sprint < totalSprints) and only runs in the passed block. Failed sprints don't trigger refinement since the code is inside the `if (passed)` block at line 802.\"\n    },\n    {\n      \"criterion\": \"completed_sprint_freezing\",\n      \"score\": 9,\n      \"details\": \"Implemented with a belt-and-suspenders approach: (1) freezeCompletedSprints() in refinement.ts replaces modified completed sections with originals (line 1140), (2) a programmatic verification loop (lines 1143-1153) checks each completed section and force-repairs any that still differ. extractSprintSection, extractCompletedSprintSections, and freezeCompletedSprints all have unit tests verifying behavior.\"\n    },\n    {\n      \"criterion\": \"spec_diff_computation_and_logging\",\n      \"score\": 8,\n      \"details\": \"computeSpecDiff() in refinement.ts implements a line-level diff with '+' and '-' prefixes. Returns null when strings are identical, handled at line 1157-1161 with a 'no changes proposed' message. The diff is displayed with color formatting (green for additions, red for removals) at lines 1164-1173. Tests verify null return for identical, '+' for additions, '-' for removals.\"\n    },\n    {\n      \"criterion\": \"user_gate_for_refinement_approval\",\n      \"score\": 8,\n      \"details\": \"Uses the existing promptGate infrastructure (line 1187-1195) with Accept/Reject options. The gate prompt explicitly says 'Reject preserves original spec unchanged' and the reject option is labeled 'keep original spec (no changes)'. On rejection (line 1197-1201), the original spec is written back to disk and regression data is restored.\"\n    },\n    {\n      \"criterion\": \"auto_accept_non_interactive\",\n      \"score\": 8,\n      \"details\": \"When not interactive (line 1176-1185), the spec is auto-accepted with a clear log line: 'Spec refinement auto-accepted (non-interactive mode).' The diff is still logged before this check (lines 1164-1173), ensuring auditability. The spec is written to disk and regression data is restored.\"\n    },\n    {\n      \"criterion\": \"no_refinement_without_flag\",\n      \"score\": 9,\n      \"details\": \"The guard `if (config.refineSpec && sprint < totalSprints)` at line 835 means the entire refinement block is skipped (not called then short-circuited) when refineSpec is false. No log lines, no agent calls, no spec reads/writes beyond existing behavior. Test at refinement.test.ts line 221-240 verifies the config defaults.\"\n    },\n    {\n      \"criterion\": \"regression_criteria_preserved_after_refinement\",\n      \"score\": 8,\n      \"details\": \"The regression.json content is read before refinement (readRegressionFileRaw at line 1101) and restored via restoreRegressionData in every code path: empty spec (1129), error (1135), no changes (1160), auto-accept (1182), rejection (1200), and acceptance (1207). This is thorough byte-level preservation.\"\n    },\n    {\n      \"criterion\": \"sprint_count_recalculation\",\n      \"score\": 8,\n      \"details\": \"After refinement is accepted, countSprints() counts ## Sprint N headings in the revised spec (line 1183/1208). In the sprint loop (lines 847-851), if the count differs, it's capped by config.maxSprints and a log line reports 'Sprint count updated: X → Y'. Progress is also updated.\"\n    },\n    {\n      \"criterion\": \"reject_preserves_original_spec\",\n      \"score\": 8,\n      \"details\": \"On rejection (lines 1197-1201): writeSpec writes the originalSpec back to disk, restoreRegressionData restores regression.json, the function returns specChanged: false with the original spec and original sprint count, and logs 'Spec refinement rejected. Original spec preserved.'\"\n    },\n    {\n      \"criterion\": \"refinement_prompt_includes_codebase_context\",\n      \"score\": 8,\n      \"details\": \"buildRefinementPrompt() includes: (1) full current spec content via template literal, (2) explicit lists of completed and remaining sprint numbers, (3) instruction 'Read the actual codebase to understand what was built so far', (4) instruction to preserve completed sprints verbatim and only modify not-yet-started sections. All four requirements are present. Tests at lines 244-276 verify each element.\"\n    },\n    {\n      \"criterion\": \"refinement_error_handling\",\n      \"score\": 8,\n      \"details\": \"The try/catch at lines 1113-1137 handles Planner errors: empty/null output is caught (lines 1127-1131), exceptions are caught with a warning log (line 1133), original spec is written back, regression data is restored, and the function returns specChanged: false allowing the loop to continue. The harness does not crash.\"\n    },\n    {\n      \"criterion\": \"tests_for_refinement_logic\",\n      \"score\": 8,\n      \"details\": \"refinement.test.ts has 27 tests covering: (a) extractSprintSection and freezeCompletedSprints (lines 88-164), (b) countSprints with add/remove edge cases (lines 168-190), (c) --refine-spec flag parsing present and absent (lines 14-59), (d) no-op behavior when flag absent (lines 221-240), (e) computeSpecDiff with +/- output (lines 194-217). Also includes buildRefinementPrompt tests (lines 244-276). All 27 tests pass.\"\n    },\n    {\n      \"criterion\": \"type_safety_and_code_quality\",\n      \"score\": 7,\n      \"details\": \"No TypeScript errors in the new refinement.ts or the refinement-related sections of harness.ts (confirmed via tsc --noEmit grep). No `any` types in new code. refineSpec is properly typed as boolean? in HarnessConfig. RefinementResult interface is defined locally. The 11 tsc errors are all pre-existing in other files (artifact-digest.ts, skills.test.ts, config.test.ts). New types added to shared/types.ts where appropriate. Naming follows camelCase/PascalCase conventions.\"\n    },\n    {\n      \"criterion\": \"integration_with_sprint_loop\",\n      \"score\": 8,\n      \"details\": \"Refinement is integrated at lines 834-855 of harness.ts, executing after sprint passes and checkpoint saves (line 827) and before mid-run steering (line 858). When refineSpec is false, the block is entirely skipped. It coexists with regression accumulation (line 806-812), checkpoint saving (lines 814-827), and mid-run steering (line 858+). The spec and totalSprints variables are updated in-place for the loop to use.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 4 Feature 1.6 (Progressive Spec Refinement) is well-implemented. The core refinement logic in shared/refinement.ts is clean with good separation of concerns. Integration into the sprint loop is correct and non-invasive. All 391 tests pass, including 27 dedicated refinement tests. The only notable gap is the missing --help handler (the flag exists but --help throws an error), though this appears to be a pre-existing limitation of the CLI framework. Error handling, regression preservation, and completed sprint freezing are all thorough. Code quality is good with no TypeScript errors in new code and no `any` types.\"\n}\n```",
+    "stop_reason": "end_turn",
+    "session_id": "fe19311b-0e75-4067-813c-f39922b00180",
+    "total_cost_usd": 0.9777327499999999,
+    "usage": {
+      "input_tokens": 525,
+      "cache_creation_input_tokens": 57087,
+      "cache_read_input_tokens": 929178,
+      "output_tokens": 6149,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 57087,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-4-6": {
+        "inputTokens": 525,
+        "outputTokens": 6149,
+        "cacheReadInputTokens": 929178,
+        "cacheCreationInputTokens": 57087,
+        "webSearchRequests": 0,
+        "costUSD": 0.9777327499999999,
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000
+      }
+    },
+    "permission_denials": [],
+    "fast_mode_state": "off",
+    "uuid": "6167e0c8-ab04-4efd-8de2-12294ddb163c"
+  }
+}
