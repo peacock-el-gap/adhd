@@ -160,6 +160,68 @@ The `--context` flag is repeatable. Each file's contents are injected into the p
 
 7. **Checkpoint & Steering** -- After each passing sprint, progress is saved. Between sprints you can continue, skip a sprint, edit the spec, or abort. Safe to interrupt and resume.
 
+## Built-In Methodologies: BDD & TDD
+
+By default, the harness bakes **BDD** and **TDD** into the agent prompts:
+
+- **BDD (Behavior-Driven Development)** -- The planner writes acceptance scenarios in Given/When/Then format. These flow into sprint contracts as testable criteria. The evaluator verifies that tests exist for each scenario and that they pass.
+
+- **TDD (Test-Driven Development)** -- The generator receives Red-Green-Refactor instructions: write failing tests first, implement until tests pass, then refactor. Enforcement is pragmatic -- the evaluator checks that tests exist and are meaningful, not that they were written in a specific order.
+
+Both are enabled by default. Disable with `--no-bdd` and/or `--no-tdd` if your project doesn't need them. These flags also filter community skills tagged with the corresponding methodology type.
+
+## Skills System
+
+Skills are composable guidance documents that augment the agent prompts. Each skill declares which agents receive it and how.
+
+### Three Scopes
+
+| Scope | Location | Purpose |
+|-------|----------|---------|
+| **Harness** | `<harness>/shared/skills/` | Built-in: spec format, contract structure, scoring guide |
+| **User** | `~/.adhd/skills/` | Your reusable practices across all projects |
+| **Project** | `<project>/.adhd/skills/local/` | Project-specific domain knowledge and conventions |
+
+Precedence: project > user > harness (same skill name in a higher scope overrides lower).
+
+### Routing
+
+Each skill declares per-agent routing in its `skill.yaml` manifest:
+
+- **inject** -- Content embedded directly in the agent's system prompt. For small, essential guidance.
+- **reference** -- File path listed in the prompt; agent reads via `Read` tool when relevant. For larger documents.
+- **exclude** -- Not provided to this agent.
+
+### Creating a Project Skill
+
+For project-specific conventions, create a markdown file with YAML frontmatter in `.adhd/skills/local/`:
+
+```markdown
+---
+name: API Conventions
+agents: [planner, generator, evaluator]
+tier: inject
+---
+
+All REST endpoints follow /api/v2/{resource} pattern.
+Authentication uses Bearer tokens via X-Auth-Token header.
+Error responses use RFC 7807 Problem Details format.
+```
+
+Defaults: if `agents:` is omitted, all agents receive it. If `tier:` is omitted, it defaults to `inject`.
+
+### Installing External Skills
+
+Clone or copy skill directories into the appropriate scope:
+
+```bash
+# User scope (available to all your projects)
+git clone https://github.com/example/adhd-skill-bdd ~/.adhd/skills/bdd-gherkin
+
+# Project scope (for this project only)
+git clone https://github.com/example/adhd-skill-fastapi .adhd/skills/installed/python-fastapi
+```
+
 ## The `.adhd/` Directory
 
 ```
@@ -206,6 +268,10 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Branch creation | `--branch <name>` | -- | off (stay on current branch) |
 | Editor for spec | `--editor <cmd>` | `ADHD_EDITOR` or `EDITOR` | none |
 | Gate timeout | `--gate-timeout <sec>` | `ADHD_GATE_TIMEOUT` | varies by gate (0 = skip all) |
+| Disable BDD | `--no-bdd` | -- | BDD enabled |
+| Disable TDD | `--no-tdd` | -- | TDD enabled |
+| Source directory | `--source-dir <dir>` | `SOURCE_DIR` | `src` |
+| Test directory | `--test-dir <dir>` | `TEST_DIR` | `tests` |
 | Langfuse tracing | -- | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` | disabled |
 | Langfuse base URL | -- | `LANGFUSE_BASE_URL` | `https://cloud.langfuse.com` |
 
@@ -266,7 +332,7 @@ bun run start:codex -- "Build a task manager with REST API and dashboard"
 
 ## Architecture
 
-For design rationale, the GAN connection, and project structure, see [docs/INTERNALS.md](docs/INTERNALS.md).
+For design rationale, the GAN connection, and project structure, see [docs/INTERNALS.md](docs/INTERNALS.md). For the enhancement roadmap and opportunity analysis, see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License & Attribution
 
