@@ -15,6 +15,7 @@ import {
   writeProgress,
   writeSpec,
 } from "../shared/files.ts";
+import { computeDiffSection } from "../shared/diff.ts";
 import { accumulateRegressionCriteria, buildRegressionSection, readRegressionCriteria } from "../shared/regression.ts";
 import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
 import { promptGate, promptGateWithText } from "../shared/interaction.ts";
@@ -568,6 +569,14 @@ async function runSprintLoop(
         }
 
         supplementaryContext += `\n\n## Static Analysis Results\n\n${staticAnalysisResult.output}`;
+      }
+
+      // Diff-aware evaluation on retries (Feature 1.3)
+      if (retry > 0 && beforeSha) {
+        const diffSection = computeDiffSection(gitDir, beforeSha, retry);
+        if (diffSection) {
+          supplementaryContext += diffSection;
+        }
       }
 
       const evaluatorSpan = attemptSpan.startChild("evaluator", { model: evaluatorModel, sprint, attempt: retry });
