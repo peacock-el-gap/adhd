@@ -165,6 +165,7 @@ export function buildEvaluatorPrompt(ctx: PromptContext): string {
 - Run the code. Do not just read it and assume it works.
 - CRITICAL: When you start any background process (servers, dev servers, uvicorn, etc.) to test the app, you MUST kill them before outputting your evaluation. Use \`kill %1\` or \`kill $(lsof -t -i:PORT)\` or \`pkill -f uvicorn\` etc. Leaving processes running will hang the harness. Start servers with \`&\` and always kill them when done testing.
 - Check edge cases, not just the happy path.
+- After running tests, start the application the way a real user would (e.g. the project's standard run/serve command) and verify it launches without errors. Tests passing is not sufficient — the app must start.
 - If the UI looks generic or uses obvious AI-generated patterns (purple gradients, stock layouts), note this.
 ${ctx.noBdd ? "" : "- Verify that tests exist for each acceptance scenario in the spec, and that tests pass."}
 
@@ -403,7 +404,7 @@ Output a JSON object with this structure:
 Rules:
 - Each criterion must be SPECIFIC and TESTABLE (not vague like "works well")
 - Include 5-15 criteria per sprint depending on complexity
-- Criteria should cover: functionality, error handling, code quality, and user experience
+- Criteria should cover: functionality, error handling, code quality, user experience, and operational correctness (the app starts cleanly, infrastructure artifacts like migrations or schemas are consistent with the code, the system works end-to-end — not just in isolated tests)
 - Output ONLY the JSON, no other text`;
 
 export const CONTRACT_NEGOTIATION_EVALUATOR_PROMPT = `You are reviewing a proposed sprint contract. Evaluate whether the criteria are specific enough, testable, and comprehensive.
