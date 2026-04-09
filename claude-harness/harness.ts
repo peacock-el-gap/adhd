@@ -31,6 +31,7 @@ import type {
 } from "../shared/types.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 import { createUsageTracker, type UsageTracker } from "../shared/usage.ts";
+import { runDocumenter } from "./documenter.ts";
 import { runEvaluator } from "./evaluator.ts";
 import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
 import { runPlanner } from "./planner.ts";
@@ -102,9 +103,11 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   const plannerSkills = routeSkillsForAgent(resolvedSkills, "planner");
   const generatorSkills = routeSkillsForAgent(resolvedSkills, "generator");
   const evaluatorSkills = routeSkillsForAgent(resolvedSkills, "evaluator");
+  const documenterSkills = routeSkillsForAgent(resolvedSkills, "documenter");
   warnIfOversized(plannerSkills, "planner");
   warnIfOversized(generatorSkills, "generator");
   warnIfOversized(evaluatorSkills, "evaluator");
+  warnIfOversized(documenterSkills, "documenter");
   if (resolvedSkills.length > 0) {
     log("HARNESS", `Skills loaded: ${resolvedSkills.length} (${resolvedSkills.map((s) => s.name).join(", ")})`);
   }
@@ -182,7 +185,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     startTime,
     harnessSpan,
     usage,
-    { generator: generatorSkills, evaluator: evaluatorSkills },
+    { generator: generatorSkills, evaluator: evaluatorSkills, documenter: documenterSkills },
   );
   } catch (err) {
     if (err instanceof UserAbortError) {
@@ -222,6 +225,7 @@ async function resumeHarness(
   const plannerSkills = routeSkillsForAgent(resolvedSkills, "planner");
   const generatorSkills = routeSkillsForAgent(resolvedSkills, "generator");
   const evaluatorSkills = routeSkillsForAgent(resolvedSkills, "evaluator");
+  const documenterSkills = routeSkillsForAgent(resolvedSkills, "documenter");
 
   let progress: HarnessProgress;
   try {
@@ -292,7 +296,7 @@ async function resumeHarness(
       startTime,
       harnessSpan,
       usage,
-      { generator: generatorSkills, evaluator: evaluatorSkills },
+      { generator: generatorSkills, evaluator: evaluatorSkills, documenter: documenterSkills },
     ),
   );
   harnessSpan.end();
@@ -339,13 +343,14 @@ async function runSprintLoop(
   startTime: number,
   parentSpan: Span,
   usage: UsageTracker,
-  skills?: { generator: AgentSkills; evaluator: AgentSkills },
+  skills?: { generator: AgentSkills; evaluator: AgentSkills; documenter: AgentSkills },
 ): Promise<HarnessResult> {
   const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
   const logLevel = config.logLevel ?? "normal";
   // B3: per-agent model overrides
   const generatorModel = config.modelGenerator ?? model;
   const evaluatorModel = config.modelEvaluator ?? model;
+  const documenterModel = config.modelDocumenter ?? model;
 
   for (let sprint = startSprint; sprint <= totalSprints; sprint++) {
     logDivider();
@@ -636,6 +641,67 @@ async function runSprintLoop(
   const allPassed = results.every((r) => r.passed);
   progress.status = allPassed ? "complete" : "failed";
   await writeProgress(config.workDir, progress);
+
+  // OPP-13-A: Run Documenter agent after all sprints pass (best-effort)
+  if (allPassed && !config.noDocs) {
+    const documenterSpan = parentSpan.startChild("documenter", { model: documenterModel });
+    try {
+      // Capture HEAD SHA before documenter runs
+      let beforeDocsSha = "";
+      try {
+        beforeDocsSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
+      } catch {
+        // No git repo or no commits yet
+      }
+
+      const docResult = await documenterSpan.run(() =>
+        runDocumenter(
+          config.workDir,
+          documenterModel,
+          isGreenfield,
+          logLevel,
+          skills?.documenter,
+          config.sourceDir,
+          config.testDir,
+          results,
+        ),
+      );
+
+      // Record usage
+      if (docResult.sdkResult) {
+        usage.recordStage("documenter", docResult.sdkResult);
+      }
+
+      // Git commit enforcement for documenter
+      if (beforeDocsSha) {
+        try {
+          const afterDocsSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
+          const docsDirty = execSync("git status --porcelain", { cwd: gitDir, encoding: "utf-8" }).trim();
+
+          if (afterDocsSha !== beforeDocsSha && !docsDirty) {
+            log("HARNESS", "Documenter commit source: agent");
+          } else if (docsDirty) {
+            // Fallback auto-commit with [docs] prefix
+            log("HARNESS", "Documenter left uncommitted changes — fallback auto-commit");
+            execSync(`git add -A && git commit -m "[docs] Add project documentation"`, {
+              cwd: gitDir,
+              stdio: "pipe",
+            });
+            log("HARNESS", "Documenter commit source: fallback");
+          } else {
+            log("HARNESS", "Documenter commit source: none (no changes)");
+          }
+        } catch (err) {
+          log("HARNESS", `WARNING: Documenter commit enforcement failed: ${err}`);
+        }
+      }
+
+      documenterSpan.end();
+    } catch (err) {
+      documenterSpan.end({ error: String(err) });
+      log("HARNESS", `WARNING: Documenter failed: ${err instanceof Error ? err.message : String(err)}. Documentation generation skipped.`);
+    }
+  }
 
   const totalDuration = Date.now() - startTime;
   logDivider();
