@@ -141,7 +141,7 @@ describe("readRegressionCriteria", () => {
 
     const result = await readRegressionCriteria(TMP_DIR);
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("test_crit");
+    expect(result[0]!.name).toBe("test_crit");
   });
 });
 

@@ -53,7 +53,7 @@ interface ParsedCli {
   noDocs: boolean;
   modelDocumenter?: string;
   // Phase 1 Deepen: Static Analysis
-  lintGate: boolean;
+  lintGate?: boolean;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {

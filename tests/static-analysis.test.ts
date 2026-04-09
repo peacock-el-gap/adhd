@@ -26,8 +26,8 @@ describe("detectStaticAnalysisCommands", () => {
 
     const commands = await detectStaticAnalysisCommands(TMP_DIR);
     expect(commands).toHaveLength(1);
-    expect(commands[0].name).toBe("lint");
-    expect(commands[0].script).toBe("npm run lint");
+    expect(commands[0]!.name).toBe("lint");
+    expect(commands[0]!.script).toBe("npm run lint");
   });
 
   test("detects typecheck script from package.json", async () => {
@@ -39,7 +39,7 @@ describe("detectStaticAnalysisCommands", () => {
 
     const commands = await detectStaticAnalysisCommands(TMP_DIR);
     expect(commands).toHaveLength(1);
-    expect(commands[0].name).toBe("typecheck");
+    expect(commands[0]!.name).toBe("typecheck");
   });
 
   test("detects type-check script from package.json", async () => {
@@ -51,7 +51,7 @@ describe("detectStaticAnalysisCommands", () => {
 
     const commands = await detectStaticAnalysisCommands(TMP_DIR);
     expect(commands).toHaveLength(1);
-    expect(commands[0].name).toBe("type-check");
+    expect(commands[0]!.name).toBe("type-check");
   });
 
   test("detects multiple scripts", async () => {
