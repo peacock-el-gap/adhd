@@ -63,7 +63,7 @@ export function parseSkillYaml(yamlContent: string): SkillManifest {
   let currentAgent: AgentRole | null = null;
   let currentAgentData: { tier?: SkillTier; files?: string[] } = {};
 
-  const agents: AgentRole[] = ["planner", "generator", "evaluator"];
+  const agents: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
 
   function flushAgent() {
     if (currentAgent && currentAgentData.tier) {
@@ -153,7 +153,7 @@ export function parseLocalSkill(mdContent: string, filePath: string): ResolvedSk
   let name = "";
   let type: string | undefined;
   let tier: SkillTier = "inject";
-  let agentList: AgentRole[] = ["planner", "generator", "evaluator"];
+  let agentList: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
 
   // Extract frontmatter
   const fmMatch = mdContent.match(/^---\n([\s\S]*?)\n---/);
@@ -181,7 +181,7 @@ export function parseLocalSkill(mdContent: string, filePath: string): ResolvedSk
     name = filename.replace(/\.md$/, "");
   }
 
-  const allAgents: AgentRole[] = ["planner", "generator", "evaluator"];
+  const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
   const routing = {} as Record<AgentRole, SkillRouting>;
 
   for (const agent of allAgents) {
@@ -210,7 +210,7 @@ function resolveExternalSkill(
     const yamlContent = readFileSync(yamlPath, "utf-8");
     const manifest = parseSkillYaml(yamlContent);
 
-    const allAgents: AgentRole[] = ["planner", "generator", "evaluator"];
+    const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
     const routing = {} as Record<AgentRole, SkillRouting>;
 
     for (const agent of allAgents) {
@@ -349,7 +349,7 @@ export function resolveSkills(
   }
 
   // Load inject-tier file contents
-  const allAgents: AgentRole[] = ["planner", "generator", "evaluator"];
+  const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
   for (const skill of skills) {
     for (const agent of allAgents) {
       const routing = skill.routing[agent];

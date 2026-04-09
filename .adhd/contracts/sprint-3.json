@@ -1,0 +1,90 @@
+{
+  "sprintNumber": 3,
+  "features": [
+    "Skills Integration for Documenter",
+    "Resume Compatibility",
+    "Documentation Quality Validation"
+  ],
+  "criteria": [
+    {
+      "name": "skill_yaml_parser_recognizes_documenter",
+      "description": "parseSkillYaml() in shared/skills.ts recognizes 'documenter' as a valid agent in the routing block, so a skill.yaml with `documenter: { tier: inject, files: [...] }` correctly populates manifest.routing.documenter",
+      "threshold": 7
+    },
+    {
+      "name": "local_skill_md_supports_documenter_agent",
+      "description": "parseLocalSkill() supports 'documenter' in the agents frontmatter array (e.g., `agents: [documenter, generator]`), and when included, the skill is routed to the documenter with the correct tier",
+      "threshold": 7
+    },
+    {
+      "name": "resolve_skills_loads_documenter_content",
+      "description": "resolveSkills() and resolveExternalSkill() iterate over all four agent roles including 'documenter', loading inject-tier content for documenter-targeted skills just as they do for planner/generator/evaluator",
+      "threshold": 7
+    },
+    {
+      "name": "skill_exclude_tier_for_documenter",
+      "description": "A skill with `documenter: exclude` in its routing (or no documenter entry at all) results in routeSkillsForAgent(skills, 'documenter') returning empty injected content and no reference entries for that skill",
+      "threshold": 7
+    },
+    {
+      "name": "skill_reference_tier_for_documenter",
+      "description": "A skill with `documenter: reference` routing causes routeSkillsForAgent(skills, 'documenter') to include the skill's files in the referenceManifest and additionalDirs, but not in injected content",
+      "threshold": 7
+    },
+    {
+      "name": "progress_json_docs_generated_field",
+      "description": "HarnessProgress type in shared/types.ts includes an optional boolean field `docsGenerated` that is set to true after the Documenter completes successfully, and persisted to progress.json",
+      "threshold": 7
+    },
+    {
+      "name": "resume_docs_only_when_sprints_complete",
+      "description": "When --resume is used and progress.json shows status 'complete' with docsGenerated false/undefined, the harness runs only the Documenter phase (no sprint loop re-execution) and then sets docsGenerated to true",
+      "threshold": 7
+    },
+    {
+      "name": "resume_skips_when_docs_already_generated",
+      "description": "When --resume is used and progress.json has docsGenerated: true with status 'complete', the harness logs a message like 'All sprints and documentation already completed' and does not re-invoke the Documenter",
+      "threshold": 7
+    },
+    {
+      "name": "resume_normal_sprints_then_docs",
+      "description": "When --resume is used with partially completed sprints (status != 'complete'), the normal sprint resume behavior runs first, and if all sprints pass, the Documenter runs afterward as usual",
+      "threshold": 7
+    },
+    {
+      "name": "documenter_failure_leaves_docs_generated_false",
+      "description": "If the Documenter agent throws an error or fails during execution, docsGenerated remains false/undefined in progress.json so that a subsequent --resume re-attempts the Documenter phase. The harness logs the error but does not crash with an unhandled exception",
+      "threshold": 7
+    },
+    {
+      "name": "validation_readme_exists_and_meaningful",
+      "description": "After the Documenter completes successfully, the harness checks that README.md exists in the documentation target directory and has at least 200 characters of content. If the check passes, no warning is logged",
+      "threshold": 7
+    },
+    {
+      "name": "validation_warning_short_readme",
+      "description": "If README.md exists but has fewer than 200 characters, a warning is logged containing text like 'README.md is very short' or 'Documentation may be incomplete'. The run still reports success",
+      "threshold": 7
+    },
+    {
+      "name": "validation_warning_missing_readme",
+      "description": "If README.md does not exist after the Documenter runs, a warning is logged containing text like 'did not create README.md'. The harness still exits successfully (validation is advisory only)",
+      "threshold": 7
+    },
+    {
+      "name": "validation_checks_changelog_exists",
+      "description": "After the Documenter completes, the harness checks that CHANGELOG.md exists in the documentation target directory. A missing CHANGELOG.md produces a warning but does not fail the run",
+      "threshold": 7
+    },
+    {
+      "name": "validation_does_not_fail_run",
+      "description": "Documentation validation failures (missing/short files) never cause the harness to report failure or exit with a non-zero exit code. The overall run result is unaffected by validation warnings",
+      "threshold": 7
+    },
+    {
+      "name": "tests_cover_sprint3_features",
+      "description": "bun test passes with tests covering: skill YAML parsing for documenter agent, local skill routing to documenter, resume with docsGenerated flag, documenter failure recovery, and documentation validation logic. At least 10 new or updated test cases exist for Sprint 3 features",
+      "threshold": 7
+    }
+  ]
+}

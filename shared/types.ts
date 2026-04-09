@@ -80,6 +80,8 @@ export interface HarnessProgress {
   specApproved?: boolean;
   // Phase C additions
   branch?: string; // C3: branch created for this run
+  // OPP-13-A: Documenter tracking
+  docsGenerated?: boolean; // true after Documenter completes successfully
 }
 
 export type CommitSource = "agent" | "resume" | "fallback" | "none";

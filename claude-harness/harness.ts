@@ -31,6 +31,7 @@ import type {
 } from "../shared/types.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 import { createUsageTracker, type UsageTracker } from "../shared/usage.ts";
+import { validateDocumentation } from "../shared/doc-validation.ts";
 import { runDocumenter } from "./documenter.ts";
 import { runEvaluator } from "./evaluator.ts";
 import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
@@ -235,6 +236,52 @@ async function resumeHarness(
   }
 
   if (progress.status === "complete") {
+    // OPP-13-A: If sprints complete but docs not generated, run just the documenter
+    if (!progress.docsGenerated && !config.noDocs) {
+      log("HARNESS", "All sprints complete. Running Documenter phase only...");
+
+      const harnessSpan = tracer.startSpan(`harness-resume-docs-${new Date().toISOString().replace(/[:.]/g, "-")}`, {
+        model,
+        workDir: config.workDir,
+        isGreenfield,
+        docsOnly: true,
+      });
+
+      const results: SprintResult[] = progress.sprintResults ?? [];
+      const documenterModel = config.modelDocumenter ?? model;
+      const logLevel = config.logLevel ?? "normal";
+      const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
+
+      return harnessSpan.run(async () => {
+        try {
+          await runDocumenterPhase(
+            config,
+            documenterModel,
+            isGreenfield,
+            logLevel,
+            gitDir,
+            harnessSpan,
+            usage,
+            documenterSkills,
+            results,
+            progress,
+          );
+        } catch {
+          // Documenter failure is non-fatal
+        }
+
+        const totalDuration = Date.now() - startTime;
+        usage.printSummary();
+        await usage.save();
+        harnessSpan.end();
+        return { success: true, sprints: results, totalDurationMs: totalDuration };
+      });
+    }
+
+    // Both sprints and docs done (or --no-docs)
+    if (progress.docsGenerated) {
+      throw new Error("All sprints and documentation already completed. Nothing to resume.");
+    }
     throw new Error("All sprints already completed. Nothing to resume.");
   }
 
@@ -644,63 +691,18 @@ async function runSprintLoop(
 
   // OPP-13-A: Run Documenter agent after all sprints pass (best-effort)
   if (allPassed && !config.noDocs) {
-    const documenterSpan = parentSpan.startChild("documenter", { model: documenterModel });
-    try {
-      // Capture HEAD SHA before documenter runs
-      let beforeDocsSha = "";
-      try {
-        beforeDocsSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
-      } catch {
-        // No git repo or no commits yet
-      }
-
-      const docResult = await documenterSpan.run(() =>
-        runDocumenter(
-          config.workDir,
-          documenterModel,
-          isGreenfield,
-          logLevel,
-          skills?.documenter,
-          config.sourceDir,
-          config.testDir,
-          results,
-        ),
-      );
-
-      // Record usage
-      if (docResult.sdkResult) {
-        usage.recordStage("documenter", docResult.sdkResult);
-      }
-
-      // Git commit enforcement for documenter
-      if (beforeDocsSha) {
-        try {
-          const afterDocsSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
-          const docsDirty = execSync("git status --porcelain", { cwd: gitDir, encoding: "utf-8" }).trim();
-
-          if (afterDocsSha !== beforeDocsSha && !docsDirty) {
-            log("HARNESS", "Documenter commit source: agent");
-          } else if (docsDirty) {
-            // Fallback auto-commit with [docs] prefix
-            log("HARNESS", "Documenter left uncommitted changes — fallback auto-commit");
-            execSync(`git add -A && git commit -m "[docs] Add project documentation"`, {
-              cwd: gitDir,
-              stdio: "pipe",
-            });
-            log("HARNESS", "Documenter commit source: fallback");
-          } else {
-            log("HARNESS", "Documenter commit source: none (no changes)");
-          }
-        } catch (err) {
-          log("HARNESS", `WARNING: Documenter commit enforcement failed: ${err}`);
-        }
-      }
-
-      documenterSpan.end();
-    } catch (err) {
-      documenterSpan.end({ error: String(err) });
-      log("HARNESS", `WARNING: Documenter failed: ${err instanceof Error ? err.message : String(err)}. Documentation generation skipped.`);
-    }
+    await runDocumenterPhase(
+      config,
+      documenterModel,
+      isGreenfield,
+      logLevel,
+      gitDir,
+      parentSpan,
+      usage,
+      skills?.documenter,
+      results,
+      progress,
+    );
   }
 
   const totalDuration = Date.now() - startTime;
@@ -717,6 +719,87 @@ async function runSprintLoop(
   }
 
   return { success: allPassed, sprints: results, totalDurationMs: totalDuration };
+}
+
+// --- Documenter Phase ---
+
+async function runDocumenterPhase(
+  config: HarnessConfig,
+  documenterModel: string,
+  isGreenfield: boolean,
+  logLevel: string,
+  gitDir: string,
+  parentSpan: Span,
+  usage: UsageTracker,
+  documenterSkills: AgentSkills | undefined,
+  results: SprintResult[],
+  progress: HarnessProgress,
+): Promise<void> {
+  const documenterSpan = parentSpan.startChild("documenter", { model: documenterModel });
+  try {
+    // Capture HEAD SHA before documenter runs
+    let beforeDocsSha = "";
+    try {
+      beforeDocsSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
+    } catch {
+      // No git repo or no commits yet
+    }
+
+    const docResult = await documenterSpan.run(() =>
+      runDocumenter(
+        config.workDir,
+        documenterModel,
+        isGreenfield,
+        logLevel as import("../shared/types.ts").LogLevel,
+        documenterSkills,
+        config.sourceDir,
+        config.testDir,
+        results,
+      ),
+    );
+
+    // Record usage
+    if (docResult.sdkResult) {
+      usage.recordStage("documenter", docResult.sdkResult);
+    }
+
+    // Git commit enforcement for documenter
+    if (beforeDocsSha) {
+      try {
+        const afterDocsSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
+        const docsDirty = execSync("git status --porcelain", { cwd: gitDir, encoding: "utf-8" }).trim();
+
+        if (afterDocsSha !== beforeDocsSha && !docsDirty) {
+          log("HARNESS", "Documenter commit source: agent");
+        } else if (docsDirty) {
+          // Fallback auto-commit with [docs] prefix
+          log("HARNESS", "Documenter left uncommitted changes — fallback auto-commit");
+          execSync(`git add -A && git commit -m "[docs] Add project documentation"`, {
+            cwd: gitDir,
+            stdio: "pipe",
+          });
+          log("HARNESS", "Documenter commit source: fallback");
+        } else {
+          log("HARNESS", "Documenter commit source: none (no changes)");
+        }
+      } catch (err) {
+        log("HARNESS", `WARNING: Documenter commit enforcement failed: ${err}`);
+      }
+    }
+
+    // OPP-13-A: Validate documentation output
+    validateDocumentation(isGreenfield ? join(config.workDir, "app") : config.workDir);
+
+    // Mark docs as generated in progress
+    progress.docsGenerated = true;
+    await writeProgress(config.workDir, progress);
+
+    documenterSpan.end();
+  } catch (err) {
+    documenterSpan.end({ error: String(err) });
+    log("HARNESS", `WARNING: Documenter failed: ${err instanceof Error ? err.message : String(err)}. Documentation generation skipped.`);
+    // docsGenerated remains false/undefined so resume can re-attempt
+  }
 }
 
 // --- Error handling ---
