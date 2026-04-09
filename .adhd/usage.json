@@ -131,7 +131,21 @@
         }
       ],
       "totalCostUsd": 12.02119
+    },
+    {
+      "startedAt": "2026-04-09T15:11:02.719Z",
+      "stages": [
+        {
+          "stage": "planner",
+          "inputTokens": 23,
+          "outputTokens": 6536,
+          "cacheReadTokens": 724288,
+          "costUsd": 0.9214214999999999,
+          "durationMs": 176491
+        }
+      ],
+      "totalCostUsd": 0.9214214999999999
     }
   ],
-  "runTotalCostUsd": 12.88750025
+  "runTotalCostUsd": 13.80892175
 }
