@@ -42,6 +42,8 @@ export interface HarnessConfig {
   lintGate?: boolean; // --lint-gate flag, makes lint/typecheck failure a hard gate
   // Phase 1 Deepen: Sprint Selection
   sprint?: number; // --sprint N flag, run a specific sprint only
+  // Phase 1 Deepen: Progressive Spec Refinement
+  refineSpec?: boolean; // --refine-spec flag, enables spec refinement after passing sprints
 }
 
 export interface SprintContract {

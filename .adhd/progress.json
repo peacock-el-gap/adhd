@@ -1,11 +1,11 @@
 {
   "status": "building",
-  "currentSprint": 3,
+  "currentSprint": 4,
   "totalSprints": 6,
-  "completedSprints": 2,
+  "completedSprints": 3,
   "retryCount": 0,
   "specApproved": true,
-  "lastPassedCommitSha": "bb80dcfc30b98d62c6cb45586c9829cc5c630522",
+  "lastPassedCommitSha": "b5f1f5bfad2837b9b1de57d2f2d6ad5723e96450",
   "sprintResults": [
     {
       "sprintNumber": 1,
@@ -300,6 +300,154 @@
           "permission_denials": [],
           "fast_mode_state": "off",
           "uuid": "e6f76667-f53e-4533-b6b2-95e61eb545c6"
+        }
+      }
+    },
+    {
+      "sprintNumber": 3,
+      "passed": true,
+      "attempts": 1,
+      "evalResult": {
+        "passed": true,
+        "scores": {
+          "cli_sprint_flag_parsing": 9,
+          "config_sprint_field": 9,
+          "sprint_resume_mutual_exclusion": 9,
+          "sprint_requires_existing_spec": 8,
+          "sprint_skips_planning_phase": 9,
+          "sprint_skips_earlier_sprints": 8,
+          "contract_reuse_when_exists": 9,
+          "contract_negotiation_when_missing": 9,
+          "missing_checkpoint_warning": 9,
+          "sprint_flag_validation": 8,
+          "no_prompt_required_for_sprint_mode": 9,
+          "workspace_not_cleaned_in_sprint_mode": 9,
+          "regression_criteria_loaded_in_sprint_mode": 8,
+          "tests_cover_sprint_selection": 7,
+          "clean_startup_and_type_safety": 7
+        },
+        "feedback": [
+          {
+            "criterion": "cli_sprint_flag_parsing",
+            "score": 9,
+            "details": "--sprint is defined in parseCli() as type 'string' at line 99 of config.ts, parsed to number via parseInt at line 141, and exposed as 'sprint' on ParsedCli (line 58). Running with '--sprint 3' sets value to 3; omitting leaves undefined. Verified via runtime test."
+          },
+          {
+            "criterion": "config_sprint_field",
+            "score": 9,
+            "details": "HarnessConfig in shared/types.ts includes 'sprint?: number' at line 44. resolveConfig() maps cli.sprint to config.sprint at line 299. Both verified in source and via runtime test."
+          },
+          {
+            "criterion": "sprint_resume_mutual_exclusion",
+            "score": 9,
+            "details": "resolveConfig() at line 184 checks if both sprint and resume are set and throws 'Cannot use --sprint and --resume together.' This occurs before any workspace initialization or LLM calls. Verified via runtime test and unit tests."
+          },
+          {
+            "criterion": "sprint_requires_existing_spec",
+            "score": 8,
+            "details": "sprintSelectionHarness at line 377 checks existsSync for spec.md and throws 'No spec found. Run the planner first or provide a spec.' when missing. This is before any planning/LLM invocation. Test coverage is via source-code string matching rather than behavioral test."
+          },
+          {
+            "criterion": "sprint_skips_planning_phase",
+            "score": 9,
+            "details": "sprintSelectionHarness (lines 364-470) never calls runPlanner(). It loads spec via readSpec() at line 397 and proceeds directly to runSprintLoop(). Test at line 167-178 verifies the function body doesn't contain runPlanner() and does contain readSpec()."
+          },
+          {
+            "criterion": "sprint_skips_earlier_sprints",
+            "score": 8,
+            "details": "sprintSelectionHarness passes sprintN as both startSprint and endSprint (totalSprints param) to runSprintLoop at lines 460-461. The loop at line 521 runs 'for (sprint = startSprint; sprint <= totalSprints; sprint++)' so only sprint N executes. The log shows 'SPRINT N/N' (line 523). The denominator shows N/N rather than N/total which is slightly odd but functionally correct."
+          },
+          {
+            "criterion": "contract_reuse_when_exists",
+            "score": 9,
+            "details": "In the sprint loop at lines 536-542, when config.sprint is set, the code attempts readContract(config.workDir, sprint). If it exists, it's loaded with a log message 'Loaded existing contract for sprint'. Negotiation is skipped via the if(!contract) guard at line 545."
+          },
+          {
+            "criterion": "contract_negotiation_when_missing",
+            "score": 9,
+            "details": "When readContract throws (no file exists), contract remains undefined. The if(!contract) block at line 545 triggers 'Negotiating sprint contract...' and runs negotiation. The logic is clear and correct."
+          },
+          {
+            "criterion": "missing_checkpoint_warning",
+            "score": 9,
+            "details": "At lines 410-421, when sprintN > 1, it reads progress and checks completedSprints >= sprintN - 1. If not (or if progress.json doesn't exist), it logs 'Warning: No checkpoint for sprint N-1. Ensure the codebase is in the expected state.' Execution continues without error."
+          },
+          {
+            "criterion": "sprint_flag_validation",
+            "score": 8,
+            "details": "resolveConfig at lines 189-193 rejects non-positive integers (0, NaN) with 'Invalid --sprint value'. For -1, Node's parseArgs itself rejects it as ambiguous, which is still a clear error but not the custom message. When sprint exceeds total sprints, line 406 logs a warning. Slightly imperfect for -1 case but functionally correct."
+          },
+          {
+            "criterion": "no_prompt_required_for_sprint_mode",
+            "score": 9,
+            "details": "At line 203, the prompt-required check explicitly exempts sprint mode: 'if (!userPrompt && !cli.resume && cli.sprint === undefined)'. Verified via runtime test: --sprint 3 without a prompt produces config with empty userPrompt string."
+          },
+          {
+            "criterion": "workspace_not_cleaned_in_sprint_mode",
+            "score": 9,
+            "details": "sprintSelectionHarness at line 382 calls initWorkspace with { resume: true }, which preserves existing .adhd/ artifacts. This mirrors the resume path behavior."
+          },
+          {
+            "criterion": "regression_criteria_loaded_in_sprint_mode",
+            "score": 8,
+            "details": "The sprint loop at lines 666-676 loads regression criteria via readRegressionCriteria() and buildRegressionSection() for sprint > 1 when !config.noBdd. Since sprint mode uses the same runSprintLoop, this works for --sprint 3. However, there's no sprint-mode-specific test for this — it's verified by checking source strings."
+          },
+          {
+            "criterion": "tests_cover_sprint_selection",
+            "score": 7,
+            "details": "sprint-selection.test.ts covers all required areas: CLI parsing, mutual exclusion, spec requirement, contract reuse, sprint range, checkpoint warning, validation, no-prompt, workspace preservation, regression, type safety, and sprint-exceeds-total. All 364 tests pass. However, many tests use source-code string matching (reading harness.ts and checking for substrings) rather than behavioral/unit testing with mocks. This is functional but fragile — renaming a log message would break tests without any real regression."
+          },
+          {
+            "criterion": "clean_startup_and_type_safety",
+            "score": 7,
+            "details": "tsc --noEmit produces 11 errors, but NONE are in sprint-related files (types.ts, config.ts, harness.ts, sprint-selection.test.ts). The errors are in pre-existing files: artifact-digest.ts (3 errors), config.test.ts (1 error missing noDocs field from prior sprint), and skills.test.ts (7 errors missing documenter field from prior sprint). The sprint field is properly typed as optional throughout. All 364 tests pass with bun test. The pre-existing TS errors are a concern but don't affect this sprint's work."
+          }
+        ],
+        "overallSummary": "Sprint 3 (Sprint Selection) is well-implemented. The --sprint N flag is properly parsed, validated, and integrated into the harness flow. The sprintSelectionHarness function correctly skips planning, checks for existing spec, reuses contracts, warns about missing checkpoints, and runs only the targeted sprint. All 364 tests pass. The main weaknesses are: (1) many tests rely on source-code string matching rather than behavioral testing, making them fragile; (2) there are 11 pre-existing TypeScript errors from prior sprints that weren't cleaned up. Despite these issues, all criteria meet the threshold.",
+        "sdkResult": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 271275,
+          "duration_api_ms": 261161,
+          "num_turns": 28,
+          "result": "Good. Now I have enough information to score all criteria.\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"cli_sprint_flag_parsing\": 9,\n    \"config_sprint_field\": 9,\n    \"sprint_resume_mutual_exclusion\": 9,\n    \"sprint_requires_existing_spec\": 8,\n    \"sprint_skips_planning_phase\": 9,\n    \"sprint_skips_earlier_sprints\": 8,\n    \"contract_reuse_when_exists\": 9,\n    \"contract_negotiation_when_missing\": 9,\n    \"missing_checkpoint_warning\": 9,\n    \"sprint_flag_validation\": 8,\n    \"no_prompt_required_for_sprint_mode\": 9,\n    \"workspace_not_cleaned_in_sprint_mode\": 9,\n    \"regression_criteria_loaded_in_sprint_mode\": 8,\n    \"tests_cover_sprint_selection\": 7,\n    \"clean_startup_and_type_safety\": 7\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"cli_sprint_flag_parsing\",\n      \"score\": 9,\n      \"details\": \"--sprint is defined in parseCli() as type 'string' at line 99 of config.ts, parsed to number via parseInt at line 141, and exposed as 'sprint' on ParsedCli (line 58). Running with '--sprint 3' sets value to 3; omitting leaves undefined. Verified via runtime test.\"\n    },\n    {\n      \"criterion\": \"config_sprint_field\",\n      \"score\": 9,\n      \"details\": \"HarnessConfig in shared/types.ts includes 'sprint?: number' at line 44. resolveConfig() maps cli.sprint to config.sprint at line 299. Both verified in source and via runtime test.\"\n    },\n    {\n      \"criterion\": \"sprint_resume_mutual_exclusion\",\n      \"score\": 9,\n      \"details\": \"resolveConfig() at line 184 checks if both sprint and resume are set and throws 'Cannot use --sprint and --resume together.' This occurs before any workspace initialization or LLM calls. Verified via runtime test and unit tests.\"\n    },\n    {\n      \"criterion\": \"sprint_requires_existing_spec\",\n      \"score\": 8,\n      \"details\": \"sprintSelectionHarness at line 377 checks existsSync for spec.md and throws 'No spec found. Run the planner first or provide a spec.' when missing. This is before any planning/LLM invocation. Test coverage is via source-code string matching rather than behavioral test.\"\n    },\n    {\n      \"criterion\": \"sprint_skips_planning_phase\",\n      \"score\": 9,\n      \"details\": \"sprintSelectionHarness (lines 364-470) never calls runPlanner(). It loads spec via readSpec() at line 397 and proceeds directly to runSprintLoop(). Test at line 167-178 verifies the function body doesn't contain runPlanner() and does contain readSpec().\"\n    },\n    {\n      \"criterion\": \"sprint_skips_earlier_sprints\",\n      \"score\": 8,\n      \"details\": \"sprintSelectionHarness passes sprintN as both startSprint and endSprint (totalSprints param) to runSprintLoop at lines 460-461. The loop at line 521 runs 'for (sprint = startSprint; sprint <= totalSprints; sprint++)' so only sprint N executes. The log shows 'SPRINT N/N' (line 523). The denominator shows N/N rather than N/total which is slightly odd but functionally correct.\"\n    },\n    {\n      \"criterion\": \"contract_reuse_when_exists\",\n      \"score\": 9,\n      \"details\": \"In the sprint loop at lines 536-542, when config.sprint is set, the code attempts readContract(config.workDir, sprint). If it exists, it's loaded with a log message 'Loaded existing contract for sprint'. Negotiation is skipped via the if(!contract) guard at line 545.\"\n    },\n    {\n      \"criterion\": \"contract_negotiation_when_missing\",\n      \"score\": 9,\n      \"details\": \"When readContract throws (no file exists), contract remains undefined. The if(!contract) block at line 545 triggers 'Negotiating sprint contract...' and runs negotiation. The logic is clear and correct.\"\n    },\n    {\n      \"criterion\": \"missing_checkpoint_warning\",\n      \"score\": 9,\n      \"details\": \"At lines 410-421, when sprintN > 1, it reads progress and checks completedSprints >= sprintN - 1. If not (or if progress.json doesn't exist), it logs 'Warning: No checkpoint for sprint N-1. Ensure the codebase is in the expected state.' Execution continues without error.\"\n    },\n    {\n      \"criterion\": \"sprint_flag_validation\",\n      \"score\": 8,\n      \"details\": \"resolveConfig at lines 189-193 rejects non-positive integers (0, NaN) with 'Invalid --sprint value'. For -1, Node's parseArgs itself rejects it as ambiguous, which is still a clear error but not the custom message. When sprint exceeds total sprints, line 406 logs a warning. Slightly imperfect for -1 case but functionally correct.\"\n    },\n    {\n      \"criterion\": \"no_prompt_required_for_sprint_mode\",\n      \"score\": 9,\n      \"details\": \"At line 203, the prompt-required check explicitly exempts sprint mode: 'if (!userPrompt && !cli.resume && cli.sprint === undefined)'. Verified via runtime test: --sprint 3 without a prompt produces config with empty userPrompt string.\"\n    },\n    {\n      \"criterion\": \"workspace_not_cleaned_in_sprint_mode\",\n      \"score\": 9,\n      \"details\": \"sprintSelectionHarness at line 382 calls initWorkspace with { resume: true }, which preserves existing .adhd/ artifacts. This mirrors the resume path behavior.\"\n    },\n    {\n      \"criterion\": \"regression_criteria_loaded_in_sprint_mode\",\n      \"score\": 8,\n      \"details\": \"The sprint loop at lines 666-676 loads regression criteria via readRegressionCriteria() and buildRegressionSection() for sprint > 1 when !config.noBdd. Since sprint mode uses the same runSprintLoop, this works for --sprint 3. However, there's no sprint-mode-specific test for this — it's verified by checking source strings.\"\n    },\n    {\n      \"criterion\": \"tests_cover_sprint_selection\",\n      \"score\": 7,\n      \"details\": \"sprint-selection.test.ts covers all required areas: CLI parsing, mutual exclusion, spec requirement, contract reuse, sprint range, checkpoint warning, validation, no-prompt, workspace preservation, regression, type safety, and sprint-exceeds-total. All 364 tests pass. However, many tests use source-code string matching (reading harness.ts and checking for substrings) rather than behavioral/unit testing with mocks. This is functional but fragile — renaming a log message would break tests without any real regression.\"\n    },\n    {\n      \"criterion\": \"clean_startup_and_type_safety\",\n      \"score\": 7,\n      \"details\": \"tsc --noEmit produces 11 errors, but NONE are in sprint-related files (types.ts, config.ts, harness.ts, sprint-selection.test.ts). The errors are in pre-existing files: artifact-digest.ts (3 errors), config.test.ts (1 error missing noDocs field from prior sprint), and skills.test.ts (7 errors missing documenter field from prior sprint). The sprint field is properly typed as optional throughout. All 364 tests pass with bun test. The pre-existing TS errors are a concern but don't affect this sprint's work.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 3 (Sprint Selection) is well-implemented. The --sprint N flag is properly parsed, validated, and integrated into the harness flow. The sprintSelectionHarness function correctly skips planning, checks for existing spec, reuses contracts, warns about missing checkpoints, and runs only the targeted sprint. All 364 tests pass. The main weaknesses are: (1) many tests rely on source-code string matching rather than behavioral testing, making them fragile; (2) there are 11 pre-existing TypeScript errors from prior sprints that weren't cleaned up. Despite these issues, all criteria meet the threshold.\"\n}\n```",
+          "stop_reason": "end_turn",
+          "session_id": "18923080-a356-46fd-a87e-9f02b47c8c82",
+          "total_cost_usd": 0.6722075000000001,
+          "usage": {
+            "input_tokens": 23,
+            "cache_creation_input_tokens": 38554,
+            "cache_read_input_tokens": 569510,
+            "output_tokens": 5855,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 38554,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-opus-4-6": {
+              "inputTokens": 23,
+              "outputTokens": 5855,
+              "cacheReadInputTokens": 569510,
+              "cacheCreationInputTokens": 38554,
+              "webSearchRequests": 0,
+              "costUSD": 0.6722075000000001,
+              "contextWindow": 200000,
+              "maxOutputTokens": 64000
+            }
+          },
+          "permission_denials": [],
+          "fast_mode_state": "off",
+          "uuid": "4f157f68-9251-40dc-ae1b-58045232900c"
         }
       }
     }

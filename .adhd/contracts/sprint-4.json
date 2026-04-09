@@ -1,0 +1,83 @@
+{
+  "sprintNumber": 4,
+  "features": [
+    "Feature 1.6: Progressive Spec Refinement (Guarded)"
+  ],
+  "criteria": [
+    {
+      "name": "refine_spec_cli_flag",
+      "description": "A --refine-spec boolean CLI flag is added to parseCli() and resolveConfig(). When not passed, it defaults to false. The flag is stored as refineSpec on HarnessConfig. Running `bun run cli --help` (or equivalent) lists the flag. Passing --refine-spec sets config.refineSpec to true; omitting it leaves it false.",
+      "threshold": 7
+    },
+    {
+      "name": "planner_reinvocation_after_passing_sprint",
+      "description": "When --refine-spec is set and a sprint passes (but is not the last sprint), the Planner agent is re-invoked with the current spec content and a prompt instructing it to propose adjustments for remaining (not-yet-started) sprints based on what was actually built. The Planner writes the revised spec to .adhd/spec.md. No re-invocation occurs after the final sprint passes or after a sprint that fails.",
+      "threshold": 7
+    },
+    {
+      "name": "completed_sprint_freezing",
+      "description": "The refinement logic ensures completed sprints cannot be modified. The spec content for completed sprints (all ## Sprint N sections where N <= current completed sprint number) remains byte-identical before and after refinement. This is enforced by either (a) post-processing the Planner output to restore original completed-sprint sections, or (b) the Planner prompt explicitly instructing preservation — but regardless of approach, a programmatic check compares completed sprint sections before and after and rejects/repairs if they differ.",
+      "threshold": 7
+    },
+    {
+      "name": "spec_diff_computation_and_logging",
+      "description": "After the Planner proposes spec changes, a line-level diff between the old spec and the proposed spec is computed and logged to the terminal. Added lines are prefixed with '+', removed lines with '-'. If the old and proposed specs are identical, a message indicating no changes is logged instead of an empty diff.",
+      "threshold": 7
+    },
+    {
+      "name": "user_gate_for_refinement_approval",
+      "description": "In interactive mode, after the spec diff is displayed, a gate is shown to the user with options to Accept or Reject the revised spec. If rejected, the original spec is preserved unchanged. If accepted, the revised spec replaces the current one on disk. The gate uses the existing promptGate/promptGateWithText infrastructure. The gate prompt clearly labels which option preserves the original.",
+      "threshold": 7
+    },
+    {
+      "name": "auto_accept_non_interactive",
+      "description": "When both --refine-spec and --no-interactive are set, the refinement gate is skipped (auto-accepted) and the revised spec is written to disk, but the spec diff is still logged to the terminal for auditability. A log line explicitly states the refinement was auto-accepted.",
+      "threshold": 7
+    },
+    {
+      "name": "no_refinement_without_flag",
+      "description": "When --refine-spec is NOT passed, no Planner re-invocation occurs after any sprint passes. The existing sprint transition behavior is completely preserved — no new log lines, no new agent calls, no spec reads/writes beyond what already exists. Verified by: running a multi-sprint loop without --refine-spec and confirming no refinement-related log output appears.",
+      "threshold": 7
+    },
+    {
+      "name": "regression_criteria_preserved_after_refinement",
+      "description": "After spec refinement occurs (whether accepted or rejected), the accumulated BDD regression criteria in .adhd/regression.json remain byte-identical to their pre-refinement state. Refinement does not clear, modify, or re-derive regression criteria from completed sprints.",
+      "threshold": 7
+    },
+    {
+      "name": "sprint_count_recalculation",
+      "description": "After spec refinement is accepted, the total sprint count is recalculated from the revised spec (by counting ## Sprint N headings). If refinement adds or removes sprints, the loop's totalSprints variable is updated accordingly, capped by config.maxSprints. A log line reports the new sprint count (e.g., 'Sprint count updated: 5 → 6').",
+      "threshold": 7
+    },
+    {
+      "name": "reject_preserves_original_spec",
+      "description": "When the user rejects the proposed refinement at the gate, the original spec is fully preserved on disk (.adhd/spec.md is byte-identical to its pre-refinement state), the sprint loop continues with the original spec and original sprint count, and a log line confirms the rejection.",
+      "threshold": 7
+    },
+    {
+      "name": "refinement_prompt_includes_codebase_context",
+      "description": "The Planner re-invocation prompt includes: (1) the full current spec content, (2) an explicit list of which sprint numbers are completed vs remaining, (3) instruction to read the actual codebase to understand what was built, and (4) explicit instruction to only modify not-yet-started sprint sections and preserve all completed sprint sections verbatim.",
+      "threshold": 7
+    },
+    {
+      "name": "refinement_error_handling",
+      "description": "If the Planner re-invocation fails (agent error, timeout, or returns empty/unparseable output), the original spec is preserved unchanged on disk, a warning is logged to the terminal describing the failure, and the sprint loop continues normally with the original spec. The harness does not crash or exit due to a refinement failure.",
+      "threshold": 7
+    },
+    {
+      "name": "tests_for_refinement_logic",
+      "description": "Unit tests exist covering at minimum: (a) completed sprint section extraction and freezing logic, (b) sprint count recalculation from spec content including edge cases of added/removed sprints, (c) --refine-spec flag parsing (present and absent), (d) no-op behavior when the flag is absent, (e) diff computation produces correct +/- output. All tests use Bun's test runner and pass with `bun test`.",
+      "threshold": 7
+    },
+    {
+      "name": "type_safety_and_code_quality",
+      "description": "All new code compiles without TypeScript errors (`bunx tsc --noEmit` passes). New types/interfaces are added to shared/types.ts where appropriate. No `any` types are used in new code. Functions have explicit parameter and return types. Naming conventions are consistent with the existing codebase (camelCase functions, PascalCase types).",
+      "threshold": 7
+    },
+    {
+      "name": "integration_with_sprint_loop",
+      "description": "The refinement logic is integrated into the runSprintLoop function in harness.ts, executing after a sprint passes and before the next sprint's contract negotiation begins. It coexists cleanly with existing mid-run steering (C4), regression accumulation (1.1), and checkpoint saving without disrupting their behavior. The refinement step is skipped entirely (not called then short-circuited) when refineSpec is false.",
+      "threshold": 7
+    }
+  ]
+}

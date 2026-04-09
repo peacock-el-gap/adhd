@@ -56,6 +56,8 @@ interface ParsedCli {
   lintGate?: boolean;
   // Phase 1 Deepen: Sprint Selection
   sprint?: number;
+  // Phase 1 Deepen: Progressive Spec Refinement
+  refineSpec?: boolean;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -97,6 +99,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "lint-gate": { type: "boolean", default: false },
       // Phase 1 Deepen: Sprint Selection
       sprint: { type: "string" },
+      // Phase 1 Deepen: Progressive Spec Refinement
+      "refine-spec": { type: "boolean", default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -139,6 +143,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     lintGate: values["lint-gate"] as boolean,
     // Phase 1 Deepen: Sprint Selection
     sprint: values.sprint ? parseInt(values.sprint as string, 10) : undefined,
+    // Phase 1 Deepen: Progressive Spec Refinement
+    refineSpec: values["refine-spec"] as boolean,
   };
 }
 
@@ -297,6 +303,8 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     lintGate: cli.lintGate || false,
     // Phase 1 Deepen: Sprint Selection
     sprint: cli.sprint,
+    // Phase 1 Deepen: Progressive Spec Refinement
+    refineSpec: cli.refineSpec || false,
   };
 
   // Validate
