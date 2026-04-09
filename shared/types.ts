@@ -35,6 +35,9 @@ export interface HarnessConfig {
   // WP1: BDD/TDD prompt flags
   noBdd?: boolean; // --no-bdd flag, disables BDD instructions in prompts
   noTdd?: boolean; // --no-tdd flag, disables TDD instructions in prompts
+  // OPP-13-A: Documenter agent
+  noDocs?: boolean; // --no-docs flag, disables post-run documentation generation
+  modelDocumenter?: string; // --model-documenter, per-agent model override for documenter
 }
 
 export interface SprintContract {

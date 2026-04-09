@@ -190,6 +190,27 @@ describe("parseCli", () => {
     expect(cli.sourceDir).toBeUndefined();
     expect(cli.testDir).toBeUndefined();
   });
+
+  // OPP-13-A: --no-docs and --model-documenter
+  test("parses --no-docs flag", () => {
+    const cli = parseCli(["--no-docs", "test"]);
+    expect(cli.noDocs).toBe(true);
+  });
+
+  test("--no-docs defaults to false", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.noDocs).toBe(false);
+  });
+
+  test("parses --model-documenter flag", () => {
+    const cli = parseCli(["--model-documenter", "claude-sonnet-4-20250514", "test"]);
+    expect(cli.modelDocumenter).toBe("claude-sonnet-4-20250514");
+  });
+
+  test("--model-documenter defaults to undefined", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.modelDocumenter).toBeUndefined();
+  });
 });
 
 // --- loadHarnessEnv ---
@@ -245,27 +266,27 @@ describe("loadHarnessEnv", () => {
 
 describe("resolveConfig", () => {
   test("throws when no prompt and not resuming", () => {
-    expect(() => resolveConfig({ greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false })).toThrow("A prompt is required");
+    expect(() => resolveConfig({ greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false, noDocs: false })).toThrow("A prompt is required");
   });
 
   test("allows missing prompt when resuming", () => {
-    const config = resolveConfig({ resume: true, greenfield: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false });
+    const config = resolveConfig({ resume: true, greenfield: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false, noDocs: false });
     expect(config.isResume).toBe(true);
     expect(config.userPrompt).toBe("");
   });
 
   test("resolves log level from flags", () => {
-    const verbose = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: true, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false });
+    const verbose = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: true, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false, noDocs: false });
     expect(verbose.logLevel).toBe("verbose");
 
-    const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false });
+    const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false, noDocs: false });
     expect(quiet.logLevel).toBe("quiet");
 
     const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true, dryRun: false, noBdd: false, noTdd: false });
     expect(debug.logLevel).toBe("debug");
   });
 
-  const baseCli = { prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false };
+  const baseCli = { prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false, noDocs: false };
 
   test("resolves editor from CLI flag", () => {
     const config = resolveConfig({ ...baseCli, editor: "code --wait" });
@@ -450,6 +471,100 @@ describe("resolveConfig", () => {
     } finally {
       if (prevSrc === undefined) delete process.env.SOURCE_DIR;
       else process.env.SOURCE_DIR = prevSrc;
+    }
+  });
+
+  // OPP-13-A: noDocs config resolution
+  test("noDocs defaults to false", () => {
+    const prev = process.env.ADHD_NO_DOCS;
+    delete process.env.ADHD_NO_DOCS;
+    try {
+      const config = resolveConfig({ ...baseCli, noDocs: false });
+      expect(config.noDocs).toBe(false);
+    } finally {
+      if (prev !== undefined) process.env.ADHD_NO_DOCS = prev;
+    }
+  });
+
+  test("noDocs from --no-docs CLI flag", () => {
+    const config = resolveConfig({ ...baseCli, noDocs: true });
+    expect(config.noDocs).toBe(true);
+  });
+
+  test("noDocs from ADHD_NO_DOCS env var", () => {
+    const prev = process.env.ADHD_NO_DOCS;
+    process.env.ADHD_NO_DOCS = "1";
+    try {
+      const config = resolveConfig({ ...baseCli, noDocs: false });
+      expect(config.noDocs).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.ADHD_NO_DOCS;
+      else process.env.ADHD_NO_DOCS = prev;
+    }
+  });
+
+  test("noDocs from ADHD_NO_DOCS=true env var", () => {
+    const prev = process.env.ADHD_NO_DOCS;
+    process.env.ADHD_NO_DOCS = "true";
+    try {
+      const config = resolveConfig({ ...baseCli, noDocs: false });
+      expect(config.noDocs).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.ADHD_NO_DOCS;
+      else process.env.ADHD_NO_DOCS = prev;
+    }
+  });
+
+  test("--no-docs CLI flag takes precedence over env var", () => {
+    const prev = process.env.ADHD_NO_DOCS;
+    process.env.ADHD_NO_DOCS = "0";
+    try {
+      const config = resolveConfig({ ...baseCli, noDocs: true });
+      expect(config.noDocs).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.ADHD_NO_DOCS;
+      else process.env.ADHD_NO_DOCS = prev;
+    }
+  });
+
+  // OPP-13-A: modelDocumenter config resolution
+  test("modelDocumenter from --model-documenter CLI flag", () => {
+    const config = resolveConfig({ ...baseCli, modelDocumenter: "claude-sonnet-4-20250514" });
+    expect(config.modelDocumenter).toBe("claude-sonnet-4-20250514");
+  });
+
+  test("modelDocumenter defaults to undefined", () => {
+    const prev = process.env.MODEL_DOCUMENTER;
+    delete process.env.MODEL_DOCUMENTER;
+    try {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.modelDocumenter).toBeUndefined();
+    } finally {
+      if (prev !== undefined) process.env.MODEL_DOCUMENTER = prev;
+    }
+  });
+
+  test("modelDocumenter from MODEL_DOCUMENTER env var", () => {
+    const prev = process.env.MODEL_DOCUMENTER;
+    process.env.MODEL_DOCUMENTER = "claude-haiku-4-5-20251001";
+    try {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.modelDocumenter).toBe("claude-haiku-4-5-20251001");
+    } finally {
+      if (prev === undefined) delete process.env.MODEL_DOCUMENTER;
+      else process.env.MODEL_DOCUMENTER = prev;
+    }
+  });
+
+  test("CLI --model-documenter takes precedence over MODEL_DOCUMENTER env var", () => {
+    const prev = process.env.MODEL_DOCUMENTER;
+    process.env.MODEL_DOCUMENTER = "claude-haiku-4-5-20251001";
+    try {
+      const config = resolveConfig({ ...baseCli, modelDocumenter: "claude-opus-4-6" });
+      expect(config.modelDocumenter).toBe("claude-opus-4-6");
+    } finally {
+      if (prev === undefined) delete process.env.MODEL_DOCUMENTER;
+      else process.env.MODEL_DOCUMENTER = prev;
     }
   });
 });

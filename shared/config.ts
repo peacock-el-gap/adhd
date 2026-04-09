@@ -49,6 +49,9 @@ interface ParsedCli {
   // WP1: BDD/TDD flags
   noBdd: boolean;
   noTdd: boolean;
+  // OPP-13-A: Documenter agent
+  noDocs: boolean;
+  modelDocumenter?: string;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
@@ -83,6 +86,9 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       // WP1: BDD/TDD flags
       "no-bdd": { type: "boolean", default: false },
       "no-tdd": { type: "boolean", default: false },
+      // OPP-13-A: Documenter agent
+      "no-docs": { type: "boolean", default: false },
+      "model-documenter": { type: "string" },
     },
     allowPositionals: true,
     strict: true,
@@ -118,6 +124,9 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     // WP1: BDD/TDD flags
     noBdd: values["no-bdd"] as boolean,
     noTdd: values["no-tdd"] as boolean,
+    // OPP-13-A: Documenter agent
+    noDocs: values["no-docs"] as boolean,
+    modelDocumenter: values["model-documenter"] as string | undefined,
   };
 }
 
@@ -222,6 +231,8 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
   const modelPlanner = cli.modelPlanner ?? process.env.MODEL_PLANNER ?? undefined;
   const modelGenerator = cli.modelGenerator ?? process.env.MODEL_GENERATOR ?? undefined;
   const modelEvaluator = cli.modelEvaluator ?? process.env.MODEL_EVALUATOR ?? undefined;
+  // OPP-13-A: Documenter model override
+  const modelDocumenter = cli.modelDocumenter ?? process.env.MODEL_DOCUMENTER ?? undefined;
 
   const config: HarnessConfig = {
     userPrompt,
@@ -255,12 +266,21 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     // WP1: BDD/TDD flags
     noBdd: cli.noBdd || false,
     noTdd: cli.noTdd || false,
+    // OPP-13-A: Documenter agent
+    noDocs: cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS),
+    modelDocumenter,
   };
 
   // Validate
   validateConfig(config);
 
   return config;
+}
+
+/** Check if a string env var is truthy (1, true, yes) */
+function isTruthy(val: string | undefined): boolean {
+  if (!val) return false;
+  return ["1", "true", "yes"].includes(val.toLowerCase());
 }
 
 export function validateConfig(config: HarnessConfig): void {
