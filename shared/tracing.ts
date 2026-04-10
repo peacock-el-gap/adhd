@@ -1,4 +1,4 @@
-import { type Options, query as originalQuery } from "@anthropic-ai/claude-agent-sdk";
+import { type Options, query as originalQuery, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { log, logDebug } from "./logger.ts";
 import type { HarnessConfig } from "./types.ts";
 
@@ -52,6 +52,20 @@ export { activeQuery as query };
 
 let otelSdk: { shutdown(): Promise<void> } | null = null;
 
+// Structural types for dynamically-imported OTEL modules (avoids `any`)
+interface OtelTracer {
+  startSpan(name: string, options: { attributes: Record<string, unknown> }, ctx: unknown): OtelSpan;
+}
+interface OtelSpan {
+  setAttributes(attrs: Record<string, unknown>): void;
+  end(): void;
+}
+interface OtelApi {
+  context: { active(): unknown; with(ctx: unknown, fn: () => unknown): unknown };
+  trace: { setSpan(ctx: unknown, span: OtelSpan): unknown; getTracer(name: string): OtelTracer };
+}
+type PropagateAttrs = (attrs: Record<string, unknown>, fn: () => unknown) => unknown;
+
 export function initTracing(config: HarnessConfig): Tracer {
   if (!config.langfusePublicKey || !config.langfuseSecretKey) {
     logDebug("HARNESS", "Langfuse tracing: disabled (no LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY)");
@@ -97,7 +111,9 @@ export function initTracing(config: HarnessConfig): Tracer {
     const cacheUsageQueue: Record<string, number>[] = [];
 
     const arizeQuery = mutableSDK.query;
-    activeQuery = async function* patchedQuery(params: any): any {
+    activeQuery = async function* patchedQuery(
+      params: Parameters<typeof originalQuery>[0],
+    ): AsyncGenerator<SDKMessage, void> {
       for await (const msg of arizeQuery(params)) {
         if (msg.type === "result" && msg.usage) {
           cacheUsageQueue.push({
@@ -174,12 +190,12 @@ export function initTracing(config: HarnessConfig): Tracer {
 }
 
 function createOtelSpan(
-  otelTracer: any,
-  otelApi: any,
-  propagateAttrs: any,
+  otelTracer: OtelTracer,
+  otelApi: OtelApi,
+  propagateAttrs: PropagateAttrs,
   name: string,
   metadata?: Record<string, unknown>,
-  parentCtx?: any,
+  parentCtx?: unknown,
   traceName?: string,
 ): Span {
   const activeCtx = parentCtx ?? otelApi.context.active();
@@ -197,7 +213,7 @@ function createOtelSpan(
       return otelApi.context.with(spanCtx, () =>
         // Only set traceName on the root span; children inherit via OTEL context
         traceName ? propagateAttrs({ traceName }, fn) : fn(),
-      );
+      ) as Promise<T>;
     },
 
     startChild(childName: string, childMetadata?: Record<string, unknown>): Span {

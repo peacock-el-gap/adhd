@@ -123,8 +123,8 @@ Content here.`;
 
       const result = scanSkillsDir(dir, "user");
       expect(result).toHaveLength(1);
-      expect(result[0].name).toBe("test-skill");
-      expect(result[0].source).toBe("user");
+      expect(result[0]?.name).toBe("test-skill");
+      expect(result[0]?.source).toBe("user");
     });
   });
 });

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { harnessDir, readContract, readProgress, readSpec, writeContract, writeProgress, writeSpec } from "./files.ts";
+import type { HarnessProgress } from "./types.ts";
 
 describe("files", () => {
   describe("harnessDir", () => {
@@ -53,9 +54,12 @@ describe("files", () => {
       const dir = await mkdtemp(join(tmpdir(), "files-"));
       await mkdir(join(dir, ".adhd"), { recursive: true });
 
-      const progress = {
+      const progress: HarnessProgress = {
+        status: "building",
         currentSprint: 2,
         totalSprints: 5,
+        completedSprints: 1,
+        retryCount: 0,
         sprintResults: [{ sprintNumber: 1, passed: true, attempts: 1 }],
       };
       await writeProgress(dir, progress);
