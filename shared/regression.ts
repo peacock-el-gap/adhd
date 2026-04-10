@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { harnessDir } from "./files.ts";
+import { log } from "./logger.ts";
 import type { RegressionCriterion, SprintContract } from "./types.ts";
 
 /**
@@ -36,14 +37,16 @@ export async function readRegressionCriteria(workDir: string): Promise<Regressio
       return parsed as RegressionCriterion[];
     }
     // File exists but is not an array — malformed schema
-    console.warn(
-      `[HARNESS] Warning: regression.json has unexpected schema (expected array, got ${typeof parsed}). Proceeding without regression criteria.`,
+    log(
+      "HARNESS",
+      `Warning: regression.json has unexpected schema (expected array, got ${typeof parsed}). Proceeding without regression criteria.`,
     );
     return [];
   } catch (err) {
     // File exists but contains invalid JSON
-    console.warn(
-      `[HARNESS] Warning: regression.json contains invalid JSON: ${err instanceof Error ? err.message : String(err)}. Proceeding without regression criteria.`,
+    log(
+      "HARNESS",
+      `Warning: regression.json contains invalid JSON: ${err instanceof Error ? err.message : String(err)}. Proceeding without regression criteria.`,
     );
     return [];
   }

@@ -22,6 +22,10 @@ const baseConfig: ResolvedConfig = {
   noDocs: false,
   lintGate: false,
   refineSpec: false,
+  resolvedModelPlanner: "claude-opus-4-6",
+  resolvedModelGenerator: "claude-opus-4-6",
+  resolvedModelEvaluator: "claude-opus-4-6",
+  resolvedModelDocumenter: "claude-opus-4-6",
 };
 
 describe("initTracing — noop when disabled", () => {

@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
-import { harnessDir } from "../shared/files.ts";
+import { gitDir, harnessDir } from "../shared/files.ts";
 import { log, shouldLog } from "../shared/logger.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
@@ -26,7 +26,7 @@ export async function runGenerator(
   const { config, spec, contract, previousFeedback, skills } = opts;
   const attempt = opts.attempt ?? 0;
   const { workDir, isGreenfield, noTdd, sourceDir, testDir } = config;
-  const model = config.modelGenerator ?? config.model;
+  const model = config.resolvedModelGenerator;
   const level = config.logLevel;
   const sprint = contract.sprintNumber;
   log(
@@ -37,7 +37,7 @@ export async function runGenerator(
   const systemPrompt = buildGeneratorPrompt({ workDir, isGreenfield, noTdd, skills, sourceDir, testDir });
   const hDir = harnessDir(workDir);
 
-  const codeDir = isGreenfield ? `${workDir}/app/` : workDir;
+  const codeDir = gitDir(workDir, isGreenfield);
   let prompt = `IMPORTANT: Your working directory is ${workDir}. All code MUST be created inside ${codeDir}. Do NOT create files outside of ${workDir}.\n\nThe product spec is at ${hDir}/spec.md.\n\n## Product Spec\n\n${spec}\n\n## Sprint Contract\n\n${JSON.stringify(contract, null, 2)}`;
 
   if (previousFeedback) {
@@ -87,22 +87,25 @@ export async function runGenerator(
   return result;
 }
 
+export interface EnsureCommitOptions {
+  workDir: string;
+  gitDir: string;
+  beforeSha: string;
+  sessionId: string | undefined;
+  contract: SprintContract;
+  isRetry: boolean;
+  model: string;
+}
+
 /**
  * Ensure the generator committed its work. If uncommitted changes remain,
  * resume the generator session to request a meaningful commit, then fall back
  * to a harness-level auto-commit if the agent still doesn't comply.
  */
-export async function ensureGeneratorCommit(
-  workDir: string,
-  gitDir: string,
-  beforeSha: string,
-  sessionId: string | undefined,
-  contract: SprintContract,
-  isRetry: boolean,
-  model: string,
-): Promise<CommitSource> {
-  const currentSha = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
-  const dirty = execSync("git status --porcelain", { cwd: gitDir, encoding: "utf-8" }).trim();
+export async function ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<CommitSource> {
+  const { workDir, gitDir: gDir, beforeSha, sessionId, contract, isRetry, model } = opts;
+  const currentSha = execSync("git rev-parse HEAD", { cwd: gDir, encoding: "utf-8" }).trim();
+  const dirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
 
   // Case A: Agent committed and tree is clean
   if (currentSha !== beforeSha && !dirty) {
@@ -152,7 +155,7 @@ export async function ensureGeneratorCommit(
   }
 
   // Check if the resume succeeded
-  const postResumeDirty = execSync("git status --porcelain", { cwd: gitDir, encoding: "utf-8" }).trim();
+  const postResumeDirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
   if (!postResumeDirty) {
     log("HARNESS", "Generator committed via session resume");
     return "resume";
@@ -165,7 +168,7 @@ export async function ensureGeneratorCommit(
   const message = `[auto-commit] Sprint ${sprint}: uncommitted ${prefix}: ${features} (generator did not commit)`;
 
   log("HARNESS", `WARNING: Generator still did not commit — harness fallback auto-commit`);
-  execSync(`git add -A && git commit -m ${JSON.stringify(message)}`, { cwd: gitDir, stdio: "pipe" });
+  execSync(`git add -A && git commit -m ${JSON.stringify(message)}`, { cwd: gDir, stdio: "pipe" });
 
   return "fallback";
 }

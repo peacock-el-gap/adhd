@@ -313,6 +313,11 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     noDocs: cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS),
     lintGate: cli.lintGate || false,
     refineSpec: cli.refineSpec || false,
+    // Per-agent resolved models
+    resolvedModelPlanner: modelPlanner ?? model,
+    resolvedModelGenerator: modelGenerator ?? model,
+    resolvedModelEvaluator: modelEvaluator ?? model,
+    resolvedModelDocumenter: modelDocumenter ?? model,
     // Genuinely optional
     tzDisplay,
     langfusePublicKey,

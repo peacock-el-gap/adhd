@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { gitDir } from "../shared/files.ts";
 import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
 import type { ResolvedConfig } from "../shared/types.ts";
 
@@ -8,8 +8,7 @@ export interface StaticAnalysisResult {
 }
 
 export async function runStaticAnalysis(config: ResolvedConfig): Promise<StaticAnalysisResult> {
-  const isGreenfield = config.isGreenfield;
-  const projectDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
+  const projectDir = gitDir(config.workDir, config.isGreenfield);
   let commands: Awaited<ReturnType<typeof detectStaticAnalysisCommands>>;
   try {
     commands = await detectStaticAnalysisCommands(projectDir);

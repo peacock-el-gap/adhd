@@ -22,7 +22,7 @@ export async function runPlanner(
 
   log("PLANNER", `Starting planning for: "${userPrompt.slice(0, 100)}${userPrompt.length > 100 ? "..." : ""}"`);
 
-  const model = config.modelPlanner ?? config.model;
+  const model = config.resolvedModelPlanner;
   let systemPrompt = buildPlannerPrompt({
     workDir,
     isGreenfield,

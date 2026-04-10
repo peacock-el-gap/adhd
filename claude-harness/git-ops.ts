@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { join } from "node:path";
+import { gitDir } from "../shared/files.ts";
 import { promptGate } from "../shared/interaction.ts";
 import { log, logError } from "../shared/logger.ts";
 import type { HarnessProgress, ResolvedConfig } from "../shared/types.ts";
@@ -10,11 +10,11 @@ export async function revertToCheckpoint(
   isGreenfield: boolean,
   progress: HarnessProgress,
 ): Promise<void> {
-  const gitDir = isGreenfield ? join(workDir, "app") : workDir;
+  const gDir = gitDir(workDir, isGreenfield);
   const sha = progress.lastPassedCommitSha ?? "";
 
   try {
-    const currentHead = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
+    const currentHead = execSync("git rev-parse HEAD", { cwd: gDir, encoding: "utf-8" }).trim();
     if (currentHead === sha) {
       log("HARNESS", "HEAD matches checkpoint — no revert needed");
       return;
@@ -23,14 +23,14 @@ export async function revertToCheckpoint(
     log("HARNESS", `Reverting commits after checkpoint ${sha.slice(0, 8)}...`);
     execSync(
       `git revert --no-commit ${sha}..HEAD && git commit -m "Revert incomplete sprint ${progress.completedSprints + 1} attempt"`,
-      { cwd: gitDir, stdio: "pipe" },
+      { cwd: gDir, stdio: "pipe" },
     );
     log("HARNESS", "Revert successful");
   } catch (err) {
     // Revert failed (conflicts) — warn and continue
     logError("HARNESS", `Git revert failed (conflicts?). Continuing without revert. Error: ${err}`);
     try {
-      execSync("git revert --abort", { cwd: gitDir, stdio: "ignore" });
+      execSync("git revert --abort", { cwd: gDir, stdio: "ignore" });
     } catch {
       // Already clean
     }

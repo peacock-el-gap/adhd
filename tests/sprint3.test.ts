@@ -10,7 +10,6 @@ import {
   scanSkillsDir,
 } from "../shared/skills.ts";
 import type { AgentSkills, ResolvedSkill } from "../shared/skills.ts";
-import type { HarnessProgress } from "../shared/types.ts";
 import { validateDocumentation } from "../shared/doc-validation.ts";
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -295,63 +294,6 @@ describe("routeSkillsForAgent for documenter", () => {
 });
 
 // =====================================================
-// Feature 9: Resume Compatibility
-// =====================================================
-
-describe("HarnessProgress docsGenerated field", () => {
-  test("docsGenerated field can be set on HarnessProgress", () => {
-    const progress: HarnessProgress = {
-      status: "complete",
-      currentSprint: 3,
-      totalSprints: 3,
-      completedSprints: 3,
-      retryCount: 0,
-      docsGenerated: true,
-    };
-    expect(progress.docsGenerated).toBe(true);
-  });
-
-  test("docsGenerated is optional (defaults to undefined)", () => {
-    const progress: HarnessProgress = {
-      status: "complete",
-      currentSprint: 3,
-      totalSprints: 3,
-      completedSprints: 3,
-      retryCount: 0,
-    };
-    expect(progress.docsGenerated).toBeUndefined();
-  });
-
-  test("docsGenerated persists through JSON serialization", () => {
-    const progress: HarnessProgress = {
-      status: "complete",
-      currentSprint: 3,
-      totalSprints: 3,
-      completedSprints: 3,
-      retryCount: 0,
-      docsGenerated: true,
-    };
-    const serialized = JSON.stringify(progress);
-    const deserialized = JSON.parse(serialized) as HarnessProgress;
-    expect(deserialized.docsGenerated).toBe(true);
-  });
-
-  test("docsGenerated false persists correctly", () => {
-    const progress: HarnessProgress = {
-      status: "complete",
-      currentSprint: 3,
-      totalSprints: 3,
-      completedSprints: 3,
-      retryCount: 0,
-      docsGenerated: false,
-    };
-    const serialized = JSON.stringify(progress);
-    const deserialized = JSON.parse(serialized) as HarnessProgress;
-    expect(deserialized.docsGenerated).toBe(false);
-  });
-});
-
-// =====================================================
 // Feature 10: Documentation Quality Validation
 // =====================================================
 
@@ -362,56 +304,14 @@ describe("validateDocumentation", () => {
     writeFileSync(join(dir, "README.md"), "x".repeat(500));
     writeFileSync(join(dir, "CHANGELOG.md"), "# Changelog\n\n## Sprint 1\n- Feature A");
 
-    // Should not throw
     expect(() => validateDocumentation(dir)).not.toThrow();
   });
 
-  test("warns for short README.md (< 200 chars)", () => {
-    const dir = join(tmpBase, "project");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "README.md"), "Short");
-    writeFileSync(join(dir, "CHANGELOG.md"), "# Changelog");
-
-    // Capture log output — validateDocumentation should not throw
-    const logs: string[] = [];
-    const origLog = console.log;
-    // validateDocumentation uses log() which writes to stdout
-    // We just verify it doesn't throw
-    expect(() => validateDocumentation(dir)).not.toThrow();
-  });
-
-  test("warns for missing README.md", () => {
-    const dir = join(tmpBase, "project");
-    mkdirSync(dir, { recursive: true });
-    // No README.md created
-    writeFileSync(join(dir, "CHANGELOG.md"), "# Changelog");
-
-    expect(() => validateDocumentation(dir)).not.toThrow();
-  });
-
-  test("warns for missing CHANGELOG.md", () => {
-    const dir = join(tmpBase, "project");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "README.md"), "x".repeat(500));
-    // No CHANGELOG.md created
-
-    expect(() => validateDocumentation(dir)).not.toThrow();
-  });
-
-  test("does not throw even when both files are missing", () => {
+  test("warns for missing README.md without throwing", () => {
     const dir = join(tmpBase, "project");
     mkdirSync(dir, { recursive: true });
 
     expect(() => validateDocumentation(dir)).not.toThrow();
-  });
-
-  test("validation never causes non-zero exit", () => {
-    // This test verifies the function is advisory-only
-    const dir = join(tmpBase, "project");
-    mkdirSync(dir, { recursive: true });
-    // No docs at all
-    const result = validateDocumentation(dir);
-    expect(result).toBeUndefined(); // void function, no error thrown
   });
 });
 

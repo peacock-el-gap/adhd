@@ -2,7 +2,7 @@ import { processAgentStream } from "../shared/agent-stream.ts";
 import { buildArtifactDigest } from "../shared/artifact-digest.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
-import { harnessDir } from "../shared/files.ts";
+import { gitDir, harnessDir } from "../shared/files.ts";
 import { log } from "../shared/logger.ts";
 import { buildDocumenterPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
@@ -19,13 +19,13 @@ export interface RunDocumenterOptions {
 export async function runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields }> {
   const { config, skills, sprintResults } = opts;
   const { workDir, isGreenfield, sourceDir, testDir } = config;
-  const model = config.modelDocumenter ?? config.model;
+  const model = config.resolvedModelDocumenter;
   const level = config.logLevel;
   log("DOCUMENTER", "Generating project documentation...");
 
   const systemPrompt = buildDocumenterPrompt({ workDir, isGreenfield, skills, sourceDir, testDir });
   const hDir = harnessDir(workDir);
-  const docTarget = isGreenfield ? `${workDir}/app/` : workDir;
+  const docTarget = gitDir(workDir, isGreenfield);
 
   // Build the artifact digest for context
   const artifactDigest = buildArtifactDigest({ workDir, sprintResults });

@@ -1,6 +1,7 @@
 import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
+import { gitDir } from "../shared/files.ts";
 import { log, logError, shouldLog } from "../shared/logger.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
@@ -21,13 +22,13 @@ export async function runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResul
   const { config, contract, skills, supplementaryContext } = opts;
   const attempt = opts.attempt ?? 0;
   const { workDir, isGreenfield, noBdd, sourceDir, testDir, passThreshold } = config;
-  const model = config.modelEvaluator ?? config.model;
+  const model = config.resolvedModelEvaluator;
   const level = config.logLevel;
   const sprint = contract.sprintNumber;
   log("EVALUATOR", `Evaluating sprint ${sprint} against ${contract.criteria.length} criteria`);
 
   const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield, noBdd, skills, sourceDir, testDir });
-  const appLocation = isGreenfield ? `${workDir}/app/` : workDir;
+  const appLocation = gitDir(workDir, isGreenfield);
 
   const prompt = `IMPORTANT: Your working directory is ${workDir}. The application code is in ${appLocation}. All file operations must be within ${workDir}.
 

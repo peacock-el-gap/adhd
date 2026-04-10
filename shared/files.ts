@@ -10,6 +10,11 @@ export function harnessDir(workDir: string): string {
   return join(workDir, ".adhd");
 }
 
+/** Resolve the git working directory. In greenfield mode, code lives under app/. */
+export function gitDir(workDir: string, isGreenfield: boolean): string {
+  return isGreenfield ? join(workDir, "app") : workDir;
+}
+
 /**
  * Initialize workspace for a harness run.
  *

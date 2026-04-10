@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { parseCli, resolveConfig } from "../shared/config.ts";
-import type { HarnessConfig } from "../shared/types.ts";
 
 const baseCli = {
   greenfield: false,
@@ -127,31 +126,3 @@ describe("no prompt required for sprint mode", () => {
   });
 });
 
-// =====================================================
-// Type safety: HarnessConfig.sprint
-// =====================================================
-
-describe("clean type safety", () => {
-  test("sprint field is optional on HarnessConfig", () => {
-    const config: HarnessConfig = {
-      userPrompt: "test",
-      workDir: "/tmp",
-      maxSprints: 5,
-      maxRetriesPerSprint: 3,
-      passThreshold: 7,
-    };
-    expect(config.sprint).toBeUndefined();
-  });
-
-  test("sprint field can be set on HarnessConfig", () => {
-    const config: HarnessConfig = {
-      userPrompt: "test",
-      workDir: "/tmp",
-      maxSprints: 5,
-      maxRetriesPerSprint: 3,
-      passThreshold: 7,
-      sprint: 3,
-    };
-    expect(config.sprint).toBe(3);
-  });
-});

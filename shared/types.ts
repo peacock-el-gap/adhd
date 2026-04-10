@@ -57,6 +57,11 @@ export interface ResolvedConfig {
   noDocs: boolean;
   lintGate: boolean;
   refineSpec: boolean;
+  // Per-agent resolved models — always a concrete string
+  resolvedModelPlanner: string;
+  resolvedModelGenerator: string;
+  resolvedModelEvaluator: string;
+  resolvedModelDocumenter: string;
   // Genuinely optional — no sensible default
   tzDisplay?: string;
   langfusePublicKey?: string;

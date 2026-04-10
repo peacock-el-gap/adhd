@@ -70,6 +70,37 @@ interface OtelApi {
 }
 type PropagateAttrs = (attrs: Record<string, unknown>, fn: () => unknown) => unknown;
 
+interface TracingDeps {
+  NodeSDK: new (opts: {
+    spanProcessors: unknown[];
+    instrumentations: unknown[];
+  }) => { start(): void; shutdown(): Promise<void> };
+  LangfuseSpanProcessor: new (opts: Record<string, unknown>) => unknown;
+  isDefaultExportSpan: (span: unknown) => boolean;
+  ClaudeAgentSDKInstrumentation: new () => { manuallyInstrument(mod: Record<string, unknown>): void };
+  ClaudeAgentSDKModule: Record<string, unknown>;
+  otelApi: OtelApi;
+  propagateAttributes: PropagateAttrs;
+}
+
+function loadTracingDeps(): TracingDeps {
+  const { NodeSDK } = require("@opentelemetry/sdk-node");
+  const { LangfuseSpanProcessor, isDefaultExportSpan } = require("@langfuse/otel");
+  const { ClaudeAgentSDKInstrumentation } = require("@arizeai/openinference-instrumentation-claude-agent-sdk");
+  const ClaudeAgentSDKModule = require("@anthropic-ai/claude-agent-sdk");
+  const otelApi = require("@opentelemetry/api");
+  const { propagateAttributes } = require("@langfuse/core");
+  return {
+    NodeSDK,
+    LangfuseSpanProcessor,
+    isDefaultExportSpan,
+    ClaudeAgentSDKInstrumentation,
+    ClaudeAgentSDKModule,
+    otelApi,
+    propagateAttributes,
+  };
+}
+
 export function initTracing(config: ResolvedConfig): Tracer {
   if (!config.langfusePublicKey || !config.langfuseSecretKey) {
     logDebug("HARNESS", "Langfuse tracing: disabled (no LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY)");
@@ -85,33 +116,18 @@ export function initTracing(config: ResolvedConfig): Tracer {
     }
 
     // Dynamic imports to avoid loading when tracing is disabled
-    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
-    var { NodeSDK } = require("@opentelemetry/sdk-node");
-    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
-    var { LangfuseSpanProcessor, isDefaultExportSpan } = require("@langfuse/otel");
-    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
-    var { ClaudeAgentSDKInstrumentation } = require("@arizeai/openinference-instrumentation-claude-agent-sdk");
-    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
-    var ClaudeAgentSDKModule = require("@anthropic-ai/claude-agent-sdk");
-    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
-    var otelApi = require("@opentelemetry/api");
-    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
-    var { propagateAttributes } = require("@langfuse/core");
+    const deps = loadTracingDeps();
 
     // Create a mutable copy — Bun's module namespace objects are frozen
-    const mutableSDK = { ...ClaudeAgentSDKModule };
+    const mutableSDK = { ...deps.ClaudeAgentSDKModule };
 
-    const instrumentation = new ClaudeAgentSDKInstrumentation();
+    const instrumentation = new deps.ClaudeAgentSDKInstrumentation();
     instrumentation.manuallyInstrument(mutableSDK);
 
     // Capture the arize-patched query, then wrap it to fix cache token reporting.
     // The arize instrumentation only reports input_tokens/output_tokens, missing
     // cache_read_input_tokens entirely — which makes Langfuse show wrong costs.
-    //
-    // Primary approach: set usage_details directly on the active span when a result
-    // message arrives. Falls back to a FIFO queue + span processor if getActiveSpan()
-    // is unavailable (e.g., OTEL context doesn't propagate through async generators).
-    const arizeQuery = mutableSDK.query;
+    const arizeQuery = mutableSDK.query as typeof originalQuery;
     activeQuery = async function* patchedQuery(
       params: Parameters<typeof originalQuery>[0],
     ): AsyncGenerator<SDKMessage, void> {
@@ -123,7 +139,7 @@ export function initTracing(config: ResolvedConfig): Tracer {
             cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
             cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
           };
-          const activeSpan = otelApi.trace.getActiveSpan?.();
+          const activeSpan = deps.otelApi.trace.getActiveSpan?.();
           if (activeSpan) {
             activeSpan.setAttributes({ "langfuse.observation.usage_details": JSON.stringify(data) });
           }
@@ -132,14 +148,14 @@ export function initTracing(config: ResolvedConfig): Tracer {
       }
     } as typeof originalQuery;
 
-    const sdk = new NodeSDK({
+    const sdk = new deps.NodeSDK({
       spanProcessors: [
-        new LangfuseSpanProcessor({
+        new deps.LangfuseSpanProcessor({
           timeout: 15,
           flushAt: 10,
           flushInterval: 15,
           shouldExportSpan: ({ otelSpan }: { otelSpan: { instrumentationScope: { name: string } } }) =>
-            isDefaultExportSpan(otelSpan) ||
+            deps.isDefaultExportSpan(otelSpan) ||
             otelSpan.instrumentationScope.name === "@arizeai/openinference-instrumentation-claude-agent-sdk" ||
             otelSpan.instrumentationScope.name === "adhd-harness",
         }),
@@ -153,11 +169,11 @@ export function initTracing(config: ResolvedConfig): Tracer {
     log("HARNESS", `Langfuse tracing: enabled (${config.langfuseBaseUrl ?? "https://cloud.langfuse.com"})`);
 
     // Get OTEL tracer for structural spans
-    const otelTracer = otelApi.trace.getTracer("adhd-harness");
+    const otelTracer = deps.otelApi.trace.getTracer("adhd-harness");
 
     return {
       startSpan(name: string, metadata?: Record<string, unknown>): Span {
-        return createOtelSpan(otelTracer, otelApi, propagateAttributes, name, metadata, undefined, name);
+        return createOtelSpan(otelTracer, deps.otelApi, deps.propagateAttributes, name, metadata, undefined, name);
       },
       async flush(): Promise<void> {
         try {
@@ -166,7 +182,7 @@ export function initTracing(config: ResolvedConfig): Tracer {
             otelSdk = null;
           }
         } catch (err) {
-          console.warn(`[TRACING] Failed to flush: ${err}`);
+          logDebug("TRACING", `Failed to flush: ${err}`);
         }
       },
     };
