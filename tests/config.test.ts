@@ -568,3 +568,125 @@ describe("resolveConfig", () => {
     }
   });
 });
+
+// --- Phase 1 Deepen flags (consolidated from shared/config.test.ts) ---
+
+const baseCli1d = {
+  greenfield: false,
+  resume: false,
+  verbose: false,
+  quiet: false,
+  noInteractive: false,
+  debug: false,
+  dryRun: false,
+  noBdd: false,
+  noTdd: false,
+  noDocs: false,
+};
+
+describe("parseCli Phase 1 Deepen flags", () => {
+  test("parses --lint-gate flag", () => {
+    const cli = parseCli(["--lint-gate", "test"]);
+    expect(cli.lintGate).toBe(true);
+  });
+
+  test("--lint-gate defaults to false", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.lintGate).toBe(false);
+  });
+
+  test("parses --sprint N flag", () => {
+    const cli = parseCli(["--sprint", "3"]);
+    expect(cli.sprint).toBe(3);
+  });
+
+  test("--sprint defaults to undefined", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.sprint).toBeUndefined();
+  });
+
+  test("parses --refine-spec flag", () => {
+    const cli = parseCli(["--refine-spec", "test"]);
+    expect(cli.refineSpec).toBe(true);
+  });
+
+  test("--refine-spec defaults to false", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.refineSpec).toBe(false);
+  });
+
+  test("parses --no-bdd flag", () => {
+    const cli = parseCli(["--no-bdd", "test"]);
+    expect(cli.noBdd).toBe(true);
+  });
+
+  test("--no-bdd defaults to false", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.noBdd).toBe(false);
+  });
+});
+
+describe("resolveConfig --sprint and --resume mutual exclusion", () => {
+  test("throws exact error message when both --sprint and --resume are set", () => {
+    expect(() => resolveConfig({ ...baseCli1d, sprint: 3, resume: true })).toThrow(
+      "Cannot use --sprint and --resume together.",
+    );
+  });
+
+  test("--sprint alone works", () => {
+    const config = resolveConfig({ ...baseCli1d, sprint: 3 });
+    expect(config.sprint).toBe(3);
+  });
+
+  test("--resume alone works", () => {
+    const config = resolveConfig({ ...baseCli1d, resume: true });
+    expect(config.isResume).toBe(true);
+  });
+});
+
+describe("resolveConfig --sprint validation", () => {
+  test("--sprint without prompt works (sprint mode doesn't require prompt)", () => {
+    const config = resolveConfig({ ...baseCli1d, sprint: 1 });
+    expect(config.sprint).toBe(1);
+    expect(config.userPrompt).toBe("");
+  });
+
+  test("rejects --sprint 0 as invalid", () => {
+    expect(() => resolveConfig({ ...baseCli1d, sprint: 0 })).toThrow("Invalid --sprint value");
+  });
+
+  test("rejects --sprint -1 as invalid", () => {
+    expect(() => resolveConfig({ ...baseCli1d, sprint: -1 })).toThrow("Invalid --sprint value");
+  });
+
+  test("rejects non-integer sprint (NaN)", () => {
+    expect(() => resolveConfig({ ...baseCli1d, sprint: NaN })).toThrow("Invalid --sprint value");
+  });
+
+  test("accepts --sprint 1 (minimum valid)", () => {
+    const config = resolveConfig({ ...baseCli1d, sprint: 1 });
+    expect(config.sprint).toBe(1);
+  });
+});
+
+describe("resolveConfig Phase 1 Deepen flags resolution", () => {
+  test("resolves lintGate from CLI", () => {
+    const config = resolveConfig({ ...baseCli1d, prompt: "test", lintGate: true });
+    expect(config.lintGate).toBe(true);
+  });
+
+  test("lintGate defaults to false", () => {
+    const config = resolveConfig({ ...baseCli1d, prompt: "test" });
+    expect(config.lintGate).toBe(false);
+  });
+
+  test("resolves noBdd from CLI", () => {
+    const config = resolveConfig({ ...baseCli1d, prompt: "test", noBdd: true });
+    expect(config.noBdd).toBe(true);
+  });
+
+  test("resolves refineSpec from CLI", () => {
+    const config = resolveConfig({ ...baseCli1d, prompt: "test", refineSpec: true });
+    expect(config.refineSpec).toBe(true);
+  });
+});

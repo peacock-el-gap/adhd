@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseContract } from "../claude-harness/harness.ts";
+import { parseContract } from "../claude-harness/contract.ts";
 
 describe("parseContract", () => {
   const validContract = {

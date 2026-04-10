@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isTransientError } from "../claude-harness/harness.ts";
+import { isTransientError } from "../claude-harness/error-handling.ts";
 
 describe("isTransientError", () => {
   // --- Should be transient (retryable) ---

@@ -7,7 +7,7 @@ import type { AgentSkills } from "../shared/skills.ts";
 import type { Options } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
-import { extractBalancedJson } from "./harness.ts";
+import { extractBalancedJson } from "./contract.ts";
 
 export async function runEvaluator(
   workDir: string,

@@ -48,3 +48,38 @@ describe("initTracing — with Langfuse keys", () => {
     expect(typeof tracer.flush).toBe("function");
   });
 });
+
+// --- Noop tracer span methods (consolidated from shared/tracing.test.ts) ---
+
+describe("noop tracer span methods", () => {
+  test("startSpan returns a span with expected methods", () => {
+    const tracer = initTracing(baseConfig);
+    const span = tracer.startSpan("test-span");
+    expect(typeof span.run).toBe("function");
+    expect(typeof span.startChild).toBe("function");
+    expect(typeof span.end).toBe("function");
+  });
+
+  test("span.run executes the function normally", async () => {
+    const tracer = initTracing(baseConfig);
+    const span = tracer.startSpan("test");
+    const result = await span.run(async () => 42);
+    expect(result).toBe(42);
+  });
+
+  test("span.end does not throw", () => {
+    const tracer = initTracing(baseConfig);
+    const span = tracer.startSpan("test");
+    expect(() => span.end()).not.toThrow();
+    expect(() => span.end({ key: "value" })).not.toThrow();
+  });
+
+  test("span startChild returns another working span", async () => {
+    const tracer = initTracing(baseConfig);
+    const parent = tracer.startSpan("parent");
+    const child = parent.startChild("child");
+    const result = await child.run(async () => "nested");
+    expect(result).toBe("nested");
+    child.end();
+  });
+});

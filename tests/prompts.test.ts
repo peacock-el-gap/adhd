@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { buildPlannerPrompt, buildGeneratorPrompt, buildEvaluatorPrompt } from "../shared/prompts.ts";
+import {
+  buildPlannerPrompt,
+  buildGeneratorPrompt,
+  buildEvaluatorPrompt,
+  CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
+  CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
+} from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 
 const baseCtx = {
@@ -218,5 +224,18 @@ describe("buildEvaluatorPrompt — skills injection", () => {
   test("appends reference manifest", () => {
     const prompt = buildEvaluatorPrompt({ ...baseCtx, skills: referenceSkills });
     expect(prompt).toContain("## Reference Materials");
+  });
+});
+
+// --- Contract negotiation prompts (consolidated from shared/prompts.test.ts) ---
+
+describe("contract negotiation prompts", () => {
+  test("CONTRACT_NEGOTIATION_GENERATOR_PROMPT contains type classification instructions", () => {
+    expect(CONTRACT_NEGOTIATION_GENERATOR_PROMPT).toContain("behavioral");
+    expect(CONTRACT_NEGOTIATION_GENERATOR_PROMPT).toContain("implementation");
+  });
+
+  test("CONTRACT_NEGOTIATION_EVALUATOR_PROMPT contains quality criteria check", () => {
+    expect(CONTRACT_NEGOTIATION_EVALUATOR_PROMPT).toContain("quality");
   });
 });

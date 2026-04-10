@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { shouldLog } from "../shared/logger.ts";
+import { shouldLog, summarize } from "../shared/logger.ts";
 
 describe("shouldLog", () => {
   test("quiet messages shown at all levels", () => {
@@ -28,5 +28,27 @@ describe("shouldLog", () => {
     expect(shouldLog("debug", "normal")).toBe(false);
     expect(shouldLog("debug", "verbose")).toBe(false);
     expect(shouldLog("debug", "debug")).toBe(true);
+  });
+});
+
+describe("summarize", () => {
+  test("replaces newlines with escaped newlines", () => {
+    expect(summarize("line1\nline2\nline3")).toBe("line1\\nline2\\nline3");
+  });
+
+  test("truncates to maxLen", () => {
+    const long = "a".repeat(300);
+    const result = summarize(long, 100);
+    expect(result.length).toBe(100);
+  });
+
+  test("uses default maxLen of 200", () => {
+    const long = "a".repeat(300);
+    const result = summarize(long);
+    expect(result.length).toBe(200);
+  });
+
+  test("returns short strings unchanged", () => {
+    expect(summarize("hello")).toBe("hello");
   });
 });

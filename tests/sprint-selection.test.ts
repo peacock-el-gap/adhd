@@ -168,7 +168,7 @@ describe("sprint selection skips planning phase", () => {
     const content = readFileSync("claude-harness/harness.ts", "utf-8");
     // Find the sprintSelectionHarness function and verify it doesn't call runPlanner
     const fnStart = content.indexOf("async function sprintSelectionHarness(");
-    const fnEnd = content.indexOf("\nasync function revertToCheckpoint(");
+    const fnEnd = content.indexOf("\nasync function runSprintLoop(");
     expect(fnStart).toBeGreaterThan(-1);
     expect(fnEnd).toBeGreaterThan(fnStart);
     const fnBody = content.slice(fnStart, fnEnd);
@@ -186,7 +186,7 @@ describe("sprint selection runs only target sprint", () => {
   test("runSprintLoop called with startSprint=N, endSprint=N", () => {
     const content = readFileSync("claude-harness/harness.ts", "utf-8");
     const fnStart = content.indexOf("async function sprintSelectionHarness(");
-    const fnEnd = content.indexOf("\nasync function revertToCheckpoint(");
+    const fnEnd = content.indexOf("\nasync function runSprintLoop(");
     const fnBody = content.slice(fnStart, fnEnd);
     // The sprint loop is called with sprintN as both start and end
     expect(fnBody).toContain("sprintN,\n      sprintN,");
@@ -231,7 +231,7 @@ describe("workspace not cleaned in sprint mode", () => {
   test("sprintSelectionHarness calls initWorkspace with resume: true", () => {
     const content = readFileSync("claude-harness/harness.ts", "utf-8");
     const fnStart = content.indexOf("async function sprintSelectionHarness(");
-    const fnEnd = content.indexOf("\nasync function revertToCheckpoint(");
+    const fnEnd = content.indexOf("\nasync function runSprintLoop(");
     const fnBody = content.slice(fnStart, fnEnd);
     expect(fnBody).toContain("resume: true");
   });
