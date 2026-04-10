@@ -1,12 +1,13 @@
 # Adversarial Development Harness for Delivery (ADHD)
 
-A three-agent harness that separates **planning**, **building**, and **evaluation** into distinct AI agents. The evaluator's job is to **break** what the generator builds -- creating adversarial tension that drives quality beyond what a single agent achieves.
+A four-agent harness that separates **planning**, **building**, **evaluation**, and **documentation** into distinct AI agents. The evaluator's job is to **break** what the generator builds -- creating adversarial tension that drives quality beyond what a single agent achieves.
 
 | Agent | Role | Analogy |
 |-------|------|---------|
 | **Planner** | Expands a short prompt into a full product spec with sprints | Product manager |
 | **Generator** | Builds one feature at a time, commits to git | Software engineer |
 | **Evaluator** | Actively tries to break what the generator built, scores ruthlessly | Adversarial QA |
+| **Documenter** | Generates project documentation after all sprints pass | Technical writer |
 
 Based on Anthropic's [Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps). Originally forked from [coleam00/adversarial-dev](https://github.com/coleam00/adversarial-dev) by Cole Medin -- the initial architecture, three-agent design, and adversarial evaluation loop originate from that project.
 
@@ -43,6 +44,7 @@ After `bun link`, you can run `adhd` from any directory -- it operates on the cu
 | [Build a new project from a prompt](#build-a-new-project) | `adhd --greenfield "Build a task manager"` |
 | [Build a new project from a spec file](#build-a-new-project) | `adhd --greenfield --file spec.md` |
 | [Resume after interruption](#resume-after-interruption) | `adhd --resume` |
+| [Re-run a specific sprint](#sprint-selection) | `adhd --sprint 3` |
 | [Preview the plan without building](#dry-run) | `adhd --dry-run "Add auth with JWT"` |
 | [Provide reference docs to the planner](#context-injection) | `adhd --context api-spec.yaml "Implement the API"` |
 | [Use a cheaper model](#configuration) | `adhd --model claude-sonnet-4-6 "Add auth"` |
@@ -50,6 +52,8 @@ After `bun link`, you can run `adhd` from any directory -- it operates on the cu
 | [Work on a dedicated branch](#configuration) | `adhd --branch feature/auth "Add auth"` |
 | [Run non-interactively](#configuration) | `adhd --no-interactive --file spec.md` |
 | [Skip all interactive gates](#configuration) | `adhd --gate-timeout 0 --file spec.md` |
+| [Enable lint hard gate](#static-analysis--lint-gate) | `adhd --lint-gate "Add auth"` |
+| [Enable spec refinement](#progressive-spec-refinement) | `adhd --refine-spec "Build a dashboard"` |
 
 All commands below assume you're in the project directory. Use `--project <path>` to target a different directory without cd-ing.
 
@@ -100,6 +104,19 @@ cd ~/my-app
 adhd --resume
 ```
 
+### Sprint Selection
+
+Re-run a specific sprint without running all previous sprints. Requires an existing spec in `.adhd/spec.md` (from a previous run or `--dry-run`):
+
+```bash
+# Re-run sprint 3 only
+adhd --sprint 3
+```
+
+If a contract for the target sprint already exists in `.adhd/contracts/`, it is reused. Otherwise, contract negotiation runs fresh. The harness warns if no checkpoint exists for the previous sprint but proceeds anyway.
+
+Cannot be combined with `--resume`.
+
 ### Dry Run
 
 Preview the planner's spec without building anything. Useful for refining your prompt before committing to a full run:
@@ -119,6 +136,26 @@ adhd --context api-spec.yaml --context design.md "Implement the REST API"
 ```
 
 The `--context` flag is repeatable. Each file's contents are injected into the planner's prompt as reference material. This is useful when the planner needs domain knowledge that isn't in your codebase.
+
+### Static Analysis / Lint Gate
+
+By default, the harness automatically detects `lint`, `typecheck`, and `type-check` scripts in your project's `package.json` and runs them after the generator completes. Results are injected into the evaluator's context as supplementary signal (soft gate -- does not consume retry attempts).
+
+Enable hard gate mode to make lint/typecheck failures skip the evaluator and count as failed attempts:
+
+```bash
+adhd --lint-gate "Add auth with JWT"
+```
+
+### Progressive Spec Refinement
+
+After each passing sprint, have the planner re-evaluate and adjust the spec for remaining sprints based on what was actually built:
+
+```bash
+adhd --refine-spec "Build a dashboard with analytics"
+```
+
+In interactive mode, you review a diff of proposed changes and can accept or reject them. Completed sprint sections are frozen and cannot be modified. Combined with `--no-interactive`, refinements are auto-accepted (but the diff is still logged).
 
 ## What to Expect
 
@@ -150,21 +187,29 @@ The `--context` flag is repeatable. Each file's contents are injected into the p
 
 2. **Spec Approval** -- You review the spec with options to approve, edit in your editor (`--editor`), revise with feedback (re-runs the planner), or abort. Timeout defaults to abort (safe). Skipped in non-interactive mode.
 
-3. **Contract Negotiation** -- For each sprint, the generator and evaluator negotiate a JSON contract defining exactly what "done" means. The evaluator adds edge cases and tightens criteria. You get a preview before building starts.
+3. **Contract Negotiation** -- For each sprint, the generator and evaluator negotiate a JSON contract defining exactly what "done" means. Each criterion is classified as `"behavioral"` (functional behavior) or `"implementation"` (code quality). The evaluator adds edge cases and tightens criteria. You get a preview before building starts.
 
 4. **Build** -- The generator implements features one at a time, making git commits after each. After the generator finishes, the harness verifies that all changes were committed. If not, it resumes the generator session to request a meaningful commit message. As a last resort, the harness auto-commits with a descriptive fallback message referencing the sprint and features.
 
-5. **Evaluation** -- The evaluator reads the code, runs the application, and tries to break it. Each criterion is scored 1-10. All must meet the threshold (default: 7). If the evaluator fails a sprint, you can override the score and force a PASS (useful for false negatives).
+5. **Static Analysis** -- If the project has `lint`/`typecheck` scripts, they run automatically and results are injected into the evaluator's context. With `--lint-gate`, failures skip evaluation and count as a retry.
 
-6. **Retry** -- If any criterion fails, detailed feedback goes back to the generator. This cycles up to `maxRetries` times per sprint.
+6. **Evaluation** -- The evaluator reads the code, runs the application, and tries to break it. Each criterion is scored 1-10. All must meet the threshold (default: 7). On retries, a git diff of what changed is included for sharper feedback. If the evaluator fails a sprint, you can override the score and force a PASS (useful for false negatives).
 
-7. **Checkpoint & Steering** -- After each passing sprint, progress is saved. Between sprints you can continue, skip a sprint, edit the spec, or abort. Safe to interrupt and resume.
+7. **Regression Check** -- Behavioral criteria from passing sprints accumulate in `.adhd/regression.json`. On subsequent sprints, the evaluator checks both new and accumulated criteria, catching cross-sprint regressions. Disable with `--no-bdd`.
+
+8. **Retry** -- If any criterion fails, detailed feedback goes back to the generator. This cycles up to `maxRetries` times per sprint.
+
+9. **Spec Refinement** -- With `--refine-spec`, the planner re-evaluates remaining sprints after each pass, adjusting scope based on what was actually built. Completed sprints are frozen.
+
+10. **Checkpoint & Steering** -- After each passing sprint, progress is saved. Between sprints you can continue, skip a sprint, edit the spec, or abort. Safe to interrupt and resume.
+
+11. **Documentation** -- After all sprints pass, the documenter agent generates project documentation. Disable with `--no-docs`.
 
 ## Built-In Methodologies: BDD & TDD
 
 By default, the harness bakes **BDD** and **TDD** into the agent prompts:
 
-- **BDD (Behavior-Driven Development)** -- The planner writes acceptance scenarios in Given/When/Then format. These flow into sprint contracts as testable criteria. The evaluator verifies that tests exist for each scenario and that they pass.
+- **BDD (Behavior-Driven Development)** -- The planner writes acceptance scenarios in Given/When/Then format. These flow into sprint contracts as testable criteria. The evaluator verifies that tests exist for each scenario and that they pass. Behavioral criteria accumulate across sprints for regression detection.
 
 - **TDD (Test-Driven Development)** -- The generator receives Red-Green-Refactor instructions: write failing tests first, implement until tests pass, then refactor. Enforcement is pragmatic -- the evaluator checks that tests exist and are meaningful, not that they were written in a specific order.
 
@@ -232,6 +277,7 @@ your-project/
 │   ├── .env                   # Optional: config overrides
 │   ├── progress.json          # Run state + checkpoint data
 │   ├── spec.md                # Product spec from the planner
+│   ├── regression.json        # Accumulated behavioral criteria (cross-sprint)
 │   ├── usage.json             # Cumulative cost/token tracking across sessions
 │   ├── contracts/             # Sprint contract JSON files
 │   ├── feedback/              # Evaluator feedback per attempt
@@ -241,6 +287,8 @@ your-project/
 
 **Conversation logs** are detailed markdown records of everything each agent said and did. Always written regardless of terminal log level. Useful for debugging or understanding agent decisions.
 
+**regression.json** persists across runs -- it is not cleaned by fresh runs or `--resume`. It tracks accumulated behavioral criteria from all passing sprints, enabling cross-sprint regression detection.
+
 ## Configuration
 
 Settings via CLI flags, environment variables, or `.adhd/.env` in the project directory.
@@ -248,7 +296,7 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 
 | Setting | CLI Flag | Env Var | Default |
 |---------|----------|---------|---------|
-| User prompt | positional arg | -- | -- (required, except `--resume`) |
+| User prompt | positional arg | -- | -- (required, except `--resume`/`--sprint`) |
 | Prompt file | `--file`, `-f` `<path>` | -- | -- |
 | Project directory | `--project <path>` | -- | current directory |
 | Greenfield mode | `--greenfield` | -- | off (existing project) |
@@ -256,6 +304,7 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Planner model | `--model-planner <name>` | `MODEL_PLANNER` | same as `--model` |
 | Generator model | `--model-generator <name>` | `MODEL_GENERATOR` | same as `--model` |
 | Evaluator model | `--model-evaluator <name>` | `MODEL_EVALUATOR` | same as `--model` |
+| Documenter model | `--model-documenter <name>` | `MODEL_DOCUMENTER` | same as `--model` |
 | Max sprints | `--max-sprints <n>` | `MAX_SPRINTS` | `10` |
 | Max retries/sprint | `--max-retries <n>` | `MAX_RETRIES` | `3` |
 | Pass threshold | `--threshold <n>` | `PASS_THRESHOLD` | `7` |
@@ -263,6 +312,7 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Timezone display | -- | `TZ_DISPLAY` | system local |
 | Non-interactive | `--no-interactive` | -- | interactive |
 | Resume mode | `--resume` | -- | off |
+| Sprint selection | `--sprint <n>` | -- | off (run all sprints) |
 | Dry-run mode | `--dry-run` | -- | off |
 | Context files | `--context <file>` (repeatable) | -- | none |
 | Branch creation | `--branch <name>` | -- | off (stay on current branch) |
@@ -270,6 +320,9 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Gate timeout | `--gate-timeout <sec>` | `ADHD_GATE_TIMEOUT` | varies by gate (0 = skip all) |
 | Disable BDD | `--no-bdd` | -- | BDD enabled |
 | Disable TDD | `--no-tdd` | -- | TDD enabled |
+| Skip docs | `--no-docs` | `ADHD_NO_DOCS` | docs enabled |
+| Lint hard gate | `--lint-gate` | -- | off (soft gate) |
+| Spec refinement | `--refine-spec` | -- | off |
 | Source directory | `--source-dir <dir>` | `SOURCE_DIR` | `src` |
 | Test directory | `--test-dir <dir>` | `TEST_DIR` | `tests` |
 | Langfuse tracing | -- | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` | disabled |
@@ -302,11 +355,11 @@ LANGFUSE_SECRET_KEY=sk-lf-...
 
 ### Langfuse Tracing
 
-[Langfuse](https://langfuse.com) integration traces every harness run — planner calls, generator sprints, evaluator scores, and tool usage. Zero overhead when disabled.
+[Langfuse](https://langfuse.com) integration traces every harness run -- planner calls, generator sprints, evaluator scores, and tool usage. Zero overhead when disabled.
 
 **Setup:**
 
-1. Create a Langfuse account (cloud or self-hosted) and generate API keys from **Settings → API Keys**.
+1. Create a Langfuse account (cloud or self-hosted) and generate API keys from **Settings > API Keys**.
 2. Add the keys to your project's `.adhd/.env`:
    ```env
    LANGFUSE_PUBLIC_KEY=pk-lf-...
@@ -314,6 +367,82 @@ LANGFUSE_SECRET_KEY=sk-lf-...
    ```
    For self-hosted instances, also set `LANGFUSE_BASE_URL` (defaults to `https://cloud.langfuse.com`).
 3. Run with `--debug` to confirm: you should see `Langfuse tracing: enabled` in the startup output.
+
+## Architecture
+
+```
+adhd/
+├── claude-harness/        # Main harness (Claude Agent SDK)
+│   ├── index.ts           # CLI entry point
+│   ├── harness.ts         # Orchestration loop (sprint loop, retry, gates)
+│   ├── planner.ts         # Planner agent invocation
+│   ├── generator.ts       # Generator agent invocation
+│   ├── evaluator.ts       # Evaluator agent invocation
+│   └── documenter.ts      # Documenter agent invocation
+├── shared/                # Shared infrastructure
+│   ├── types.ts           # Core type definitions (HarnessConfig, SprintContract, etc.)
+│   ├── config.ts          # CLI parsing, config resolution, validation
+│   ├── prompts.ts         # System prompts for all agents + negotiation prompts
+│   ├── files.ts           # .adhd/ file I/O (contracts, feedback, progress, spec)
+│   ├── skills.ts          # Skills resolution, routing, and injection
+│   ├── regression.ts      # BDD regression accumulation and injection
+│   ├── diff.ts            # Git diff computation for retry-aware evaluation
+│   ├── static-analysis.ts # Lint/typecheck detection and execution
+│   ├── refinement.ts      # Progressive spec refinement logic
+│   ├── logger.ts          # Terminal output with log levels and ANSI colors
+│   ├── interaction.ts     # Interactive gate prompts (approve/reject/edit)
+│   ├── usage.ts           # Per-stage cost and token tracking
+│   ├── tracing.ts         # Langfuse OTEL tracing integration
+│   ├── conversation-logger.ts  # Markdown conversation log writer
+│   ├── doc-validation.ts  # Documentation validation utilities
+│   ├── artifact-digest.ts # Build artifact digest generation
+│   └── skills/            # Built-in harness skills (YAML + markdown)
+├── codex-harness/         # Alternative harness (OpenAI Codex SDK, frozen)
+├── tests/                 # Test files (Bun test runner)
+├── example-prompts/       # Sample spec files for reference
+├── package.json           # Dependencies and scripts
+├── tsconfig.json          # TypeScript config (strict mode)
+└── biome.json             # Linter/formatter config
+```
+
+The harness follows a GAN-inspired architecture where the generator and evaluator operate in adversarial tension. The generator builds; the evaluator tries to break it. Failed evaluations feed detailed feedback back to the generator, creating an iterative improvement loop.
+
+Key data flow:
+- **Spec** (`.adhd/spec.md`) flows from planner to all agents
+- **Contracts** (`.adhd/contracts/sprint-N.json`) are negotiated between generator and evaluator
+- **Feedback** (`.adhd/feedback/`) flows from evaluator back to generator on retries
+- **Regression criteria** (`.adhd/regression.json`) accumulate from passing sprints and feed into future evaluations
+- **Progress** (`.adhd/progress.json`) tracks run state for checkpoint/resume
+
+## Features
+
+### Core Loop
+- Sprint-based project decomposition with contract negotiation
+- Adversarial evaluation with per-criterion scoring
+- Retry loop with detailed feedback
+- Checkpoint/resume across interruptions
+- Interactive gates at key decision points
+
+### Evaluation Quality (Phase 1 Deepen)
+- **BDD Regression Accumulation** -- Behavioral criteria from passing sprints accumulate and are re-checked on subsequent sprints, catching cross-sprint regressions
+- **Static Analysis Soft Gate** -- Auto-detects and runs lint/typecheck, injecting results into evaluator context
+- **Lint Hard Gate** (`--lint-gate`) -- Lint/typecheck failures skip evaluation and count as failed attempts
+- **Diff-Aware Retries** -- On retry attempts, the evaluator sees a git diff of what changed, enabling sharper feedback
+- **Quality Criteria in Contracts** -- Contracts include code quality criteria (naming, duplication, error handling) alongside functional criteria
+
+### Developer Experience
+- **Sprint Selection** (`--sprint N`) -- Re-run a specific sprint without running all previous sprints
+- **Progressive Spec Refinement** (`--refine-spec`) -- Spec adapts after each sprint based on what was actually built
+- **Dry Run** (`--dry-run`) -- Preview the plan without building
+- **Context Injection** (`--context`) -- Provide reference docs to the planner
+- **Per-Agent Models** -- Use different models for planner, generator, evaluator, and documenter
+- **Branch Creation** (`--branch`) -- Auto-create a git branch before the sprint loop
+
+### Observability
+- Per-stage cost and token tracking (`.adhd/usage.json`)
+- Langfuse OTEL tracing integration
+- Conversation logs for every agent interaction
+- Configurable terminal log levels
 
 ## Example Prompts
 
@@ -330,12 +459,24 @@ The Codex harness uses greenfield-only mode, building into `workspace/codex/app/
 bun run start:codex -- "Build a task manager with REST API and dashboard"
 ```
 
-## Architecture
+## Development
 
-For design rationale, the GAN connection, and project structure, see [docs/INTERNALS.md](docs/INTERNALS.md). For the enhancement roadmap and opportunity analysis, see [docs/ROADMAP.md](docs/ROADMAP.md).
+```bash
+# Run tests
+bun test
+
+# Type check
+bun run typecheck
+
+# Lint
+bun run lint
+
+# Lint + fix
+bun run lint:fix
+```
 
 ## License & Attribution
 
 MIT License. See [LICENSE](LICENSE).
 
-This project was originally forked from [coleam00/adversarial-dev](https://github.com/coleam00/adversarial-dev) by Cole Medin. The initial three-agent adversarial architecture -- planner, generator, and evaluator -- comes from that work. This fork has since been substantially rewritten (shared config layer, contract negotiation, checkpoint/resume, interactive gates, Langfuse tracing, cost tracking, and more), but the core concept and original codebase are Cole's.
+This project was originally forked from [coleam00/adversarial-dev](https://github.com/coleam00/adversarial-dev) by Cole Medin. The initial three-agent adversarial architecture -- planner, generator, and evaluator -- comes from that work. This fork has since been substantially rewritten (shared config layer, contract negotiation, checkpoint/resume, interactive gates, Langfuse tracing, cost tracking, regression detection, spec refinement, and more), but the core concept and original codebase are Cole's.
