@@ -7,6 +7,10 @@ const MAX_DIFF_CHARS = 8000;
  * Returns undefined if the diff should be skipped (attempt 0, no beforeSha, git failure, etc.).
  * Returns a formatted "## Changes Since Last Attempt" section string for injection into
  * the Evaluator's supplementaryContext.
+ * @param workDir - The project root directory (must be a git repository)
+ * @param beforeSha - The git SHA of the previous attempt's commit
+ * @param attempt - The current attempt number (0-based; skips diff on attempt 0)
+ * @returns Formatted diff section string, or undefined if diff should be skipped
  */
 export function computeDiffSection(workDir: string, beforeSha: string, attempt: number): string | undefined {
   // Skip on first attempt

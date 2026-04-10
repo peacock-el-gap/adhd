@@ -3,7 +3,11 @@ import { join } from "node:path";
 import { harnessDir } from "./files.ts";
 import type { RegressionCriterion, SprintContract } from "./types.ts";
 
-/** Path to the regression.json file within .adhd/ */
+/**
+ * Path to the regression.json file within .adhd/
+ * @param workDir - The project root directory
+ * @returns Absolute path to .adhd/regression.json
+ */
 export function regressionPath(workDir: string): string {
   return join(harnessDir(workDir), "regression.json");
 }
@@ -13,6 +17,8 @@ export function regressionPath(workDir: string): string {
  * Returns an empty array if the file does not exist.
  * Logs a warning and returns an empty array if the file exists but contains
  * invalid JSON or an unexpected schema (graceful degradation).
+ * @param workDir - The project root directory
+ * @returns Array of accumulated regression criteria, or empty array on failure
  */
 export async function readRegressionCriteria(workDir: string): Promise<RegressionCriterion[]> {
   const filePath = regressionPath(workDir);
@@ -47,6 +53,8 @@ export async function readRegressionCriteria(workDir: string): Promise<Regressio
  * After a sprint passes, accumulate its behavioral criteria into regression.json.
  * Criteria with type !== "behavioral" are excluded.
  * Deduplicates by name — newer criteria (higher sprintNumber) replace older ones.
+ * @param workDir - The project root directory
+ * @param contract - The sprint contract whose behavioral criteria should be accumulated
  */
 export async function accumulateRegressionCriteria(workDir: string, contract: SprintContract): Promise<void> {
   const behavioralCriteria = contract.criteria.filter((c) => c.type === "behavioral");
@@ -77,6 +85,8 @@ export async function accumulateRegressionCriteria(workDir: string, contract: Sp
 /**
  * Build a "## Regression Criteria" section string for injection into the Evaluator prompt.
  * Returns an empty string if no regression criteria exist.
+ * @param criteria - Array of regression criteria to format
+ * @returns Formatted markdown section string, or empty string if no criteria
  */
 export function buildRegressionSection(criteria: RegressionCriterion[]): string {
   if (criteria.length === 0) return "";

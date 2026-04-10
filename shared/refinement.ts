@@ -8,6 +8,9 @@
 /**
  * Extract a specific sprint section from a spec.
  * Returns the content of "## Sprint N" through to the next "## Sprint" or end of string.
+ * @param spec - The full spec markdown content
+ * @param sprintNumber - The sprint number to extract (e.g. 1, 2, 3)
+ * @returns The sprint section content, or null if not found
  */
 export function extractSprintSection(spec: string, sprintNumber: number): string | null {
   const pattern = new RegExp(`(##\\s*Sprint\\s+${sprintNumber}\\b[^\\n]*\\n)([\\s\\S]*?)(?=##\\s*Sprint\\s+\\d|$)`);
@@ -19,6 +22,9 @@ export function extractSprintSection(spec: string, sprintNumber: number): string
 /**
  * Extract all completed sprint sections (sprints 1..completedSprint) from a spec.
  * Returns a map of sprint number -> section content.
+ * @param spec - The full spec markdown content
+ * @param completedSprint - The highest completed sprint number
+ * @returns Map of sprint number to section content for all completed sprints
  */
 export function extractCompletedSprintSections(spec: string, completedSprint: number): Map<number, string> {
   const sections = new Map<number, string>();
@@ -34,6 +40,9 @@ export function extractCompletedSprintSections(spec: string, completedSprint: nu
 /**
  * Freeze completed sprint sections in a proposed spec by replacing them
  * with the original sections. This ensures completed sprints cannot be modified.
+ * @param proposedSpec - The proposed revised spec content
+ * @param originalSections - Map of sprint number to original section content to preserve
+ * @returns The spec with completed sprint sections restored to their original content
  */
 export function freezeCompletedSprints(proposedSpec: string, originalSections: Map<number, string>): string {
   let result = proposedSpec;
@@ -48,6 +57,8 @@ export function freezeCompletedSprints(proposedSpec: string, originalSections: M
 
 /**
  * Count the number of sprint sections in a spec by matching ## Sprint N headings.
+ * @param spec - The full spec markdown content
+ * @returns The number of sprint sections found
  */
 export function countSprints(spec: string): number {
   const matches = spec.match(/##\s*Sprint\s+\d+/gi);
@@ -58,6 +69,9 @@ export function countSprints(spec: string): number {
  * Compute a line-level diff between two strings.
  * Returns lines prefixed with '+' for additions and '-' for removals.
  * Returns null if the strings are identical.
+ * @param oldSpec - The original spec content
+ * @param newSpec - The proposed new spec content
+ * @returns Diff string with +/- prefixed lines, or null if strings are identical
  */
 export function computeSpecDiff(oldSpec: string, newSpec: string): string | null {
   if (oldSpec === newSpec) return null;
@@ -143,6 +157,10 @@ export function computeSpecDiff(oldSpec: string, newSpec: string): string | null
 
 /**
  * Build the Planner re-invocation prompt for spec refinement.
+ * @param currentSpec - The current spec markdown content
+ * @param completedSprints - Array of completed sprint numbers
+ * @param remainingSprints - Array of remaining sprint numbers to be refined
+ * @returns Formatted prompt string for the Planner agent
  */
 export function buildRefinementPrompt(
   currentSpec: string,

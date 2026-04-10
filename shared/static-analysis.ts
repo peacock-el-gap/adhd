@@ -12,6 +12,8 @@ export interface StaticAnalysisCommand {
 /**
  * Detect lint/typecheck commands from a project's package.json scripts.
  * Returns an empty array if no package.json or no matching scripts.
+ * @param projectDir - The project directory containing package.json
+ * @returns Array of detected static analysis commands
  */
 export async function detectStaticAnalysisCommands(projectDir: string): Promise<StaticAnalysisCommand[]> {
   try {
@@ -34,6 +36,8 @@ export async function detectStaticAnalysisCommands(projectDir: string): Promise<
 /**
  * Truncate static analysis output to MAX_OUTPUT_CHARS with a warning message.
  * If the output is within the limit, it is returned unchanged.
+ * @param output - The raw static analysis output string
+ * @returns The original output if within limits, or truncated output with a warning appended
  */
 export function truncateStaticAnalysisOutput(output: string): string {
   if (output.length <= MAX_OUTPUT_CHARS) return output;

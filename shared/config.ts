@@ -52,7 +52,10 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--refine-spec": "Enable progressive spec refinement after passing sprints",
 };
 
-/** Print CLI usage/help text to stdout */
+/**
+ * Print CLI usage/help text to stdout.
+ * Lists all available flags with their descriptions.
+ */
 export function printHelp(): void {
   console.log("ADHD Harness — GAN-inspired adversarial coding tool\n");
   console.log("Usage: bun run claude-harness/index.ts [options] [prompt]\n");
@@ -109,6 +112,12 @@ interface ParsedCli {
   help?: boolean;
 }
 
+/**
+ * Parse CLI arguments into a structured ParsedCli object.
+ * Handles all flags, options, and positional arguments for the ADHD harness.
+ * @param argv - Array of CLI argument strings (defaults to process.argv.slice(2))
+ * @returns Parsed CLI options and positional arguments
+ */
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -203,6 +212,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
 /**
  * Load .adhd/.env from the project directory into process.env.
  * Only sets vars that aren't already set (preserving real env > .env precedence).
+ * @param projectDir - The project root directory containing .adhd/.env
  */
 export function loadHarnessEnv(projectDir: string): void {
   const envPath = join(projectDir, ".adhd", ".env");
@@ -233,6 +243,8 @@ export function loadHarnessEnv(projectDir: string): void {
  *
  * Precedence: CLI flag > env var > .adhd/.env > default
  * (loadHarnessEnv must be called before this to populate process.env from .env file)
+ * @param cli - Parsed CLI arguments from parseCli()
+ * @returns Fully resolved and validated HarnessConfig
  */
 export function resolveConfig(cli: ParsedCli): HarnessConfig {
   // Resolve project directory
@@ -371,6 +383,12 @@ function isTruthy(val: string | undefined): boolean {
   return ["1", "true", "yes"].includes(val.toLowerCase());
 }
 
+/**
+ * Validate a HarnessConfig object, throwing on invalid values.
+ * Checks that threshold, maxSprints, and maxRetries are within valid ranges.
+ * @param config - The harness configuration to validate
+ * @throws Error if any configuration value is out of range
+ */
 export function validateConfig(config: HarnessConfig): void {
   if (config.passThreshold < 1 || config.passThreshold > 10) {
     throw new Error(`Invalid threshold: ${config.passThreshold}. Must be between 1 and 10.`);
