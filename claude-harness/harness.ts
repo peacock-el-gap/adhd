@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile as readFileRaw } from "node:fs/promises";
 import { join } from "node:path";
+import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { computeDiffSection } from "../shared/diff.ts";
@@ -18,7 +19,7 @@ import {
   writeSpec,
 } from "../shared/files.ts";
 import { promptGate, promptGateWithText } from "../shared/interaction.ts";
-import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog, summarize } from "../shared/logger.ts";
+import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog } from "../shared/logger.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
 import {
   buildRefinementPrompt,
@@ -28,10 +29,10 @@ import {
   freezeCompletedSprints,
 } from "../shared/refinement.ts";
 import { accumulateRegressionCriteria, buildRegressionSection, readRegressionCriteria } from "../shared/regression.ts";
-import type { AgentSkills } from "../shared/skills.ts";
-import { resolveSkills, routeSkillsForAgent, warnIfOversized } from "../shared/skills.ts";
+import type { AgentSkills, AllAgentSkills } from "../shared/skills.ts";
+import { resolveAllAgentSkills } from "../shared/skills.ts";
 import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
-import { initTracing, type Options, query, type Span, type Tracer } from "../shared/tracing.ts";
+import { initTracing, type Options, type Span, type Tracer } from "../shared/tracing.ts";
 import type {
   CommitSource,
   EvalResult,
@@ -111,24 +112,10 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   logDebug("HARNESS", "Workspace initialized");
 
   // B4: Resolve skills from 3 scopes
-  const harnessSkillsDir = join(import.meta.dir, "../shared/skills");
-  const userSkillsDir = join(process.env.HOME ?? "", ".adhd", "skills");
-  const projectSkillsDir = join(config.workDir, ".adhd", "skills");
-  const resolvedSkills = resolveSkills(harnessSkillsDir, userSkillsDir, projectSkillsDir, {
+  const skills = resolveAllAgentSkills(config.workDir, join(import.meta.dir, "../shared"), {
     noBdd: config.noBdd,
     noTdd: config.noTdd,
   });
-  const plannerSkills = routeSkillsForAgent(resolvedSkills, "planner");
-  const generatorSkills = routeSkillsForAgent(resolvedSkills, "generator");
-  const evaluatorSkills = routeSkillsForAgent(resolvedSkills, "evaluator");
-  const documenterSkills = routeSkillsForAgent(resolvedSkills, "documenter");
-  warnIfOversized(plannerSkills, "planner");
-  warnIfOversized(generatorSkills, "generator");
-  warnIfOversized(evaluatorSkills, "evaluator");
-  warnIfOversized(documenterSkills, "documenter");
-  if (resolvedSkills.length > 0) {
-    log("HARNESS", `Skills loaded: ${resolvedSkills.length} (${resolvedSkills.map((s) => s.name).join(", ")})`);
-  }
 
   // Phase 1: Planning
   logDivider();
@@ -156,7 +143,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
     try {
       logDebug("HARNESS", "Calling runPlanner...");
       const plannerSpan = harnessSpan.startChild("planner", { model: config.modelPlanner ?? model });
-      const spec = await plannerSpan.run(() => runPlanner(config, undefined, usage, plannerSkills));
+      const spec = await plannerSpan.run(() => runPlanner(config, undefined, usage, skills.planner));
       plannerSpan.end();
       logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
       await writeSpec(config.workDir, spec);
@@ -165,7 +152,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
       // A3: Spec approval gate
       progress.status = "spec-review";
       await writeProgress(config.workDir, progress);
-      const approvedSpec = await specApprovalGate(config, spec, harnessSpan, usage, plannerSkills);
+      const approvedSpec = await specApprovalGate(config, spec, harnessSpan, usage, skills.planner);
       progress.specApproved = true;
       await writeProgress(config.workDir, progress);
 
@@ -203,12 +190,7 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
         startTime,
         harnessSpan,
         usage,
-        {
-          generator: generatorSkills,
-          evaluator: evaluatorSkills,
-          documenter: documenterSkills,
-          planner: plannerSkills,
-        },
+        skills,
       );
     } catch (err) {
       if (err instanceof UserAbortError) {
@@ -238,17 +220,10 @@ async function resumeHarness(
   await initWorkspace(config.workDir, { greenfield: isGreenfield, resume: true });
 
   // B4: Resolve skills (same as fresh path)
-  const harnessSkillsDir = join(import.meta.dir, "../shared/skills");
-  const userSkillsDir = join(process.env.HOME ?? "", ".adhd", "skills");
-  const projectSkillsDir = join(config.workDir, ".adhd", "skills");
-  const resolvedSkills = resolveSkills(harnessSkillsDir, userSkillsDir, projectSkillsDir, {
+  const skills = resolveAllAgentSkills(config.workDir, join(import.meta.dir, "../shared"), {
     noBdd: config.noBdd,
     noTdd: config.noTdd,
   });
-  const plannerSkills = routeSkillsForAgent(resolvedSkills, "planner");
-  const generatorSkills = routeSkillsForAgent(resolvedSkills, "generator");
-  const evaluatorSkills = routeSkillsForAgent(resolvedSkills, "evaluator");
-  const documenterSkills = routeSkillsForAgent(resolvedSkills, "documenter");
 
   let progress: HarnessProgress;
   try {
@@ -284,7 +259,7 @@ async function resumeHarness(
             gitDir,
             harnessSpan,
             usage,
-            documenterSkills,
+            skills.documenter,
             results,
             progress,
           );
@@ -314,7 +289,7 @@ async function resumeHarness(
   if (!progress.specApproved) {
     log("HARNESS", "Spec exists but was not approved. Showing review gate.");
     const reviewSpan = tracer.startSpan("spec-review");
-    spec = await reviewSpan.run(() => specApprovalGate(config, spec, reviewSpan, usage, plannerSkills));
+    spec = await reviewSpan.run(() => specApprovalGate(config, spec, reviewSpan, usage, skills.planner));
     reviewSpan.end();
     progress.specApproved = true;
     await writeProgress(config.workDir, progress);
@@ -365,7 +340,7 @@ async function resumeHarness(
       startTime,
       harnessSpan,
       usage,
-      { generator: generatorSkills, evaluator: evaluatorSkills, documenter: documenterSkills, planner: plannerSkills },
+      skills,
     ),
   );
   harnessSpan.end();
@@ -393,16 +368,10 @@ async function sprintSelectionHarness(
   await initWorkspace(config.workDir, { greenfield: isGreenfield, resume: true });
 
   // Resolve skills
-  const harnessSkillsDir = join(import.meta.dir, "../shared/skills");
-  const userSkillsDir = join(process.env.HOME ?? "", ".adhd", "skills");
-  const projectSkillsDir = join(config.workDir, ".adhd", "skills");
-  const resolvedSkills = resolveSkills(harnessSkillsDir, userSkillsDir, projectSkillsDir, {
+  const skills = resolveAllAgentSkills(config.workDir, join(import.meta.dir, "../shared"), {
     noBdd: config.noBdd,
     noTdd: config.noTdd,
   });
-  const generatorSkills = routeSkillsForAgent(resolvedSkills, "generator");
-  const evaluatorSkills = routeSkillsForAgent(resolvedSkills, "evaluator");
-  const documenterSkills = routeSkillsForAgent(resolvedSkills, "documenter");
 
   // Load spec
   const spec = await readSpec(config.workDir);
@@ -473,7 +442,7 @@ async function sprintSelectionHarness(
       startTime,
       harnessSpan,
       usage,
-      { generator: generatorSkills, evaluator: evaluatorSkills, documenter: documenterSkills },
+      skills,
     ),
   );
   harnessSpan.end();
@@ -520,7 +489,7 @@ async function runSprintLoop(
   startTime: number,
   parentSpan: Span,
   usage: UsageTracker,
-  skills?: { generator: AgentSkills; evaluator: AgentSkills; documenter: AgentSkills; planner?: AgentSkills },
+  skills?: AllAgentSkills,
 ): Promise<HarnessResult> {
   const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
   const logLevel = config.logLevel ?? "normal";
@@ -1452,45 +1421,12 @@ async function negotiateContract(
     startTime,
   });
 
-  let proposalText = "";
-  for await (const msg of query({ prompt: proposalPrompt, options: proposalOptions })) {
-    if (msg.type === "assistant") {
-      const message = msg as {
-        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
-      };
-      for (const block of message.message.content) {
-        if (block.type === "text" && block.text) {
-          proposalText += block.text;
-          convLog.logAssistantText(`**[Generator Proposal]**\n\n${block.text}`);
-        } else if (block.type === "tool_use" && block.name) {
-          convLog.logToolUse(block.name, block.input);
-        }
-      }
-    } else if (msg.type === "system") {
-      const sysMsg = msg as { message?: string; session_id?: string };
-      logDebug("HARNESS", `Contract proposal system: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
-    } else if (msg.type === "user") {
-      const userMsg = msg as {
-        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
-      };
-      for (const block of userMsg.message.content) {
-        if (block.type === "tool_result" && block.tool_use_id) {
-          logDebug("HARNESS", `Contract proposal tool result: ${summarize(block.content ?? "")}`);
-          convLog.logToolResult(block.content ?? "");
-        }
-      }
-    } else if (msg.type === "tool_use_summary") {
-      const summary = msg as { summary?: string };
-      convLog.logToolResult(summary.summary ?? "");
-    } else if (msg.type === "result") {
-      const result = msg as {
-        total_cost_usd?: number;
-        duration_ms?: number;
-        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
-      };
+  const proposalResult = await processAgentStream(proposalPrompt, proposalOptions, "HARNESS", "quiet", convLog, {
+    onResult(result) {
       usage?.recordStage(`sprint-${sprintNumber}-contract-proposal`, result);
-    }
-  }
+    },
+  });
+  const proposalText = proposalResult.response;
 
   // Evaluator reviews contract
   const reviewPrompt = `## Proposed Sprint Contract\n\n${proposalText}\n\nReview this contract.`;
@@ -1506,45 +1442,12 @@ async function negotiateContract(
     persistSession: false,
   };
 
-  let reviewText = "";
-  for await (const msg of query({ prompt: reviewPrompt, options: reviewOptions })) {
-    if (msg.type === "assistant") {
-      const message = msg as {
-        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
-      };
-      for (const block of message.message.content) {
-        if (block.type === "text" && block.text) {
-          reviewText += block.text;
-          convLog.logAssistantText(`**[Evaluator Review]**\n\n${block.text}`);
-        } else if (block.type === "tool_use" && block.name) {
-          convLog.logToolUse(block.name, block.input);
-        }
-      }
-    } else if (msg.type === "system") {
-      const sysMsg = msg as { message?: string; session_id?: string };
-      logDebug("HARNESS", `Contract review system: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
-    } else if (msg.type === "user") {
-      const userMsg = msg as {
-        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
-      };
-      for (const block of userMsg.message.content) {
-        if (block.type === "tool_result" && block.tool_use_id) {
-          logDebug("HARNESS", `Contract review tool result: ${summarize(block.content ?? "")}`);
-          convLog.logToolResult(block.content ?? "");
-        }
-      }
-    } else if (msg.type === "tool_use_summary") {
-      const summary = msg as { summary?: string };
-      convLog.logToolResult(summary.summary ?? "");
-    } else if (msg.type === "result") {
-      const result = msg as {
-        total_cost_usd?: number;
-        duration_ms?: number;
-        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
-      };
+  const reviewResult = await processAgentStream(reviewPrompt, reviewOptions, "HARNESS", "quiet", convLog, {
+    onResult(result) {
       usage?.recordStage(`sprint-${sprintNumber}-contract-review`, result);
-    }
-  }
+    },
+  });
+  const reviewText = reviewResult.response;
 
   const duration = Date.now() - startTime.getTime();
   await convLog.finalize(duration);

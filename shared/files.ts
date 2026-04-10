@@ -15,15 +15,14 @@ export function harnessDir(workDir: string): string {
  *
  * @param workDir - Project root directory
  * @param options.greenfield - If true, create app/ with git init.
- *   Defaults to true when no options are provided (legacy/codex-harness compat).
- *   Claude-harness always passes this explicitly.
+ *   Defaults to true when no options are provided.
  * @param options.resume - If true, skip all cleanup of existing artifacts
  */
 export async function initWorkspace(
   workDir: string,
   options?: { greenfield?: boolean; resume?: boolean },
 ): Promise<void> {
-  // Default to greenfield when called without options (backward compat for codex-harness)
+  // Default to greenfield when called without options
   const greenfield = options?.greenfield ?? options === undefined;
   const resume = options?.resume ?? false;
 

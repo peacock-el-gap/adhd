@@ -1,11 +1,13 @@
 import { execSync } from "node:child_process";
+import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
-import { log, logDebug, shouldLog, summarize } from "../shared/logger.ts";
+import { log, shouldLog } from "../shared/logger.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
-import { type Options, query } from "../shared/tracing.ts";
+import type { Options } from "../shared/tracing.ts";
+import { query } from "../shared/tracing.ts";
 import type { CommitSource, EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 
@@ -61,73 +63,26 @@ export async function runGenerator(
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Generator", sprint, attempt, { model, startTime });
 
-  let fullResponse = "";
-  let sessionId: string | undefined;
-  let sdkResult: SDKResultFields | undefined;
-
-  for await (const msg of query({ prompt, options })) {
-    if (msg.type === "assistant") {
-      const message = msg as {
-        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
-      };
-      for (const block of message.message.content) {
-        if (block.type === "text" && block.text) {
-          fullResponse += block.text;
-          convLog.logAssistantText(block.text);
-          if (shouldLog("verbose", level)) {
-            log("GENERATOR", block.text.slice(0, 200));
-          }
-        } else if (block.type === "tool_use" && block.name) {
-          convLog.logToolUse(block.name, block.input);
-          if (shouldLog("normal", level)) {
-            log("GENERATOR", `  Tool: ${block.name}`);
-          }
-          if (shouldLog("verbose", level) && block.input) {
-            const summary = String(typeof block.input === "object" ? JSON.stringify(block.input) : block.input).slice(
-              0,
-              120,
-            );
-            log("GENERATOR", `    ${summary}`);
-          }
-        }
+  const result = await processAgentStream(prompt, options, "GENERATOR", level, convLog, {
+    onToolUse(_name, input) {
+      if (shouldLog("verbose", level) && input) {
+        const summary = String(typeof input === "object" ? JSON.stringify(input) : input).slice(0, 120);
+        log("GENERATOR", `    ${summary}`);
       }
-    } else if (msg.type === "system") {
-      const sysMsg = msg as { message?: string; session_id?: string };
-      logDebug("GENERATOR", `System: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
-    } else if (msg.type === "user") {
-      const userMsg = msg as {
-        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
-      };
-      for (const block of userMsg.message.content) {
-        if (block.type === "tool_result" && block.tool_use_id) {
-          logDebug("GENERATOR", `Tool result for ${block.tool_use_id}: ${summarize(block.content ?? "")}`);
-          convLog.logToolResult(block.content ?? "");
-        }
-      }
-    } else if (msg.type === "tool_use_summary") {
-      const summary = msg as { summary?: string };
-      convLog.logToolResult(summary.summary ?? "");
-    } else if (msg.type === "result") {
-      const result = msg as {
-        session_id?: string;
-        total_cost_usd?: number;
-        duration_ms?: number;
-        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
-      };
-      sessionId = result.session_id;
-      sdkResult = result;
-      log("GENERATOR", `Sprint ${sprint} build complete (session: ${sessionId?.slice(0, 8)}...)`);
-    }
-  }
+    },
+    onResult(r) {
+      log("GENERATOR", `Sprint ${sprint} build complete (session: ${r.session_id?.slice(0, 8)}...)`);
+    },
+  });
 
   const duration = Date.now() - startTime.getTime();
   await convLog.finalize(duration);
 
-  if (!fullResponse) {
+  if (!result.response) {
     log("GENERATOR", `Sprint ${sprint} completed (agent used tools only, no text output)`);
   }
 
-  return { response: fullResponse, sessionId, sdkResult };
+  return result;
 }
 
 /**

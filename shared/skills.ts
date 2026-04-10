@@ -414,3 +414,39 @@ export function warnIfOversized(agentSkills: AgentSkills, agent: AgentRole): voi
     );
   }
 }
+
+// ── All-Agent Resolution ──────────────────────────────────────────
+
+export interface AllAgentSkills {
+  planner: AgentSkills;
+  generator: AgentSkills;
+  evaluator: AgentSkills;
+  documenter: AgentSkills;
+}
+
+/**
+ * Resolve skills from all three scope directories, route them per agent,
+ * warn about oversized injections, and log the summary.
+ */
+export function resolveAllAgentSkills(workDir: string, harnessBaseDir: string, filters?: SkillFilters): AllAgentSkills {
+  const harnessSkillsDir = join(harnessBaseDir, "skills");
+  const userSkillsDir = join(process.env.HOME ?? "", ".adhd", "skills");
+  const projectSkillsDir = join(workDir, ".adhd", "skills");
+  const resolvedSkills = resolveSkills(harnessSkillsDir, userSkillsDir, projectSkillsDir, filters);
+
+  const planner = routeSkillsForAgent(resolvedSkills, "planner");
+  const generator = routeSkillsForAgent(resolvedSkills, "generator");
+  const evaluator = routeSkillsForAgent(resolvedSkills, "evaluator");
+  const documenter = routeSkillsForAgent(resolvedSkills, "documenter");
+
+  warnIfOversized(planner, "planner");
+  warnIfOversized(generator, "generator");
+  warnIfOversized(evaluator, "evaluator");
+  warnIfOversized(documenter, "documenter");
+
+  if (resolvedSkills.length > 0) {
+    log("HARNESS", `Skills loaded: ${resolvedSkills.length} (${resolvedSkills.map((s) => s.name).join(", ")})`);
+  }
+
+  return { planner, generator, evaluator, documenter };
+}

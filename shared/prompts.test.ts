@@ -6,9 +6,6 @@ import {
   buildPlannerPrompt,
   CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
   CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
-  EVALUATOR_SYSTEM_PROMPT,
-  GENERATOR_SYSTEM_PROMPT,
-  PLANNER_SYSTEM_PROMPT,
 } from "./prompts.ts";
 
 describe("prompts", () => {
@@ -53,22 +50,7 @@ describe("prompts", () => {
     });
   });
 
-  describe("system prompts", () => {
-    it("PLANNER_SYSTEM_PROMPT is a non-empty string", () => {
-      expect(typeof PLANNER_SYSTEM_PROMPT).toBe("string");
-      expect(PLANNER_SYSTEM_PROMPT.length).toBeGreaterThan(50);
-    });
-
-    it("GENERATOR_SYSTEM_PROMPT is a non-empty string", () => {
-      expect(typeof GENERATOR_SYSTEM_PROMPT).toBe("string");
-      expect(GENERATOR_SYSTEM_PROMPT.length).toBeGreaterThan(50);
-    });
-
-    it("EVALUATOR_SYSTEM_PROMPT is a non-empty string", () => {
-      expect(typeof EVALUATOR_SYSTEM_PROMPT).toBe("string");
-      expect(EVALUATOR_SYSTEM_PROMPT.length).toBeGreaterThan(50);
-    });
-
+  describe("contract negotiation prompts", () => {
     it("CONTRACT_NEGOTIATION_GENERATOR_PROMPT contains type classification instructions", () => {
       expect(CONTRACT_NEGOTIATION_GENERATOR_PROMPT).toContain("behavioral");
       expect(CONTRACT_NEGOTIATION_GENERATOR_PROMPT).toContain("implementation");

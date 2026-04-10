@@ -1,9 +1,10 @@
+import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
-import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
+import { log, logError, shouldLog } from "../shared/logger.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
-import { type Options, query } from "../shared/tracing.ts";
+import type { Options } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 import { extractBalancedJson } from "./harness.ts";
@@ -59,64 +60,21 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt ?? 0, { model, startTime });
 
-  let fullResponse = "";
-  let sdkResult: SDKResultFields | undefined;
-
-  for await (const msg of query({ prompt, options })) {
-    if (msg.type === "assistant") {
-      const message = msg as {
-        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
-      };
-      for (const block of message.message.content) {
-        if (block.type === "text" && block.text) {
-          fullResponse += block.text;
-          convLog.logAssistantText(block.text);
-          if (shouldLog("verbose", level)) {
-            log("EVALUATOR", block.text.slice(0, 200));
-          }
-        } else if (block.type === "tool_use" && block.name) {
-          convLog.logToolUse(block.name, block.input);
-          if (shouldLog("normal", level)) {
-            log("EVALUATOR", `  Tool: ${block.name}`);
-          }
-        }
-      }
-    } else if (msg.type === "system") {
-      const sysMsg = msg as { message?: string; session_id?: string };
-      logDebug("EVALUATOR", `System: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
-    } else if (msg.type === "user") {
-      const userMsg = msg as {
-        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
-      };
-      for (const block of userMsg.message.content) {
-        if (block.type === "tool_result" && block.tool_use_id) {
-          logDebug("EVALUATOR", `Tool result for ${block.tool_use_id}: ${summarize(block.content ?? "")}`);
-          convLog.logToolResult(block.content ?? "");
-        }
-      }
-    } else if (msg.type === "tool_use_summary") {
-      const summary = msg as { summary?: string };
-      convLog.logToolResult(summary.summary ?? "");
-    } else if (msg.type === "result") {
-      const result = msg as {
-        total_cost_usd?: number;
-        duration_ms?: number;
-        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
-      };
-      sdkResult = result;
+  const streamResult = await processAgentStream(prompt, options, "EVALUATOR", level, convLog, {
+    onResult() {
       log("EVALUATOR", `Evaluation complete for sprint ${sprint}`);
-    }
-  }
+    },
+  });
 
   const duration = Date.now() - startTime.getTime();
   await convLog.finalize(duration);
 
   const evalResult: EvalResult & { sdkResult?: SDKResultFields } = parseEvalResult(
-    fullResponse,
+    streamResult.response,
     contract,
     passThreshold,
   );
-  evalResult.sdkResult = sdkResult;
+  evalResult.sdkResult = streamResult.sdkResult;
 
   if (shouldLog("normal", level)) {
     const passedCount = evalResult.feedback.filter((f) => f.score >= passThreshold).length;

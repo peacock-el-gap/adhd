@@ -6,7 +6,7 @@ export interface HarnessConfig {
   maxSprints: number;
   maxRetriesPerSprint: number;
   passThreshold: number;
-  // Phase 1 additions (optional for backward compat with codex-harness)
+  // Optional fields (defaults applied by resolveConfig)
   model?: string;
   isGreenfield?: boolean;
   isResume?: boolean;

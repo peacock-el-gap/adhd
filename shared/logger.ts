@@ -1,6 +1,6 @@
 import type { LogLevel } from "./types.ts";
 
-type AgentRole = "HARNESS" | "PLANNER" | "GENERATOR" | "EVALUATOR" | "DOCUMENTER";
+export type AgentRole = "HARNESS" | "PLANNER" | "GENERATOR" | "EVALUATOR" | "DOCUMENTER";
 
 const COLORS: Record<AgentRole, string> = {
   HARNESS: "\x1b[36m", // cyan

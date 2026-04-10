@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
-import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
+import { log, logDebug, logError } from "../shared/logger.ts";
 import { buildPlannerPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
-import { type Options, query } from "../shared/tracing.ts";
+import type { Options } from "../shared/tracing.ts";
 import type { HarnessConfig } from "../shared/types.ts";
 import type { SDKResultFields, UsageTracker } from "../shared/usage.ts";
 
@@ -113,62 +114,22 @@ export async function runPlanner(
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Planner", undefined, undefined, { model, startTime });
 
-  let fullResponse = "";
   let completed = false;
 
   logDebug("PLANNER", `Calling query() with model: ${options.model} tools: ${options.tools}`);
   logDebug("PLANNER", `Prompt: ${fullPrompt.length} chars, systemPrompt: ${systemPrompt.length} chars`);
 
-  for await (const msg of query({ prompt: fullPrompt, options })) {
-    logDebug("PLANNER", `Received message type: ${msg.type}`);
-    if (msg.type === "assistant") {
-      const message = msg as {
-        message: { content: Array<{ type: string; text?: string; name?: string; input?: unknown }> };
-      };
-      for (const block of message.message.content) {
-        if (block.type === "text" && block.text) {
-          fullResponse += block.text;
-          convLog.logAssistantText(block.text);
-          if (shouldLog("verbose", logLevel)) {
-            log("PLANNER", block.text.slice(0, 200));
-          }
-        } else if (block.type === "tool_use" && block.name) {
-          convLog.logToolUse(block.name, block.input);
-          if (shouldLog("normal", logLevel)) {
-            log("PLANNER", `  Tool: ${block.name}`);
-          }
-        }
-      }
-    } else if (msg.type === "system") {
-      const sysMsg = msg as { message?: string; session_id?: string };
-      logDebug("PLANNER", `System: ${sysMsg.message ?? sysMsg.session_id ?? "(no content)"}`);
-    } else if (msg.type === "user") {
-      const userMsg = msg as {
-        message: { content: Array<{ type: string; tool_use_id?: string; content?: string }> };
-      };
-      for (const block of userMsg.message.content) {
-        if (block.type === "tool_result" && block.tool_use_id) {
-          logDebug("PLANNER", `Tool result for ${block.tool_use_id}: ${summarize(block.content ?? "")}`);
-          convLog.logToolResult(block.content ?? "");
-        }
-      }
-    } else if (msg.type === "tool_use_summary") {
-      const summary = msg as { summary?: string };
-      convLog.logToolResult(summary.summary ?? "");
-    } else if (msg.type === "result") {
-      const result = msg as {
-        session_id?: string;
-        total_cost_usd?: number;
-        duration_ms?: number;
-        usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
-      };
+  const streamResult = await processAgentStream(fullPrompt, options, "PLANNER", logLevel, convLog, {
+    onResult(result) {
       completed = true;
       if (usage) {
         usage.recordStage(reviseFeedback ? "planner-revision" : "planner", result as SDKResultFields);
       }
       log("PLANNER", `Planning complete (session: ${result.session_id?.slice(0, 8)}...)`);
-    }
-  }
+    },
+  });
+
+  let fullResponse = streamResult.response;
 
   const duration = Date.now() - startTime.getTime();
   await convLog.finalize(duration);
