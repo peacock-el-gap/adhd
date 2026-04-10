@@ -4,9 +4,9 @@
 
 This report has three parts. Each builds on the previous:
 
-- **Part 1** catalogues every methodical functionality already implemented in the harness.
-- **Part 2** identifies gaps and opportunities, each with options, pros/cons, and recommendations. Every opportunity is numbered (OPP-01 through OPP-13).
-- **Part 3** organizes opportunities into a prioritized roadmap. Every roadmap item references its Part 2 analysis by OPP-ID. A separate **Content Stream** runs in parallel for work that requires no code changes.
+- **Part 1** catalogues every methodical functionality implemented in the harness.
+- **Part 2** identifies open gaps and opportunities, each with options, pros/cons, and recommendations.
+- **Part 3** organizes opportunities into a prioritized roadmap. A separate **Content Stream** runs in parallel for work that requires no code changes.
 
 The document is self-contained. No prior conversation context is required.
 
@@ -37,11 +37,15 @@ Before any code is written, the Generator proposes a sprint contract (5-15 testa
 
 This is **Definition of Done as a protocol**: machine-readable JSON, not a wiki page nobody reads.
 
+**Known limitation**: When contract JSON parsing fails (e.g., the Evaluator's review response is not valid JSON), the harness falls back silently to a generic 3-criterion default contract with no diagnostic logging. The raw unparseable text is not preserved. This can cause entire sprints to run against meaningless criteria. Addressed in Phase 1.5.
+
 ### 1.4 BDD (Behavior-Driven Development)
 
 When enabled (default), the Planner writes acceptance scenarios in **Given/When/Then** format. These flow into sprint contracts as testable criteria. The Evaluator verifies that tests exist for each scenario and that they pass.
 
-Disableable via `--no-bdd`. Also filters community skills tagged `type: methodology-bdd`.
+BDD criteria tagged `"type": "behavioral"` during contract negotiation are **accumulated across sprints** as a regression set (see §1.14). This turns BDD scenarios into persistent behavioral invariants — Sprint 3 cannot silently break behavior established in Sprint 1.
+
+Disableable via `--no-bdd`. Also filters community skills tagged `type: methodology-bdd`. Disabling BDD also disables regression accumulation.
 
 ### 1.5 TDD (Test-Driven Development)
 
@@ -102,6 +106,10 @@ After each passing sprint, a checkpoint is saved to `.adhd/progress.json` with t
 
 Transient errors (HTTP 429, 5xx, network) retried automatically with exponential backoff (30s, 60s, 120s).
 
+**Known limitations** (addressed in Phase 1.5):
+- **Resume does not skip contract negotiation** even when `sprint-N.json` already exists on disk. If the user aborts mid-sprint and resumes, the contract is re-negotiated from scratch. The `--sprint N` mode already has contract-reuse logic — Phase 1.5 reuses it for resume.
+- **Checkpoint rollback uses `git revert`**, which fails on dirty working trees (e.g., uncommitted `.adhd/` files written by the harness). Phase 1.5 switches to `git reset --hard` with `.adhd/` stash/unstash for deterministic rollback.
+
 ### 1.10 Skills System (Three-Scope, Self-Routing)
 
 A full plugin mechanism for composable guidance:
@@ -122,7 +130,7 @@ A full plugin mechanism for composable guidance:
 
 Three layers, all operational:
 
-1. **Conversation logs** — Detailed markdown per agent/sprint/attempt in `.adhd/logs/`. Always written regardless of log level. Tool calls with inputs, results (long outputs collapsed in `<details>`).
+1. **Conversation logs** — Detailed markdown per agent/sprint/attempt in `.adhd/logs/`. Always written regardless of log level. Tool calls with inputs, results (long outputs collapsed in `<details>`). **Known limitation**: Log filenames are deterministic (e.g., `sprint-3-attempt-0-generator.md`) with no timestamp. On resume or retry, files are overwritten, destroying forensic evidence. Phase 1.5 adds `YYYY.MM.DD-HH.MM.SS` timestamp prefixes.
 2. **Langfuse OTEL tracing** — Optional hierarchical span tree mirroring the harness structure. Fire-and-forget; zero impact on agent behavior.
 3. **Per-stage cost tracking** — Tokens, USD, duration per SDK call. Printed at session end, accumulated across resume sessions in `.adhd/usage.json`.
 
@@ -157,60 +165,61 @@ Key properties:
 | **Planner HITL** (`AskUserQuestion`) | Planner can ask clarifying questions mid-planning (60s timeout) |
 | **Timezone display** (`TZ_DISPLAY`) | Configurable terminal timestamp timezone |
 
+### 1.14 BDD Regression Accumulation Across Sprints
+
+After each passing sprint, behavioral contract criteria (those tagged `"type": "behavioral"`) are accumulated into a persistent regression set stored at `.adhd/regression.json`. When evaluating subsequent sprints, the Evaluator receives both the current sprint's contract AND all accumulated behavioral criteria from prior sprints.
+
+- **Criteria classification**: Contract negotiation prompts require every criterion to have a `"type"` field — either `"behavioral"` (observable behavior, API contracts, user-facing functionality) or `"implementation"` (code quality, naming, internal structure). Only behavioral criteria accumulate for regression.
+- **Graceful degradation**: If regression criteria cannot be read, the sprint proceeds without them.
+- **BDD-gated**: Regression accumulation is disabled when `--no-bdd` is set.
+
+### 1.15 Pre-Evaluation Static Analysis Gate
+
+Between Generator output and Evaluator invocation, the harness detects and runs the project's existing lint/typecheck commands (via `package.json` scripts or conventions). Results are injected into the Evaluator's context as supplementary data.
+
+Two modes:
+- **Soft gate** (default): Static analysis output is injected into the Evaluator prompt. No retry consumed; Evaluator decides severity.
+- **Hard gate** (`--lint-gate`): If any lint/typecheck command exits non-zero, the Evaluator is skipped entirely and the attempt counts as failed. Static analysis output is included in the feedback.
+
+Output is auto-truncated to prevent prompt bloat.
+
+### 1.16 Diff-Aware Evaluation on Retries
+
+On retry attempts (attempt > 0), the harness computes `git diff` between the previous attempt's commit and the current one. This diff is injected into the Evaluator's prompt as supplementary context, allowing the Evaluator to focus on what changed while still checking all criteria.
+
+Ordering in the Evaluator prompt: regression criteria → diff → static analysis results.
+
+### 1.17 Sprint Selection (`--sprint N`)
+
+`--sprint N` jumps to sprint N, loading the existing spec and reusing any existing contract for that sprint. If no contract exists, contract negotiation runs for that sprint only. Only the targeted sprint executes — no other sprints run.
+
+- Requires an existing spec (errors if none found)
+- Warns if no checkpoint exists for sprint N-1
+- Mutually exclusive with `--resume`
+- Preserves existing `progress.json` sprint results when available
+
+### 1.18 Quality Criteria in Contracts
+
+Contract negotiation prompts (both Generator proposal and Evaluator review) now require quality-focused criteria alongside behavioral ones. The Generator must include at least one `"implementation"`-type criterion covering code quality aspects: naming conventions, code duplication (DRY), error handling patterns, and maintainability. The Evaluator rejects contracts missing quality criteria.
+
+The Evaluator's system prompt includes a dedicated **Quality Criteria** section mandating that quality criteria are scored with the same rigor and threshold as functional criteria — they are not advisory.
+
+### 1.19 Progressive Spec Refinement
+
+When `--refine-spec` is set, after each passing sprint (except the last), the Planner re-reads the spec plus the actual code state and proposes adjustments to remaining sprints. Completed sprints are frozen — only not-yet-started sprints can be modified.
+
+**Guardrails**:
+1. Completed sprint sections are programmatically frozen and force-repaired if the Planner modifies them
+2. Accumulated BDD regression criteria are preserved across refinement
+3. A diff of proposed changes is displayed to the user
+4. A HITL gate allows accepting or rejecting the revised spec (auto-accepted in non-interactive mode)
+5. Sprint count is recalculated from the revised spec
+
 ---
 
 ## Part 2: What's Missing — Opportunities
 
-Each opportunity is numbered OPP-01 through OPP-12. These IDs are referenced in Part 3's roadmap. (OPP-13, Documentation Generation, has been implemented — see §1.12.)
-
-### OPP-01: BDD Regression Accumulation Across Sprints
-
-**Problem**: Each sprint is currently a sealed unit. The Evaluator only checks the *current* sprint's contract criteria. Previous contracts are not rechecked. This creates two related blind spots:
-
-1. **No memory** — The Evaluator doesn't know what previous sprints established or what issues were found.
-2. **No regression detection** — Sprint 3 can silently break behavior established in Sprint 1, because Sprint 1's criteria are never re-evaluated.
-
-**Key insight**: BDD scenarios are **behavioral invariants**. "Given a user submits a valid form, When the server processes it, Then a 201 is returned" — this is a promise about what the system *does*. It must remain true after Sprint 1, after Sprint 3, after Sprint 6. Unlike TDD unit tests (which may legitimately change during refactoring), BDD acceptance criteria describe business behavior that should hold across all sprints.
-
-**Opportunity**: Accumulate BDD-derived contract criteria across sprints. Have the Evaluator check ALL accumulated behavioral criteria, not just the current sprint's.
-
-**Mechanism**:
-- After Sprint N passes, its behavioral contract criteria are added to an accumulated regression set
-- When evaluating Sprint N+1, the Evaluator receives both the current sprint's contract AND accumulated behavioral criteria from Sprints 1..N
-- Pass rule: ALL current criteria >= threshold AND no regression failures on accumulated criteria
-- Criteria already exist as structured JSON in `.adhd/contracts/sprint-N.json` — no new storage format needed
-
-**Design consideration — criteria classification**: Not all contract criteria are behavioral. Some are code quality ("error handling covers X") or implementation ("uses the correct database schema"). Two approaches:
-
-- **Option A — Tag during negotiation**: Add a `"type": "behavioral"` field to criteria during contract negotiation. Only behavioral criteria accumulate for regression. Requires a prompt change in the contract negotiation phase.
-  - Pros: Precise; only genuinely behavioral criteria are re-evaluated; avoids false positives from implementation-specific criteria
-  - Cons: Adds complexity to contract format; LLM may misclassify criteria
-- **Option B — Accumulate all, let Evaluator judge**: Pass all previous criteria to the Evaluator. It can recognize which are still testable and which are obsolete (e.g., if a feature was deliberately replaced).
-  - Pros: Simpler; no contract format change; leverages Evaluator's judgment
-  - Cons: More criteria per evaluation = longer prompt, higher cost; Evaluator may be too lenient on regressions it can explain away
-- **Recommended**: **Option A** — the contract format change is minimal (one field), and precision matters more than simplicity here. False regression alerts would erode trust in the harness.
-
-**Cost consideration**: Evaluation becomes slightly more expensive each sprint (more criteria). But the Evaluator already runs the code and inspects the codebase — checking one more endpoint or scenario within the same session is marginal. For a 5-sprint run, Sprint 5's Evaluator might check ~50-60 accumulated criteria vs ~12 current ones. This is manageable within context limits.
-
-- **Effort**: Medium
-
-### OPP-03: Pre-Evaluation Static Analysis Gate
-
-**Problem**: The Evaluator is a full LLM call. Wasting an evaluation turn on trivial issues (lint errors, type errors, import mistakes) is expensive — especially when the project already has a linter or type checker configured.
-
-**Opportunity**: Run the project's existing lint/typecheck commands between Generator output and Evaluator invocation.
-
-- **Option A — Hard gate**: If lint/typecheck fails, don't run Evaluator. Count as a failed attempt, inject lint output as feedback.
-  - Pros: Saves the full cost of an Evaluator turn
-  - Cons: Consumes a retry attempt on something the Generator could fix quickly; some projects have noisy linters with pre-existing warnings
-- **Option B — Soft gate**: Run lint/typecheck, inject results into Evaluator's context as supplementary data. Evaluator decides severity.
-  - Pros: No retry consumed; Evaluator has richer signal; tolerates pre-existing warnings
-  - Cons: Still runs the Evaluator call
-- **Option C — Auto-fix gate**: Run lint with auto-fix (e.g., `biome check --fix`), commit fixes, then proceed to Evaluator.
-  - Pros: Fixes trivial issues silently; no retry or Evaluator cost
-  - Cons: Auto-fix may introduce changes the Generator didn't intend; harder to audit
-- **Recommended**: **Option B** for safety, with an opt-in flag (`--lint-gate`) for Option A when users know their linter is clean.
-- **Effort**: Small to Medium (depends on detection of project's lint/typecheck commands)
+Each opportunity below is an open gap or enhancement. Opportunities are numbered with their original IDs for traceability in Part 3. Implemented opportunities have been removed from this section — they are documented as current capabilities in Part 1 (§1.12-1.19).
 
 ### OPP-04: Generator Context Priming
 
@@ -230,34 +239,14 @@ Each opportunity is numbered OPP-01 through OPP-12. These IDs are referenced in 
 - **Recommended**: **Option B** first (zero code changes, uses existing skills). Consider **Option A** as a later enhancement for projects without manually-authored context.
 - **Effort**: Option B is zero (documentation/guidance only). Option A is Small. Option C is Medium.
 
-### OPP-05: Diff-Aware Evaluation on Retries
+### OPP-06: Separate Code Review Agent
 
-**Problem**: On retries, the Evaluator re-evaluates the entire codebase state. It doesn't know what changed between attempts, making feedback less focused and the evaluation more expensive.
+Quality criteria in contracts (§1.18) test whether quality *awareness* is the missing signal. If it proves insufficient — if quality concerns consistently need deeper, separate analysis — a dedicated **Reviewer agent** (5th agent) with read-only tools could run on passing sprints, focused exclusively on code craft: naming, duplication, maintainability, architectural fit, security patterns.
 
-**Opportunity**: Inject `git diff` between the previous attempt's commit and the current one into the Evaluator's prompt. The Evaluator can then focus on what changed while still checking all criteria.
-
-- **Pros**: Sharper feedback; the Evaluator can distinguish "this was already there" from "the generator just wrote this"; reduces evaluation time on large codebases
-- **Cons**: Adds prompt length (diffs can be large); may bias the Evaluator toward only checking changed code
-- **Mitigation**: Cap diff size (e.g., 8K tokens) with a truncation warning. The Evaluator still runs all criteria — the diff is supplementary context, not a replacement.
-- **Effort**: Small (git diff is cheap; only the evaluator prompt template changes)
-
-### OPP-06: Code Quality in Evaluation
-
-**Problem**: The Evaluator checks *behavior* — does the code work, do tests pass, does it meet criteria? It does not systematically assess *craft* — naming, duplication, maintainability, architectural fit, security patterns. These concerns are distinct: code can pass all functional tests and still be unmaintainable.
-
-**Opportunity**: Incorporate code quality assessment into the evaluation process.
-
-- **Option A — Separate Reviewer agent (4th agent)**: A new agent with read-only tools, focused on code quality. Runs only on passing sprints.
-  - Pros: Clean separation of concerns; Evaluator stays focused on behavior; Reviewer has its own specialized prompt
-  - Cons: Extra LLM cost per passing sprint; adds latency; significant architectural change (new agent type, new orchestration path)
-- **Option B — Quality criteria in contracts**: Extend contract negotiation prompts to include quality-focused criteria (naming, duplication, complexity) alongside behavioral ones.
-  - Pros: No new agent; no architectural change; quality concerns checked alongside behavior within the existing evaluation
-  - Cons: Evaluator prompt already long; mixing behavioral and quality concerns may dilute both; harder to make quality criteria optional
-- **Option C — Post-run review skill**: A skill that adds code review instructions to the Evaluator for the final sprint only.
-  - Pros: Uses existing architecture; only one extra evaluation; quality check at the end when all code is written
-  - Cons: Feedback comes too late to improve code; doesn't catch quality drift mid-run
-- **Recommended**: **Option B** initially — extend contract negotiation to include quality criteria. This tests whether the *signal* is missing (no quality awareness) or the *mechanism* is inadequate (needs a dedicated agent). Evolve to **Option A** only if quality concerns consistently need deeper, separate analysis.
-- **Effort**: Option B is Small. Option A is Large.
+- **Pros**: Clean separation of concerns; Evaluator stays focused on behavior; Reviewer has its own specialized prompt
+- **Cons**: Extra LLM cost per passing sprint; adds latency; significant architectural change (new agent type, new orchestration path)
+- **Contingent**: Only pursued if §1.18's quality criteria prove insufficient in practice.
+- **Effort**: Large
 
 ### OPP-07: Policy Skills (Security, Accessibility, Style)
 
@@ -287,32 +276,6 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Cons**: Injected skills consume prompt tokens; quality depends on authorship; risk of prompt bloat if many skills injected
 - **Mitigation**: The existing 8K-token guardrail per agent limits injection size. Reference tier avoids bloat for larger documents.
 - **Effort**: Small per skill (content authoring only, no code changes)
-
-### OPP-08: Sprint Selection (`--sprint N`)
-
-**Problem**: To re-run a single sprint, users must either `--resume` (which continues from last checkpoint) or start a full fresh run. There's no way to target a specific sprint.
-
-**Opportunity**: `--sprint N` jumps to sprint N, loading spec and existing contracts, skipping earlier sprints. If the contract for sprint N doesn't exist, runs contract negotiation for that sprint only.
-
-- **Pros**: Major DX improvement for iterating on specific sprints; saves significant time and cost
-- **Cons**: Skipped sprints may have introduced state that sprint N depends on; user must ensure codebase is in the right state
-- **Mitigation**: Require existing spec (error if none). Warn if no checkpoint exists for sprint N-1.
-- **Effort**: Medium
-
-### OPP-09: Progressive Spec Refinement
-
-**Problem**: The spec is static — written once, read many times. If the Generator discovers mid-run that the spec's assumptions are wrong (e.g., a library doesn't support a planned feature), the spec doesn't adapt.
-
-**Opportunity**: After each sprint, the Planner re-reads the spec + actual code state and adjusts remaining sprints. Completed sprints are frozen — only not-yet-started sprints can be modified.
-
-- **Pros**: Spec stays aligned with reality; recovers from incorrect assumptions; mirrors how real teams adjust scope mid-project
-- **Cons**: Changes the fundamental static-spec contract; re-planning costs tokens; may cause scope drift; risk of Planner rewriting in surprising ways
-- **Required guardrails** (if implemented):
-  1. Only sprints **not yet started** may be modified — completed sprints are frozen
-  2. Revised spec shown to the user via a gate (like existing spec approval) — not silently applied
-  3. A diff is logged: "Planner adjusted Sprint 4: removed X, added Y"
-  4. Accumulated BDD regression criteria (OPP-01-A) from completed sprints remain unchanged — they are the stable behavioral contract
-- **Effort**: Large (but guardrails reduce risk significantly)
 
 ### OPP-10: Adaptive Retry Strategy
 
@@ -351,6 +314,42 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Cons**: Requires run-ID or timestamp-based run identification; needs a storage convention for historical runs (currently each run overwrites the previous)
 - **Effort**: Medium
 
+### OPP-14: Operational Hardening
+
+**Problem**: Correctness bugs, observability gaps, and workflow friction reduce trust in harness output and waste developer time. These were surfaced by running the harness against its own codebase.
+
+**Sub-items**:
+
+1. **Sprint counting regex bug**: The regex that counts `## Sprint N` headings in the spec to determine total sprint count matches inline prose references too (e.g., sprint numbers mentioned inside acceptance scenarios or quoted text). This inflated the sprint count from 4 to 6 during the Phase 1 execution, causing the harness to run two phantom sprints with no spec guidance — the Generator invented their content during contract negotiation. **Fix**: Anchor the regex to line start (`^` with multiline flag). **Defense in depth**: Update the spec-format skill to discourage heading-level markdown (`## Sprint N`) in prose; recommend inline text or backticks instead.
+
+2. **Resume idempotency**: On `--resume`, contract negotiation re-runs even when `sprint-N.json` already exists on disk from a prior aborted attempt. This wastes ~$1 in LLM cost per resume. The `--sprint N` mode already has contract-reuse logic that checks for existing contracts — reuse that same pattern for resume.
+
+3. **Contract parse error observability**: When `parseContract` fails to extract valid JSON from the Evaluator's contract review response, it falls back silently to a generic 3-criterion default contract. No diagnostic output is produced — the raw text is not logged, the conversation log may be overwritten on retry, and there is no HITL gate to let the user intervene. All retry attempts then run against meaningless criteria. **Fix**: Log the raw unparseable text to console (truncated) and write the full text to `.adhd/logs/sprint-N-contract-parse-error.txt`.
+
+4. **Checkpoint rollback**: `revertToCheckpoint` uses `git revert --no-commit` which creates reverse commits and fails on dirty working trees. During Phase 1 execution, it failed because the harness had written `.adhd/contracts/sprint-5.json` but not committed it. **Fix**: Stash `.adhd/` files → `git reset --hard <checkpoint-sha>` → unstash. This gives clean code state with deterministic rollback while preserving harness metadata.
+
+5. **Log file naming**: Add `YYYY.MM.DD-HH.MM.SS` timestamp prefix to conversation log filenames (e.g., `2026.04.10-05.28.33-sprint-5-attempt-0-generator.md`). Prevents overwrites on resume/retry, guarantees chronological ordering in `ls`, and enables forensic analysis of multiple runs. Align Langfuse trace names to the same format for consistency.
+
+6. **Progress status during documentation**: Add `"documenting"` status to `progress.json` while the Documenter agent runs. Currently, `status` is set to `"complete"` before the Documenter starts, making `progress.json` a misleading real-time indicator.
+
+7. **`.adhd/` artifact commits**: Commit `.adhd/` artifacts (contracts, progress, feedback) with a dedicated `[adhd]` commit message before invoking the Generator, so it starts with a clean working tree. Differentiate "uncommitted changes" log messages between project code (genuine problem) vs. `.adhd/` metadata (expected harness behavior). This also eliminates the dirty-tree revert failure (sub-item 4) by ensuring `.adhd/` files are committed before any rollback attempt.
+
+- **Effort**: Medium (aggregate; individual sub-items range from Trivial to Medium)
+
+### OPP-15: Developer Experience Improvements
+
+**Problem**: During long harness runs, HITL gates activate while the developer is away from the terminal. Timeouts auto-accept defaults, which may not be the desired action. Additionally, `.adhd/` artifacts are not version-controlled by default, making it hard to reconstruct what happened during a run.
+
+**Sub-items**:
+
+1. **HITL notifications**: Terminal bell (`\x07`) on all HITL gates and error conditions — universal, zero dependencies. Plus a `--notify` flag for desktop notifications via `notify-send` (Linux) / `osascript` (macOS), visible when the terminal is backgrounded.
+
+2. **`--commit-adhd` flag**: Opt-in harness-level git commits for `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md` after each sprint. Commit message: `[adhd] Sprint N: contract + metadata`. Provides structured audit trail without polluting the project's git history by default.
+
+3. **`--commit-adhd-logs` flag**: Additionally commits `.adhd/logs/`. Implies `--commit-adhd`. Opt-in because logs can be large. For users who want full forensic history in git.
+
+- **Effort**: Small (aggregate)
+
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -364,10 +363,6 @@ Each item is assessed on four dimensions:
 3. **Impact on developer experience** — Does it make the harness easier/faster to use?
 4. **Implementation cost** — How much work and risk is involved?
 
-### Traceability
-
-Every roadmap item references its Part 2 opportunity analysis by OPP-ID, including which option was selected where applicable.
-
 ---
 
 ### Content Stream (Parallel — No Code Changes)
@@ -377,28 +372,29 @@ These items use the existing skills system and contract negotiation prompts. The
 | # | Feature | Source | Effort | Deliverable |
 |---|---------|--------|--------|-------------|
 | CS-1 | **Policy skills + code-style template** | OPP-07 | S | Harness-level: `security-owasp`, `accessibility-wcag`, `api-design` skill directories with `skill.yaml` + `.md` content. Project-level: a `code-style` skeleton template with guidance questions for developers to fill in per project (placed in `.adhd/skills/local/`). |
-| CS-2 | **Codebase context guidance** | OPP-04-B | S | Documentation/template for creating project-local `.adhd/skills/local/codebase-context.md` skills. Not a harness skill itself — a guide for users. |
+| CS-2 | **Codebase context guidance** | OPP-04 | S | Documentation/template for creating project-local `.adhd/skills/local/codebase-context.md` skills. Not a harness skill itself — a guide for users. |
 
 **Rationale**: These are the highest-leverage items relative to effort — they fill the content gap in an architecturally mature skills system. No PRs to review, no tests to write, no risk of regression.
 
 ---
 
-### Phase 1: Deepen — Smarter Within Existing Architecture
+### Phase 1.5: Operational Hardening
 
-**Goal**: Address the highest-impact gaps. Most items work within the current four-agent model. One item (1.6) is a larger architectural investment included because it addresses a fundamental limitation of static specs.
+**Goal**: Fix correctness bugs (phantom sprints from regex false positives, broken git revert on resume), close observability gaps (log file overwrites, silent contract parse failures), and add DX improvements (notifications, artifact commits). These items ensure a reliable foundation before Phase 2 extends the harness with new capabilities.
 
-| # | Feature | Source | Effort | Justification |
-|---|---------|--------|--------|---------------|
-| 1.1 | **BDD regression accumulation** | OPP-01-A | M | The #1 quality gap: cross-sprint behavioral regression. Accumulate BDD-derived contract criteria across sprints; Evaluator checks ALL accumulated behavioral criteria, not just the current sprint's. Criteria tagged `"type": "behavioral"` during contract negotiation. Uses existing contract JSON format — no new storage. |
-| 1.2 | **Static analysis gate (soft)** | OPP-03-B | S | Inject lint/typecheck results into Evaluator context. Near-zero cost, richer signal for evaluation, no retries consumed. Requires detecting the project's lint command (package.json scripts or convention). |
-| 1.3 | **Diff-aware evaluation on retries** | OPP-05 | S | Inject `git diff` between attempts into Evaluator prompt. Sharpens retry feedback, especially for large codebases. Small change to evaluator prompt template only. |
-| 1.4 | **Sprint selection (`--sprint N`)** | OPP-08 | M | Major DX improvement. Targeted sprint re-run without full `--resume` from last checkpoint. |
-| 1.5 | **Quality criteria in contracts** | OPP-06-B | S | Extend contract negotiation prompts to include quality-focused criteria (naming, duplication, complexity, documentation). Tests whether quality awareness is the missing signal before investing in a separate Reviewer agent. |
-| 1.6 | **Progressive spec refinement (guarded)** | OPP-09 | L | Living spec that adapts after each sprint. **Guardrails**: only future sprints modified; user gate before applying changes; diff logged; accumulated BDD regression criteria (1.1 / OPP-01-A) remain unchanged. The largest item in Phase 1 but addresses a fundamental limitation. |
+| # | Feature | Source | Effort | Notes |
+|---|---------|--------|--------|-------|
+| 1.5.1 | **Sprint counting regex fix + prompt guidance** | OPP-14 | Trivial | `^` anchor on regex + spec-format skill update |
+| 1.5.2 | **Timestamp log filenames** | OPP-14 | S | `YYYY.MM.DD-HH.MM.SS` prefix; align Langfuse traces |
+| 1.5.3 | **Resume contract skip** | OPP-14 | S | Reuse `--sprint N` contract-reuse logic for `--resume` |
+| 1.5.4 | **`.adhd/` artifact commits + revert fix** | OPP-14 | M | Commit `.adhd/` before Generator; switch to `git reset --hard` |
+| 1.5.5 | **Contract parse error logging** | OPP-14 | S | Log raw text + diagnostic file on parse failure |
+| 1.5.6 | **Delete Codex harness** | — | Trivial | Remove `codex-harness/`, npm script, `@openai/codex-sdk` dep |
+| 1.5.7 | **Progress `"documenting"` status** | OPP-14 | Trivial | |
+| 1.5.8 | **HITL notifications** | OPP-15 | S | Terminal bell + `--notify` flag |
+| 1.5.9 | **`--commit-adhd` / `--commit-adhd-logs` flags** | OPP-15 | S | Opt-in git commits for `.adhd/` artifacts |
 
-**Rationale for ordering**: Items 1.1-1.3 are the highest-leverage quick wins — they address quality gaps (cross-sprint regression, trivial failures, imprecise retry feedback) with minimal code. Item 1.4 is DX. Item 1.5 is a small prompt change with outsized impact on code quality. Item 1.6 is the most ambitious but directly addresses a real limitation: specs that can't adapt to reality.
-
-**Dependencies**: Item 1.6 benefits from 1.1 being in place first — accumulated BDD criteria provide the stable behavioral contract that persists even as the spec evolves around them.
+**Rationale for ordering**: Item 1.5.1 is the highest-ROI fix (one-line regex change eliminates phantom sprints). Items 1.5.2-1.5.3 solve the log overwrite and resume re-negotiation problems. Item 1.5.4 is the largest single item — it combines `.adhd/` pre-commit with the revert mechanism fix (the pre-commit eliminates the dirty-tree condition that causes revert failures). Items 1.5.5-1.5.9 are smaller independent improvements.
 
 ---
 
@@ -411,9 +407,9 @@ These items use the existing skills system and contract negotiation prompts. The
 | 2.1 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Use cheaper model by default, escalate to stronger model on failed retry. Higher success rate on hard sprints without increasing baseline cost. Decomposition (attempt 3) deferred. |
 | 2.2 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
 | 2.3 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
-| 2.4 | **Code review agent (5th agent)** | OPP-06-A | L | Separate Reviewer agent for code quality. **Contingent**: only if Phase 1's quality criteria in contracts (1.5 / OPP-06-B) proves insufficient. If OPP-06-B works well, this item is dropped. |
+| 2.4 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
 
-**Rationale**: Item 2.1 addresses a fundamental retry limitation. Items 2.2-2.3 are ecosystem and tooling. Item 2.4 is contingent — it's the escalation path if OPP-06-B doesn't deliver enough quality signal.
+**Rationale**: Item 2.1 addresses a fundamental retry limitation. Items 2.2-2.3 are ecosystem and tooling. Item 2.4 is contingent — it's the escalation path if quality criteria in contracts don't deliver enough signal.
 
 ---
 
@@ -433,19 +429,22 @@ These items use the existing skills system and contract negotiation prompts. The
 | Stream / Phase | # | Feature | Source | Notes |
 |---|---|---|---|---|
 | **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills (security, a11y, API) + project-local template |
-| | CS-2 | Codebase context guidance | OPP-04-B | User guide, not a harness skill |
+| | CS-2 | Codebase context guidance | OPP-04 | User guide, not a harness skill |
 | --- | --- | --- | --- | --- |
-| **Phase 1**<br/>*Deepen (HIGH)* | 1.1 | BDD regression accumulation | OPP-01-A | #1 quality gap: cross-sprint behavioral regression |
-| | 1.2 | Static analysis gate (soft) | OPP-03-B | Inject lint/typecheck into Evaluator context |
-| | 1.3 | Diff-aware evaluation on retries | OPP-05 | Inject `git diff` into Evaluator prompt |
-| | 1.4 | Sprint selection (`--sprint N`) | OPP-08 | Targeted re-run without full `--resume` |
-| | 1.5 | Quality criteria in contracts | OPP-06-B | Quality-focused criteria in contract negotiation |
-| | 1.6 | Progressive spec refinement (guarded) | OPP-09 | Living spec; depends on 1.1 for stable BDD floor |
+| **Phase 1.5**<br/>*Operational Hardening (HIGH)* | 1.5.1 | Sprint counting regex fix | OPP-14 | Trivial; highest-ROI fix |
+| | 1.5.2 | Timestamp log filenames | OPP-14 | Prevents log overwrites on resume/retry |
+| | 1.5.3 | Resume contract skip | OPP-14 | Reuse `--sprint N` logic for `--resume` |
+| | 1.5.4 | `.adhd/` artifact commits + revert fix | OPP-14 | Commit before Generator; `reset --hard` |
+| | 1.5.5 | Contract parse error logging | OPP-14 | Observability on parse failures |
+| | 1.5.6 | Delete Codex harness | — | Remove `codex-harness/`, deps, scripts |
+| | 1.5.7 | Progress `"documenting"` status | OPP-14 | Accurate real-time progress |
+| | 1.5.8 | HITL notifications | OPP-15 | Terminal bell + `--notify` |
+| | 1.5.9 | `--commit-adhd` / `--commit-adhd-logs` | OPP-15 | Opt-in `.adhd/` git commits |
 | --- | --- | --- | --- | --- |
 | **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag |
 | | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
 | | 2.3 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
-| | 2.4 | Code review agent (5th agent) | OPP-06-A | **Contingent**: only if 1.5 (OPP-06-B) insufficient |
+| | 2.4 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
 | --- | --- | --- | --- | --- |
 | **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
 | | 3.2 | Web dashboard | OPP-12 | Requires stabilized CLI + data formats |
@@ -456,6 +455,6 @@ These items use the existing skills system and contract negotiation prompts. The
 
 The harness's highest-leverage extension point is the **skills system**. It's a fully functional plugin architecture with per-agent routing, three scopes, and methodology-aware filtering — but only three built-in skills exist, all harness-internal. The Content Stream exploits this gap: policy skills and codebase context guides can be authored independently of any engineering phase.
 
-The second insight is that **BDD scenarios are the natural regression mechanism**. They already exist as structured JSON in sprint contracts. They represent behavioral invariants, not implementation details. Accumulating them across sprints (OPP-01-A) turns the contract system from a per-sprint checklist into a growing behavioral specification of the entire system — and pairs naturally with progressive spec refinement (OPP-09) because the accumulated BDD criteria provide the stable contract floor that persists even as the spec evolves above them.
+The second insight is that **BDD scenarios are the natural regression mechanism**. They already exist as structured JSON in sprint contracts. They represent behavioral invariants, not implementation details. Accumulating them across sprints (§1.14) turns the contract system from a per-sprint checklist into a growing behavioral specification of the entire system — and pairs naturally with progressive spec refinement (§1.19) because the accumulated BDD criteria provide the stable contract floor that persists even as the spec evolves above them.
 
-**Opportunities not on the roadmap**: OPP-04 (Generator context priming) is addressed via CS-2 (OPP-04-B) as documentation/guidance — no code needed. OPP-13 (Documentation generation) has been implemented as the Documenter agent (see §1.12).
+The third insight: **dogfooding exposes operational issues that unit tests and design reviews miss** — phantom sprints from regex false positives, log file overwrites destroying forensic evidence, silent fallbacks masking contract parse failures. Phase 1.5 (Operational Hardening) exists because running the harness against its own codebase revealed these gaps.
