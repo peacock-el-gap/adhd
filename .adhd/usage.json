@@ -145,7 +145,85 @@
         }
       ],
       "totalCostUsd": 0.9214214999999999
+    },
+    {
+      "startedAt": "2026-04-10T03:50:51.891Z",
+      "stages": [
+        {
+          "stage": "sprint-6-contract-proposal",
+          "inputTokens": 12,
+          "outputTokens": 1704,
+          "cacheReadTokens": 356781,
+          "costUsd": 0.5292629999999999,
+          "durationMs": 48554
+        },
+        {
+          "stage": "sprint-6-contract-review",
+          "inputTokens": 1277,
+          "outputTokens": 3193,
+          "cacheReadTokens": 190977,
+          "costUsd": 0.41439225,
+          "durationMs": 87223
+        },
+        {
+          "stage": "sprint-6-attempt-0-generator",
+          "inputTokens": 52,
+          "outputTokens": 9722,
+          "cacheReadTokens": 3429312,
+          "costUsd": 2.38747225,
+          "durationMs": 244280
+        },
+        {
+          "stage": "sprint-6-attempt-0-evaluator",
+          "inputTokens": 400,
+          "outputTokens": 6210,
+          "cacheReadTokens": 424944,
+          "costUsd": 0.488897,
+          "durationMs": 179023
+        },
+        {
+          "stage": "sprint-6-attempt-1-generator",
+          "inputTokens": 52,
+          "outputTokens": 17912,
+          "cacheReadTokens": 3376607,
+          "costUsd": 2.5747385,
+          "durationMs": 319759
+        },
+        {
+          "stage": "sprint-6-attempt-1-evaluator",
+          "inputTokens": 18,
+          "outputTokens": 5585,
+          "cacheReadTokens": 410387,
+          "costUsd": 0.5565772499999999,
+          "durationMs": 118743
+        },
+        {
+          "stage": "sprint-6-attempt-2-generator",
+          "inputTokens": 39,
+          "outputTokens": 7859,
+          "cacheReadTokens": 1339884,
+          "costUsd": 1.0371744999999999,
+          "durationMs": 198563
+        },
+        {
+          "stage": "sprint-6-attempt-2-evaluator",
+          "inputTokens": 474,
+          "outputTokens": 5372,
+          "cacheReadTokens": 671897,
+          "costUsd": 0.6344185,
+          "durationMs": 137350
+        },
+        {
+          "stage": "documenter",
+          "inputTokens": 809,
+          "outputTokens": 10931,
+          "cacheReadTokens": 777830,
+          "costUsd": 1.0634350000000001,
+          "durationMs": 236829
+        }
+      ],
+      "totalCostUsd": 9.686368250000001
     }
   ],
-  "runTotalCostUsd": 13.80892175
+  "runTotalCostUsd": 23.49529
 }

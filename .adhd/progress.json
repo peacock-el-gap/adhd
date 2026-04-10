@@ -1,11 +1,11 @@
 {
-  "status": "building",
+  "status": "complete",
   "currentSprint": 6,
   "totalSprints": 6,
-  "completedSprints": 5,
+  "completedSprints": 6,
   "retryCount": 2,
   "specApproved": true,
-  "lastPassedCommitSha": "e6839ea136e062b8647c70eb0af6f3998658aa3b",
+  "lastPassedCommitSha": "40735509fcc7bfa48c4099b2a58bb991c997463b",
   "sprintResults": [
     {
       "sprintNumber": 1,
@@ -746,6 +746,125 @@
           "uuid": "f837aed7-a13b-4788-9757-1429deb87e45"
         }
       }
+    },
+    {
+      "sprintNumber": 6,
+      "passed": true,
+      "attempts": 3,
+      "evalResult": {
+        "passed": true,
+        "scores": {
+          "typescript_zero_errors_including_tests": 10,
+          "no_unused_imports_in_phase1_files": 9,
+          "jsdoc_on_exported_functions_in_shared": 8,
+          "all_shared_modules_have_test_files": 10,
+          "all_existing_tests_pass": 10,
+          "biome_lint_clean": 9,
+          "no_any_casts_in_phase1_code": 10,
+          "no_dead_code_or_unreachable_branches": 8,
+          "consistent_error_handling_pattern": 9,
+          "no_regressions_in_sprint5_criteria": 10
+        },
+        "feedback": [
+          {
+            "criterion": "typescript_zero_errors_including_tests",
+            "score": 10,
+            "details": "`bunx tsc --noEmit` exits with code 0 and produces zero output. The pre-existing errors in tests/ (missing noDocs and documenter properties) are fixed — tests/config.test.ts now includes these properties in all HarnessConfig objects."
+          },
+          {
+            "criterion": "no_unused_imports_in_phase1_files",
+            "score": 9,
+            "details": "`bunx biome check shared/ claude-harness/` reports 'Checked 42 files in 44ms. No fixes applied.' — zero warnings or errors. The unused truncateStaticAnalysisOutput import in cross-feature-integration.test.ts has been removed (grep confirms no reference)."
+          },
+          {
+            "criterion": "jsdoc_on_exported_functions_in_shared",
+            "score": 8,
+            "details": "All 18 exported functions across regression.ts, diff.ts, static-analysis.ts, refinement.ts, and config.ts have JSDoc blocks with description lines and @param tags for each parameter. Minor note: descriptions use the implicit first-line pattern rather than explicit @description tags, but this is standard JSDoc convention and the intent is fully met. All @param tags are present with descriptive text."
+          },
+          {
+            "criterion": "all_shared_modules_have_test_files",
+            "score": 10,
+            "details": "All 15 non-test, non-type .ts modules in shared/ have corresponding .test.ts files: artifact-digest, config, conversation-logger, diff, doc-validation, files, interaction, logger, prompts, refinement, regression, skills, static-analysis, tracing, usage. Each test file contains test cases (187 tests pass across 20 test files in shared/)."
+          },
+          {
+            "criterion": "all_existing_tests_pass",
+            "score": 10,
+            "details": "`bun test shared/` reports 187 pass, 0 fail, 393 expect() calls across 20 files. This exceeds the 124 test minimum from sprint 5. Additionally, `bun test tests/` passes with 391 tests, 0 failures. Exit code 0."
+          },
+          {
+            "criterion": "biome_lint_clean",
+            "score": 9,
+            "details": "`bunx biome check shared/ claude-harness/` reports zero errors and zero warnings. Existing biome-ignore comments in tracing.ts and interaction.ts were modified (rule references updated) but no new suppressions were added in sprint 6."
+          },
+          {
+            "criterion": "no_any_casts_in_phase1_code",
+            "score": 10,
+            "details": "grep for 'as any', ': any', '<any>' across regression.ts, diff.ts, static-analysis.ts, refinement.ts, artifact-digest.ts, and all their test files returns zero matches. The only 'any' substring found in claude-harness/ is the variable name 'anyFailed' which is not a type cast."
+          },
+          {
+            "criterion": "no_dead_code_or_unreachable_branches",
+            "score": 8,
+            "details": "No unreachable code after return/throw statements, no unused local variables (biome would catch these), and no commented-out code blocks >3 lines found. Section comments (e.g., '// --- 1. Read spec ---') are organizational, not dead code. Clean pass."
+          },
+          {
+            "criterion": "consistent_error_handling_pattern",
+            "score": 9,
+            "details": "All 6 JSON.parse call sites in shared/ are properly guarded: files.ts (3 calls) each in try-catch throwing descriptive errors with file paths; regression.ts (1 call) in try-catch logging warning and returning []; static-analysis.ts (1 call) inside outer try-catch returning []; usage.ts (1 call) in try-catch with comment about corruption. All follow the pattern of either logging+safe-default or throwing descriptive errors."
+          },
+          {
+            "criterion": "no_regressions_in_sprint5_criteria",
+            "score": 10,
+            "details": "All sprint 5 tests pass including cross-feature-integration.test.ts, regression-integration.test.ts, sprint-selection-integration.test.ts, lint-gate-integration.test.ts, and e2e-smoke.test.ts. The 187 shared/ tests and 391 tests/ tests all pass with zero failures. The app starts successfully with `--help`."
+          }
+        ],
+        "overallSummary": "Sprint 6 is a clean technical debt cleanup sprint. All TypeScript errors are resolved (including the 8 pre-existing test errors), biome linting is clean, JSDoc coverage is comprehensive, all shared modules have test files, and all 187+ tests pass. No regressions from sprint 5. Code quality is high with consistent error handling, no type casts, and no dead code.",
+        "sdkResult": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 137350,
+          "duration_api_ms": 132541,
+          "num_turns": 34,
+          "result": "All criteria check out. Let me compile the final evaluation:\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"typescript_zero_errors_including_tests\": 10,\n    \"no_unused_imports_in_phase1_files\": 9,\n    \"jsdoc_on_exported_functions_in_shared\": 8,\n    \"all_shared_modules_have_test_files\": 10,\n    \"all_existing_tests_pass\": 10,\n    \"biome_lint_clean\": 9,\n    \"no_any_casts_in_phase1_code\": 10,\n    \"no_dead_code_or_unreachable_branches\": 8,\n    \"consistent_error_handling_pattern\": 9,\n    \"no_regressions_in_sprint5_criteria\": 10\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"typescript_zero_errors_including_tests\",\n      \"score\": 10,\n      \"details\": \"`bunx tsc --noEmit` exits with code 0 and produces zero output. The pre-existing errors in tests/ (missing noDocs and documenter properties) are fixed — tests/config.test.ts now includes these properties in all HarnessConfig objects.\"\n    },\n    {\n      \"criterion\": \"no_unused_imports_in_phase1_files\",\n      \"score\": 9,\n      \"details\": \"`bunx biome check shared/ claude-harness/` reports 'Checked 42 files in 44ms. No fixes applied.' — zero warnings or errors. The unused truncateStaticAnalysisOutput import in cross-feature-integration.test.ts has been removed (grep confirms no reference).\"\n    },\n    {\n      \"criterion\": \"jsdoc_on_exported_functions_in_shared\",\n      \"score\": 8,\n      \"details\": \"All 18 exported functions across regression.ts, diff.ts, static-analysis.ts, refinement.ts, and config.ts have JSDoc blocks with description lines and @param tags for each parameter. Minor note: descriptions use the implicit first-line pattern rather than explicit @description tags, but this is standard JSDoc convention and the intent is fully met. All @param tags are present with descriptive text.\"\n    },\n    {\n      \"criterion\": \"all_shared_modules_have_test_files\",\n      \"score\": 10,\n      \"details\": \"All 15 non-test, non-type .ts modules in shared/ have corresponding .test.ts files: artifact-digest, config, conversation-logger, diff, doc-validation, files, interaction, logger, prompts, refinement, regression, skills, static-analysis, tracing, usage. Each test file contains test cases (187 tests pass across 20 test files in shared/).\"\n    },\n    {\n      \"criterion\": \"all_existing_tests_pass\",\n      \"score\": 10,\n      \"details\": \"`bun test shared/` reports 187 pass, 0 fail, 393 expect() calls across 20 files. This exceeds the 124 test minimum from sprint 5. Additionally, `bun test tests/` passes with 391 tests, 0 failures. Exit code 0.\"\n    },\n    {\n      \"criterion\": \"biome_lint_clean\",\n      \"score\": 9,\n      \"details\": \"`bunx biome check shared/ claude-harness/` reports zero errors and zero warnings. Existing biome-ignore comments in tracing.ts and interaction.ts were modified (rule references updated) but no new suppressions were added in sprint 6.\"\n    },\n    {\n      \"criterion\": \"no_any_casts_in_phase1_code\",\n      \"score\": 10,\n      \"details\": \"grep for 'as any', ': any', '<any>' across regression.ts, diff.ts, static-analysis.ts, refinement.ts, artifact-digest.ts, and all their test files returns zero matches. The only 'any' substring found in claude-harness/ is the variable name 'anyFailed' which is not a type cast.\"\n    },\n    {\n      \"criterion\": \"no_dead_code_or_unreachable_branches\",\n      \"score\": 8,\n      \"details\": \"No unreachable code after return/throw statements, no unused local variables (biome would catch these), and no commented-out code blocks >3 lines found. Section comments (e.g., '// --- 1. Read spec ---') are organizational, not dead code. Clean pass.\"\n    },\n    {\n      \"criterion\": \"consistent_error_handling_pattern\",\n      \"score\": 9,\n      \"details\": \"All 6 JSON.parse call sites in shared/ are properly guarded: files.ts (3 calls) each in try-catch throwing descriptive errors with file paths; regression.ts (1 call) in try-catch logging warning and returning []; static-analysis.ts (1 call) inside outer try-catch returning []; usage.ts (1 call) in try-catch with comment about corruption. All follow the pattern of either logging+safe-default or throwing descriptive errors.\"\n    },\n    {\n      \"criterion\": \"no_regressions_in_sprint5_criteria\",\n      \"score\": 10,\n      \"details\": \"All sprint 5 tests pass including cross-feature-integration.test.ts, regression-integration.test.ts, sprint-selection-integration.test.ts, lint-gate-integration.test.ts, and e2e-smoke.test.ts. The 187 shared/ tests and 391 tests/ tests all pass with zero failures. The app starts successfully with `--help`.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 6 is a clean technical debt cleanup sprint. All TypeScript errors are resolved (including the 8 pre-existing test errors), biome linting is clean, JSDoc coverage is comprehensive, all shared modules have test files, and all 187+ tests pass. No regressions from sprint 5. Code quality is high with consistent error handling, no type casts, and no dead code.\"\n}\n```",
+          "stop_reason": "end_turn",
+          "session_id": "805eace4-4f29-499c-8185-1271fa6a056d",
+          "total_cost_usd": 0.6344185,
+          "usage": {
+            "input_tokens": 474,
+            "cache_creation_input_tokens": 25888,
+            "cache_read_input_tokens": 671897,
+            "output_tokens": 5372,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 25888,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-opus-4-6": {
+              "inputTokens": 474,
+              "outputTokens": 5372,
+              "cacheReadInputTokens": 671897,
+              "cacheCreationInputTokens": 25888,
+              "webSearchRequests": 0,
+              "costUSD": 0.6344185,
+              "contextWindow": 200000,
+              "maxOutputTokens": 64000
+            }
+          },
+          "permission_denials": [],
+          "fast_mode_state": "off",
+          "uuid": "7206520c-e64c-41ee-a02b-3fa9334d867d"
+        }
+      }
     }
-  ]
+  ],
+  "docsGenerated": true
 }
