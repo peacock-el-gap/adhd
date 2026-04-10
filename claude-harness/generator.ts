@@ -140,11 +140,8 @@ export async function ensureGeneratorCommit(
   try {
     for await (const msg of query({ prompt: resumePrompt, options: resumeOptions })) {
       if (msg.type === "assistant") {
-        const message = msg as {
-          message: { content: Array<{ type: string; text?: string; name?: string }> };
-        };
-        for (const block of message.message.content) {
-          if (block.type === "tool_use" && block.name) {
+        for (const block of msg.message.content) {
+          if (block.type === "tool_use") {
             log("HARNESS", `  Commit resume tool: ${block.name}`);
           }
         }

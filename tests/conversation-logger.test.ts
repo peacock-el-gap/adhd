@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createConversationLog } from "./conversation-logger.ts";
+import { createConversationLog } from "../shared/conversation-logger.ts";
 
 describe("conversation-logger", () => {
   it("creates a logger with expected methods", () => {

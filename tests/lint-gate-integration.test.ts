@@ -6,8 +6,8 @@ import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeDiffSection } from "./diff.ts";
-import type { EvalResult } from "./types.ts";
+import { computeDiffSection } from "../shared/diff.ts";
+import type { EvalResult } from "../shared/types.ts";
 
 function gitExec(cmd: string, cwd: string): string {
   const buf = execSync(cmd, { cwd, stdio: ["pipe", "pipe", "pipe"] });

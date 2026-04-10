@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { GateOption } from "./interaction.ts";
-import { promptGate } from "./interaction.ts";
+import type { GateOption } from "../shared/interaction.ts";
+import { promptGate } from "../shared/interaction.ts";
 
 describe("interaction", () => {
   const defaultOptions: GateOption[] = [

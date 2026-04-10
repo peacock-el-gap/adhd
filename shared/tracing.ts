@@ -111,8 +111,6 @@ export function initTracing(config: ResolvedConfig): Tracer {
     // Primary approach: set usage_details directly on the active span when a result
     // message arrives. Falls back to a FIFO queue + span processor if getActiveSpan()
     // is unavailable (e.g., OTEL context doesn't propagate through async generators).
-    const cacheUsageQueue: Record<string, number>[] = [];
-
     const arizeQuery = mutableSDK.query;
     activeQuery = async function* patchedQuery(
       params: Parameters<typeof originalQuery>[0],
@@ -125,37 +123,17 @@ export function initTracing(config: ResolvedConfig): Tracer {
             cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
             cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
           };
-          // Try direct span attribute setting first
           const activeSpan = otelApi.trace.getActiveSpan?.();
           if (activeSpan) {
             activeSpan.setAttributes({ "langfuse.observation.usage_details": JSON.stringify(data) });
-          } else {
-            cacheUsageQueue.push(data);
           }
         }
         yield msg;
       }
     } as typeof originalQuery;
 
-    // Fallback span processor: enriches ClaudeAgent.query spans with cache token
-    // data from the queue, only used when getActiveSpan() wasn't available above.
-    const cacheTokenEnricher = {
-      onStart() {},
-      onEnd(span: { name: string; spanContext(): { spanId: string }; attributes: Record<string, unknown> }) {
-        if (span.name === "ClaudeAgent.query" && cacheUsageQueue.length > 0) {
-          const data = cacheUsageQueue.shift();
-          if (data) {
-            span.attributes["langfuse.observation.usage_details"] = JSON.stringify(data);
-          }
-        }
-      },
-      async forceFlush() {},
-      async shutdown() {},
-    };
-
     const sdk = new NodeSDK({
       spanProcessors: [
-        cacheTokenEnricher,
         new LangfuseSpanProcessor({
           timeout: 15,
           flushAt: 10,

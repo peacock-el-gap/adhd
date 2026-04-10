@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIN_README_LENGTH, validateDocumentation } from "./doc-validation.ts";
+import { MIN_README_LENGTH, validateDocumentation } from "../shared/doc-validation.ts";
 
 describe("doc-validation", () => {
   it("exports MIN_README_LENGTH as a positive number", () => {

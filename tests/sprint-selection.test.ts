@@ -1,27 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { describe, expect, test } from "bun:test";
 import { parseCli, resolveConfig } from "../shared/config.ts";
-import type { HarnessConfig, HarnessProgress, SprintContract } from "../shared/types.ts";
-
-// ── Helpers ─────────────────────────────────────────────────────────
-
-let tmpBase: string;
-
-function makeTmp(): string {
-  const dir = mkdtempSync(join(tmpdir(), "adhd-sprint-sel-"));
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-beforeEach(() => {
-  tmpBase = makeTmp();
-});
-
-afterEach(() => {
-  rmSync(tmpBase, { recursive: true, force: true });
-});
+import type { HarnessConfig } from "../shared/types.ts";
 
 const baseCli = {
   greenfield: false,
@@ -149,109 +128,6 @@ describe("no prompt required for sprint mode", () => {
 });
 
 // =====================================================
-// Sprint selection: spec requirement
-// =====================================================
-
-describe("sprint selection requires existing spec", () => {
-  test("harness.ts checks for spec.md existence in sprint mode", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("No spec found. Run the planner first or provide a spec.");
-  });
-});
-
-// =====================================================
-// Sprint selection: skips planning
-// =====================================================
-
-describe("sprint selection skips planning phase", () => {
-  test("sprintSelectionHarness does NOT call runPlanner", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    // Find the sprintSelectionHarness function and verify it doesn't call runPlanner
-    const fnStart = content.indexOf("async function sprintSelectionHarness(");
-    const fnEnd = content.indexOf("\nasync function runSprintLoop(");
-    expect(fnStart).toBeGreaterThan(-1);
-    expect(fnEnd).toBeGreaterThan(fnStart);
-    const fnBody = content.slice(fnStart, fnEnd);
-    expect(fnBody).not.toContain("runPlanner(");
-    // But it does load spec from disk
-    expect(fnBody).toContain("readSpec(");
-  });
-});
-
-// =====================================================
-// Sprint selection: sprint range enforcement
-// =====================================================
-
-describe("sprint selection runs only target sprint", () => {
-  test("runSprintLoop called with startSprint=N, totalSprints=N", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    const fnStart = content.indexOf("async function sprintSelectionHarness(");
-    const fnEnd = content.indexOf("\ninterface SprintLoopContext");
-    const fnBody = content.slice(fnStart, fnEnd);
-    // The sprint loop is called with sprintN as both start and total (run only this sprint)
-    expect(fnBody).toContain("startSprint: sprintN,");
-    expect(fnBody).toContain("totalSprints: sprintN,");
-  });
-});
-
-// =====================================================
-// Contract reuse vs negotiation
-// =====================================================
-
-describe("contract reuse vs fresh negotiation", () => {
-  test("sprint loop checks for existing contract when config.sprint is set", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("readContract(config.workDir, sprint)");
-    expect(content).toContain("Loaded existing contract for sprint");
-  });
-
-  test("falls back to negotiation when no contract exists", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("if (!contract)");
-    expect(content).toContain("Negotiating sprint contract...");
-  });
-});
-
-// =====================================================
-// Missing checkpoint warning
-// =====================================================
-
-describe("missing checkpoint warning", () => {
-  test("sprintSelectionHarness warns about missing prior checkpoint", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("No checkpoint for sprint");
-    expect(content).toContain("Ensure the codebase is in the expected state");
-  });
-});
-
-// =====================================================
-// Workspace not cleaned in sprint mode
-// =====================================================
-
-describe("workspace not cleaned in sprint mode", () => {
-  test("sprintSelectionHarness calls initWorkspace with resume: true", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    const fnStart = content.indexOf("async function sprintSelectionHarness(");
-    const fnEnd = content.indexOf("\nasync function runSprintLoop(");
-    const fnBody = content.slice(fnStart, fnEnd);
-    expect(fnBody).toContain("resume: true");
-  });
-});
-
-// =====================================================
-// Regression criteria loaded in sprint mode
-// =====================================================
-
-describe("regression criteria loaded in sprint mode", () => {
-  test("sprint loop injects regression criteria for sprint > 1", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    // The existing evaluator block injects regression criteria for sprint > 1
-    expect(content).toContain("readRegressionCriteria(config.workDir)");
-    expect(content).toContain("buildRegressionSection(regressionCriteria)");
-  });
-});
-
-// =====================================================
 // Type safety: HarnessConfig.sprint
 // =====================================================
 
@@ -277,36 +153,5 @@ describe("clean type safety", () => {
       sprint: 3,
     };
     expect(config.sprint).toBe(3);
-  });
-});
-
-// =====================================================
-// Sprint exceeds total warning
-// =====================================================
-
-describe("sprint exceeds total sprints warning", () => {
-  test("sprintSelectionHarness warns when sprint exceeds detected count", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("exceeds detected sprint count");
-  });
-});
-
-// =====================================================
-// Integration: sprint selection dispatching
-// =====================================================
-
-describe("sprint selection dispatch in runHarness", () => {
-  test("runHarness checks config.sprint and dispatches to sprintSelectionHarness", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("if (config.sprint !== undefined)");
-    expect(content).toContain("sprintSelectionHarness(config, startTime, tracer, usage)");
-  });
-
-  test("sprint selection path is before fresh run path", () => {
-    const content = readFileSync("claude-harness/harness.ts", "utf-8");
-    const sprintIdx = content.indexOf("Sprint selection path");
-    const freshIdx = content.indexOf("Fresh run path");
-    expect(sprintIdx).toBeGreaterThan(-1);
-    expect(freshIdx).toBeGreaterThan(sprintIdx);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildArtifactDigest, DEFAULT_DIGEST_BUDGET } from "./artifact-digest.ts";
+import { buildArtifactDigest, DEFAULT_DIGEST_BUDGET } from "../shared/artifact-digest.ts";
 
 describe("artifact-digest", () => {
   it("exports DEFAULT_DIGEST_BUDGET as a positive number", () => {

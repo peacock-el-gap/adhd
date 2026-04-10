@@ -10,8 +10,8 @@ import {
   buildRegressionSection,
   readRegressionCriteria,
   regressionPath,
-} from "./regression.ts";
-import type { RegressionCriterion, SprintContract } from "./types.ts";
+} from "../shared/regression.ts";
+import type { RegressionCriterion, SprintContract } from "../shared/types.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_regression_integration__");
 const ADHD_DIR = join(TMP_DIR, ".adhd");

@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { harnessDir, readContract, readProgress, readSpec, writeContract, writeProgress, writeSpec } from "./files.ts";
-import type { HarnessProgress } from "./types.ts";
+import { harnessDir, readContract, readProgress, readSpec, writeContract, writeProgress, writeSpec } from "../shared/files.ts";
+import type { HarnessProgress } from "../shared/types.ts";
 
 describe("files", () => {
   describe("harnessDir", () => {

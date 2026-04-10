@@ -9,15 +9,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CLI_FLAG_HELP, parseCli, resolveConfig } from "./config.ts";
-import { buildRefinementPrompt, extractCompletedSprintSections, freezeCompletedSprints } from "./refinement.ts";
+import { CLI_FLAG_HELP, parseCli, resolveConfig } from "../shared/config.ts";
+import { buildRefinementPrompt, extractCompletedSprintSections, freezeCompletedSprints } from "../shared/refinement.ts";
 import {
   accumulateRegressionCriteria,
   buildRegressionSection,
   readRegressionCriteria,
   regressionPath,
-} from "./regression.ts";
-import type { RegressionCriterion, SprintContract } from "./types.ts";
+} from "../shared/regression.ts";
+import type { RegressionCriterion, SprintContract } from "../shared/types.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_cross_feature__");
 const ADHD_DIR = join(TMP_DIR, ".adhd");
@@ -391,7 +391,7 @@ describe("regression.json survives resume and sprint selection", () => {
     expect(existsSync(regressionPath(TMP_DIR))).toBe(true);
 
     // Import and call the internal cleanup function via initWorkspace
-    const { initWorkspace } = await import("./files.ts");
+    const { initWorkspace } = await import("../shared/files.ts");
 
     // initWorkspace with resume=false triggers cleanHarnessArtifacts
     await initWorkspace(TMP_DIR, { greenfield: false, resume: false });
@@ -409,7 +409,7 @@ describe("regression.json survives resume and sprint selection", () => {
     const criteria: RegressionCriterion[] = [{ name: "test_crit", description: "Test", threshold: 7, sprintNumber: 1 }];
     writeFileSync(regressionPath(TMP_DIR), JSON.stringify(criteria, null, 2), "utf-8");
 
-    const { initWorkspace } = await import("./files.ts");
+    const { initWorkspace } = await import("../shared/files.ts");
     await initWorkspace(TMP_DIR, { greenfield: false, resume: true });
 
     expect(existsSync(regressionPath(TMP_DIR))).toBe(true);

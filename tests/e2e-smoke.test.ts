@@ -8,18 +8,18 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveConfig } from "./config.ts";
-import { computeDiffSection } from "./diff.ts";
-import { readContract, readSpec, writeContract, writeSpec } from "./files.ts";
-import { countSprints } from "./refinement.ts";
+import { resolveConfig } from "../shared/config.ts";
+import { computeDiffSection } from "../shared/diff.ts";
+import { readContract, readSpec, writeContract, writeSpec } from "../shared/files.ts";
+import { countSprints } from "../shared/refinement.ts";
 import {
   accumulateRegressionCriteria,
   buildRegressionSection,
   readRegressionCriteria,
   regressionPath,
-} from "./regression.ts";
-import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "./static-analysis.ts";
-import type { EvalResult, SprintContract, SprintResult } from "./types.ts";
+} from "../shared/regression.ts";
+import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
+import type { EvalResult, SprintContract, SprintResult } from "../shared/types.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_e2e_smoke__");
 const ADHD_DIR = join(TMP_DIR, ".adhd");

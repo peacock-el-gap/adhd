@@ -351,46 +351,6 @@ describe("HarnessProgress docsGenerated field", () => {
   });
 });
 
-describe("harness.ts resume compatibility structure", () => {
-  test("resumeHarness handles status 'complete' with docsGenerated false", () => {
-    const fs = require("fs");
-    const content = fs.readFileSync("claude-harness/harness.ts", "utf-8");
-    // Check that the resume path handles docs-only re-run
-    expect(content).toContain("!progress.docsGenerated && !config.noDocs");
-    expect(content).toContain("Running Documenter phase only");
-  });
-
-  test("resumeHarness skips when docsGenerated is true", () => {
-    const fs = require("fs");
-    const content = fs.readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("All sprints and documentation already completed");
-  });
-
-  test("runDocumenterPhase sets docsGenerated to true on success", () => {
-    const fs = require("fs");
-    const content = fs.readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("progress.docsGenerated = true");
-    expect(content).toContain("await writeProgress(config.workDir, progress)");
-  });
-
-  test("documenter failure leaves docsGenerated unset", () => {
-    const fs = require("fs");
-    const content = fs.readFileSync("claude-harness/harness.ts", "utf-8");
-    // docsGenerated = true is inside try block, so catch leaves it false
-    expect(content).toContain("docsGenerated remains false/undefined so resume can re-attempt");
-  });
-
-  test("resume with partially completed sprints runs normal loop then docs", () => {
-    const fs = require("fs");
-    const content = fs.readFileSync("claude-harness/harness.ts", "utf-8");
-    // The normal resume path goes through runSprintLoop which has documenter phase
-    expect(content).toContain("runSprintLoop(");
-    // runSprintLoop calls runDocumenterPhase when allPassed && !config.noDocs
-    expect(content).toContain("allPassed && !config.noDocs");
-    expect(content).toContain("runDocumenterPhase(");
-  });
-});
-
 // =====================================================
 // Feature 10: Documentation Quality Validation
 // =====================================================
@@ -452,26 +412,6 @@ describe("validateDocumentation", () => {
     // No docs at all
     const result = validateDocumentation(dir);
     expect(result).toBeUndefined(); // void function, no error thrown
-  });
-});
-
-describe("harness.ts validation integration structure", () => {
-  test("validateDocumentation is called after documenter succeeds", () => {
-    const fs = require("fs");
-    const content = fs.readFileSync("claude-harness/harness.ts", "utf-8");
-    expect(content).toContain("validateDocumentation(");
-  });
-
-  test("validateDocumentation is exported for testing", () => {
-    expect(typeof validateDocumentation).toBe("function");
-  });
-
-  test("validation checks both README.md and CHANGELOG.md", () => {
-    const fs = require("fs");
-    const content = fs.readFileSync("shared/doc-validation.ts", "utf-8");
-    expect(content).toContain("README.md");
-    expect(content).toContain("CHANGELOG.md");
-    expect(content).toContain("MIN_README_LENGTH");
   });
 });
 

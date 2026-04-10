@@ -5,14 +5,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { readContract, writeContract } from "./files.ts";
+import { readContract, writeContract } from "../shared/files.ts";
 import {
   computeSpecDiff,
   extractCompletedSprintSections,
   extractSprintSection,
   freezeCompletedSprints,
-} from "./refinement.ts";
-import type { SprintContract } from "./types.ts";
+} from "../shared/refinement.ts";
+import type { SprintContract } from "../shared/types.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_sprint_sel_integration__");
 const ADHD_DIR = join(TMP_DIR, ".adhd");
