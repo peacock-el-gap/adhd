@@ -1441,9 +1441,9 @@ async function negotiateContract(
     systemPrompt: CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    tools: ["Read", "Glob"],
+    tools: [],
     model: proposalModel,
-    maxTurns: 10,
+    maxTurns: 1,
     persistSession: false,
   };
 
@@ -1500,9 +1500,9 @@ async function negotiateContract(
     systemPrompt: CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    tools: ["Read", "Glob"],
+    tools: [],
     model: reviewModel,
-    maxTurns: 10,
+    maxTurns: 1,
     persistSession: false,
   };
 
