@@ -1,0 +1,113 @@
+{
+  "passed": false,
+  "scores": {
+    "typescript_zero_errors_including_tests": 10,
+    "no_unused_imports_in_phase1_files": 9,
+    "jsdoc_on_exported_functions_in_shared": 4,
+    "all_shared_modules_have_test_files": 2,
+    "all_existing_tests_pass": 10,
+    "biome_lint_clean": 8,
+    "no_any_casts_in_phase1_code": 10,
+    "no_dead_code_or_unreachable_branches": 7,
+    "consistent_error_handling_pattern": 9,
+    "no_regressions_in_sprint5_criteria": 9
+  },
+  "feedback": [
+    {
+      "criterion": "typescript_zero_errors_including_tests",
+      "score": 10,
+      "details": "`bunx tsc --noEmit` exits with code 0 and produces no output. The pre-existing 8 errors in tests/ for missing noDocs and documenter properties have been fixed. All tests/ files now include the required properties (confirmed by grep showing noDocs in tests/refinement.test.ts and tests/harness-documenter.test.ts)."
+    },
+    {
+      "criterion": "no_unused_imports_in_phase1_files",
+      "score": 9,
+      "details": "The previously-identified unused truncateStaticAnalysisOutput import in cross-feature-integration.test.ts has been removed (grep returns nothing). Biome check reports zero unused import warnings across shared/ and claude-harness/. The only biome findings are 6 noExplicitAny warnings in tracing.ts, which is not an import issue."
+    },
+    {
+      "criterion": "jsdoc_on_exported_functions_in_shared",
+      "score": 4,
+      "details": "Critical failures: (1) Two exported functions in shared/config.ts completely lack JSDoc: `parseCli` (line 112) and `validateConfig` (line 374). (2) While all other exported functions have JSDoc comment blocks with descriptions, NONE of them include @param tags. The contract explicitly requires '@param tags for each parameter'. Every exported function across regression.ts (4 functions), diff.ts (1), static-analysis.ts (2), refinement.ts (6), and config.ts (3 with JSDoc) is missing @param tags. This is a systematic gap affecting 16+ functions."
+    },
+    {
+      "criterion": "all_shared_modules_have_test_files",
+      "score": 2,
+      "details": "10 out of 13 required modules are missing corresponding test files in shared/: artifact-digest.test.ts, conversation-logger.test.ts, doc-validation.test.ts, files.test.ts, interaction.test.ts, logger.test.ts, prompts.test.ts, skills.test.ts, tracing.test.ts, and usage.test.ts. Only regression, diff, static-analysis, refinement, and config have test files in shared/. Note: some of these modules have tests in tests/ directory but the contract specifically requires shared/<name>.test.ts files."
+    },
+    {
+      "criterion": "all_existing_tests_pass",
+      "score": 10,
+      "details": "`bun test shared/` produces 124 pass, 0 fail, 277 expect() calls across 10 files. This meets the >= 124 test count requirement. Exit code 0. All tests from sprints 1-5 continue to pass. Full project tests (`bun test tests/`) also pass: 391 pass, 0 fail."
+    },
+    {
+      "criterion": "biome_lint_clean",
+      "score": 8,
+      "details": "`bunx biome check shared/ claude-harness/` exits with code 0 (success). It reports 6 warnings, all for noExplicitAny in shared/tracing.ts, which is configured as 'warn' in biome.json (not an error). No errors found. Some biome-ignore comments were modified in sprint 6 (changed from lint/style/noVar to lint/correctness/noInnerDeclarations in tracing.ts) but these are updates to existing suppressions, not new ones."
+    },
+    {
+      "criterion": "no_any_casts_in_phase1_code",
+      "score": 10,
+      "details": "Grep for 'as any', ': any', and '<any>' across all specified Phase 1 files (shared/regression.ts, shared/diff.ts, shared/static-analysis.ts, shared/refinement.ts, shared/artifact-digest.ts, and their test files) returns no matches. The `any` usages flagged by biome are in shared/tracing.ts which is not a Phase 1 Deepen file."
+    },
+    {
+      "criterion": "no_dead_code_or_unreachable_branches",
+      "score": 7,
+      "details": "Biome reports no unused variables or unreachable code. The consecutive comment blocks found (3+ lines in cross-feature-integration.test.ts) are section header comments like '// === 1. Sprint selection + regression injection ===' used for organizing test sections, not commented-out code. Similar blocks in tracing.ts and prompts.ts are documentation comments. No actual dead code found."
+    },
+    {
+      "criterion": "consistent_error_handling_pattern",
+      "score": 9,
+      "details": "All 4 JSON.parse call sites in shared/ are properly guarded: regression.ts:28 has try-catch returning [] with descriptive warning; files.ts:132 (readContract) has try-catch throwing descriptive error with file path; files.ts:152 (readFeedback) has try-catch with descriptive error; files.ts:165 (readProgress) has try-catch with descriptive error including path. No bare JSON.parse calls exist."
+    },
+    {
+      "criterion": "no_regressions_in_sprint5_criteria",
+      "score": 9,
+      "details": "All 124 tests from sprint 5 continue to pass. The cross-feature-integration.test.ts tests covering combined flags, regression+refinement, sprint selection+lint-gate, etc. all pass. TypeScript compilation is clean. The malformed regression.json handling is verified by test output showing proper warning messages."
+    }
+  ],
+  "overallSummary": "Sprint 6 fails due to two critical gaps. First, JSDoc comments are missing @param tags on all 16+ exported functions (and 2 functions in config.ts lack JSDoc entirely), scoring only 4/10 against a threshold of 7. Second, 10 out of 13 required shared/ modules are missing their corresponding .test.ts files in the shared/ directory, scoring only 2/10. The cleanup work (TypeScript errors, unused imports, error handling, any casts) was done well, but the JSDoc and test coverage requirements were not met.",
+  "sdkResult": {
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 179023,
+    "duration_api_ms": 175219,
+    "num_turns": 30,
+    "result": "Now I have enough data. Let me compile the evaluation.\n\nKey findings:\n1. **TypeScript zero errors**: ✓ - `bunx tsc --noEmit` exits cleanly with no errors\n2. **No unused imports**: ✓ - truncateStaticAnalysisOutput import removed; biome shows no unused import warnings\n3. **JSDoc on exported functions**: ✗ - JSDoc exists but NO `@param` tags on any function, and 2 functions in config.ts completely lack JSDoc\n4. **All shared modules have test files**: ✗ - 10 modules missing test files (artifact-digest, conversation-logger, doc-validation, files, interaction, logger, prompts, skills, tracing, usage)\n5. **All tests pass**: ✓ - 124 pass in shared/, 391 total\n6. **Biome lint clean**: ✓ - Exit code 0, only warnings (noExplicitAny configured as \"warn\"), no errors\n7. **No any casts in phase 1 files**: ✓ - None found\n8. **No dead code**: Mixed - comment blocks are section headers in tests, not dead code; tracing.ts comments are documentation\n9. **Consistent error handling**: ✓ - All JSON.parse calls wrapped\n10. **No regressions**: ✓ - All 124 tests still pass\n\n```json\n{\n  \"passed\": false,\n  \"scores\": {\n    \"typescript_zero_errors_including_tests\": 10,\n    \"no_unused_imports_in_phase1_files\": 9,\n    \"jsdoc_on_exported_functions_in_shared\": 4,\n    \"all_shared_modules_have_test_files\": 2,\n    \"all_existing_tests_pass\": 10,\n    \"biome_lint_clean\": 8,\n    \"no_any_casts_in_phase1_code\": 10,\n    \"no_dead_code_or_unreachable_branches\": 7,\n    \"consistent_error_handling_pattern\": 9,\n    \"no_regressions_in_sprint5_criteria\": 9\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"typescript_zero_errors_including_tests\",\n      \"score\": 10,\n      \"details\": \"`bunx tsc --noEmit` exits with code 0 and produces no output. The pre-existing 8 errors in tests/ for missing noDocs and documenter properties have been fixed. All tests/ files now include the required properties (confirmed by grep showing noDocs in tests/refinement.test.ts and tests/harness-documenter.test.ts).\"\n    },\n    {\n      \"criterion\": \"no_unused_imports_in_phase1_files\",\n      \"score\": 9,\n      \"details\": \"The previously-identified unused truncateStaticAnalysisOutput import in cross-feature-integration.test.ts has been removed (grep returns nothing). Biome check reports zero unused import warnings across shared/ and claude-harness/. The only biome findings are 6 noExplicitAny warnings in tracing.ts, which is not an import issue.\"\n    },\n    {\n      \"criterion\": \"jsdoc_on_exported_functions_in_shared\",\n      \"score\": 4,\n      \"details\": \"Critical failures: (1) Two exported functions in shared/config.ts completely lack JSDoc: `parseCli` (line 112) and `validateConfig` (line 374). (2) While all other exported functions have JSDoc comment blocks with descriptions, NONE of them include @param tags. The contract explicitly requires '@param tags for each parameter'. Every exported function across regression.ts (4 functions), diff.ts (1), static-analysis.ts (2), refinement.ts (6), and config.ts (3 with JSDoc) is missing @param tags. This is a systematic gap affecting 16+ functions.\"\n    },\n    {\n      \"criterion\": \"all_shared_modules_have_test_files\",\n      \"score\": 2,\n      \"details\": \"10 out of 13 required modules are missing corresponding test files in shared/: artifact-digest.test.ts, conversation-logger.test.ts, doc-validation.test.ts, files.test.ts, interaction.test.ts, logger.test.ts, prompts.test.ts, skills.test.ts, tracing.test.ts, and usage.test.ts. Only regression, diff, static-analysis, refinement, and config have test files in shared/. Note: some of these modules have tests in tests/ directory but the contract specifically requires shared/<name>.test.ts files.\"\n    },\n    {\n      \"criterion\": \"all_existing_tests_pass\",\n      \"score\": 10,\n      \"details\": \"`bun test shared/` produces 124 pass, 0 fail, 277 expect() calls across 10 files. This meets the >= 124 test count requirement. Exit code 0. All tests from sprints 1-5 continue to pass. Full project tests (`bun test tests/`) also pass: 391 pass, 0 fail.\"\n    },\n    {\n      \"criterion\": \"biome_lint_clean\",\n      \"score\": 8,\n      \"details\": \"`bunx biome check shared/ claude-harness/` exits with code 0 (success). It reports 6 warnings, all for noExplicitAny in shared/tracing.ts, which is configured as 'warn' in biome.json (not an error). No errors found. Some biome-ignore comments were modified in sprint 6 (changed from lint/style/noVar to lint/correctness/noInnerDeclarations in tracing.ts) but these are updates to existing suppressions, not new ones.\"\n    },\n    {\n      \"criterion\": \"no_any_casts_in_phase1_code\",\n      \"score\": 10,\n      \"details\": \"Grep for 'as any', ': any', and '<any>' across all specified Phase 1 files (shared/regression.ts, shared/diff.ts, shared/static-analysis.ts, shared/refinement.ts, shared/artifact-digest.ts, and their test files) returns no matches. The `any` usages flagged by biome are in shared/tracing.ts which is not a Phase 1 Deepen file.\"\n    },\n    {\n      \"criterion\": \"no_dead_code_or_unreachable_branches\",\n      \"score\": 7,\n      \"details\": \"Biome reports no unused variables or unreachable code. The consecutive comment blocks found (3+ lines in cross-feature-integration.test.ts) are section header comments like '// === 1. Sprint selection + regression injection ===' used for organizing test sections, not commented-out code. Similar blocks in tracing.ts and prompts.ts are documentation comments. No actual dead code found.\"\n    },\n    {\n      \"criterion\": \"consistent_error_handling_pattern\",\n      \"score\": 9,\n      \"details\": \"All 4 JSON.parse call sites in shared/ are properly guarded: regression.ts:28 has try-catch returning [] with descriptive warning; files.ts:132 (readContract) has try-catch throwing descriptive error with file path; files.ts:152 (readFeedback) has try-catch with descriptive error; files.ts:165 (readProgress) has try-catch with descriptive error including path. No bare JSON.parse calls exist.\"\n    },\n    {\n      \"criterion\": \"no_regressions_in_sprint5_criteria\",\n      \"score\": 9,\n      \"details\": \"All 124 tests from sprint 5 continue to pass. The cross-feature-integration.test.ts tests covering combined flags, regression+refinement, sprint selection+lint-gate, etc. all pass. TypeScript compilation is clean. The malformed regression.json handling is verified by test output showing proper warning messages.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 6 fails due to two critical gaps. First, JSDoc comments are missing @param tags on all 16+ exported functions (and 2 functions in config.ts lack JSDoc entirely), scoring only 4/10 against a threshold of 7. Second, 10 out of 13 required shared/ modules are missing their corresponding .test.ts files in the shared/ directory, scoring only 2/10. The cleanup work (TypeScript errors, unused imports, error handling, any casts) was done well, but the JSDoc and test coverage requirements were not met.\"\n}\n```",
+    "stop_reason": "end_turn",
+    "session_id": "95a4bfee-ae85-407c-89a6-c4fce07838ef",
+    "total_cost_usd": 0.488897,
+    "usage": {
+      "input_tokens": 400,
+      "cache_creation_input_tokens": 19068,
+      "cache_read_input_tokens": 424944,
+      "output_tokens": 6210,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 19068,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-4-6": {
+        "inputTokens": 400,
+        "outputTokens": 6210,
+        "cacheReadInputTokens": 424944,
+        "cacheCreationInputTokens": 19068,
+        "webSearchRequests": 0,
+        "costUSD": 0.488897,
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000
+      }
+    },
+    "permission_denials": [],
+    "fast_mode_state": "off",
+    "uuid": "862b472e-561c-4968-a387-d1567223d68b"
+  }
+}
