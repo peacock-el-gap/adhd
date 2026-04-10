@@ -1,7 +1,6 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CLAUDE_MODEL } from "../shared/config.ts";
 import { computeDiffSection } from "../shared/diff.ts";
 import { validateDocumentation } from "../shared/doc-validation.ts";
 import {
@@ -24,9 +23,9 @@ import { initTracing, type Span, type Tracer } from "../shared/tracing.ts";
 import type {
   CommitSource,
   EvalResult,
-  HarnessConfig,
   HarnessProgress,
   HarnessResult,
+  ResolvedConfig,
   SprintContract,
   SprintResult,
 } from "../shared/types.ts";
@@ -42,13 +41,9 @@ import { runPlanner } from "./planner.ts";
 import { performSpecRefinement } from "./spec-refinement.ts";
 import { runStaticAnalysis } from "./static-analysis-runner.ts";
 
-export async function runHarness(config: HarnessConfig): Promise<HarnessResult> {
+export async function runHarness(config: ResolvedConfig): Promise<HarnessResult> {
   const startTime = Date.now();
-  const model = config.model ?? CLAUDE_MODEL;
-  // B3: per-agent model overrides (fall back to base model)
-  const generatorModel = config.modelGenerator ?? model;
-  const evaluatorModel = config.modelEvaluator ?? model;
-  const isGreenfield = config.isGreenfield ?? false;
+  const { model, isGreenfield } = config;
 
   // Configure timezone display for terminal
   if (config.tzDisplay) {
@@ -61,9 +56,8 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   log("HARNESS", "Initializing Claude Agent SDK harness");
   log("HARNESS", `Work directory: ${config.workDir}`);
-  // B3: show per-agent model overrides if configured
   const modelInfo = [config.modelPlanner, config.modelGenerator, config.modelEvaluator].some(Boolean)
-    ? `Models: planner=${config.modelPlanner ?? model}, generator=${generatorModel}, evaluator=${evaluatorModel}`
+    ? `Models: planner=${config.modelPlanner ?? model}, generator=${config.modelGenerator ?? model}, evaluator=${config.modelEvaluator ?? model}`
     : `Model: ${model}`;
   log(
     "HARNESS",
@@ -72,21 +66,21 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   // --- Resume path ---
   if (config.isResume) {
-    const result = await resumeHarness(config, model, isGreenfield, startTime, tracer, usage);
+    const result = await resumeHarness(config, startTime, tracer, usage);
     await tracer.flush();
     return result;
   }
 
   // --- Sprint selection path ---
   if (config.sprint !== undefined) {
-    const result = await sprintSelectionHarness(config, model, isGreenfield, startTime, tracer, usage);
+    const result = await sprintSelectionHarness(config, startTime, tracer, usage);
     await tracer.flush();
     return result;
   }
 
   // --- Fresh run path ---
 
-  // A2: Pre-flight dirty-tree check (skip in greenfield mode — no existing repo)
+  // Pre-flight dirty-tree check (skip in greenfield mode — no existing repo)
   if (!isGreenfield) {
     await checkDirtyTree(config);
   }
@@ -95,13 +89,12 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
   await initWorkspace(config.workDir, { greenfield: isGreenfield });
   logDebug("HARNESS", "Workspace initialized");
 
-  // B4: Resolve skills from 3 scopes
   const skills = resolveAllAgentSkills(config.workDir, join(import.meta.dir, "../shared"), {
     noBdd: config.noBdd,
     noTdd: config.noTdd,
   });
 
-  // Phase 1: Planning
+  // Planning
   logDivider();
   log("HARNESS", "PHASE 1: PLANNING");
   logDivider();
@@ -133,14 +126,12 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
       await writeSpec(config.workDir, spec);
       log("HARNESS", "Product spec written");
 
-      // A3: Spec approval gate
       progress.status = "spec-review";
       await writeProgress(config.workDir, progress);
       const approvedSpec = await specApprovalGate(config, spec, harnessSpan, usage, skills.planner);
       progress.specApproved = true;
       await writeProgress(config.workDir, progress);
 
-      // B1: Dry-run exits here
       if (config.isDryRun) {
         log("HARNESS", "Dry-run complete. Spec approved and saved.");
         usage.printSummary();
@@ -148,7 +139,6 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
         return { success: true, sprints: [], totalDurationMs: Date.now() - startTime };
       }
 
-      // C3: Create branch if --branch specified
       if (config.branch) {
         const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
         execSync(`git checkout -b ${config.branch}`, { cwd: gitDir, stdio: "pipe" });
@@ -162,20 +152,18 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
       const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
       progress.totalSprints = totalSprints;
 
-      return await runSprintLoop(
+      return await runSprintLoop({
         config,
-        model,
-        isGreenfield,
-        approvedSpec,
+        spec: approvedSpec,
         progress,
-        [],
-        1,
+        results: [],
+        startSprint: 1,
         totalSprints,
         startTime,
-        harnessSpan,
+        parentSpan: harnessSpan,
         usage,
         skills,
-      );
+      });
     } catch (err) {
       if (err instanceof UserAbortError) {
         usage.printSummary();
@@ -191,19 +179,17 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 }
 
 async function resumeHarness(
-  config: HarnessConfig,
-  model: string,
-  isGreenfield: boolean,
+  config: ResolvedConfig,
   startTime: number,
   tracer: Tracer,
   usage: UsageTracker,
 ): Promise<HarnessResult> {
+  const { model, isGreenfield } = config;
   log("HARNESS", "Resuming from checkpoint...");
 
   // Don't clean artifacts on resume
   await initWorkspace(config.workDir, { greenfield: isGreenfield, resume: true });
 
-  // B4: Resolve skills (same as fresh path)
   const skills = resolveAllAgentSkills(config.workDir, join(import.meta.dir, "../shared"), {
     noBdd: config.noBdd,
     noTdd: config.noTdd,
@@ -217,7 +203,7 @@ async function resumeHarness(
   }
 
   if (progress.status === "complete") {
-    // OPP-13-A: If sprints complete but docs not generated, run just the documenter
+    // If sprints complete but docs not generated, run just the documenter
     if (!progress.docsGenerated && !config.noDocs) {
       log("HARNESS", "All sprints complete. Running Documenter phase only...");
 
@@ -229,24 +215,17 @@ async function resumeHarness(
       });
 
       const results: SprintResult[] = progress.sprintResults ?? [];
-      const documenterModel = config.modelDocumenter ?? model;
-      const logLevel = config.logLevel ?? "normal";
-      const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
 
       return harnessSpan.run(async () => {
         try {
-          await runDocumenterPhase(
+          await runDocumenterPhase({
             config,
-            documenterModel,
-            isGreenfield,
-            logLevel,
-            gitDir,
-            harnessSpan,
+            parentSpan: harnessSpan,
             usage,
-            skills.documenter,
+            documenterSkills: skills.documenter,
             results,
             progress,
-          );
+          });
         } catch {
           // Documenter failure is non-fatal
         }
@@ -282,7 +261,7 @@ async function resumeHarness(
     progress.totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
   }
 
-  // C3: Resume branch check — warn if HEAD is on a different branch
+  // Resume branch check — warn if HEAD is on a different branch
   if (progress.branch) {
     const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
     try {
@@ -312,33 +291,30 @@ async function resumeHarness(
     resumeFrom: startSprint,
   });
   const result = await harnessSpan.run(() =>
-    runSprintLoop(
+    runSprintLoop({
       config,
-      model,
-      isGreenfield,
       spec,
       progress,
       results,
       startSprint,
-      progress.totalSprints,
+      totalSprints: progress.totalSprints,
       startTime,
-      harnessSpan,
+      parentSpan: harnessSpan,
       usage,
       skills,
-    ),
+    }),
   );
   harnessSpan.end();
   return result;
 }
 
 async function sprintSelectionHarness(
-  config: HarnessConfig,
-  model: string,
-  isGreenfield: boolean,
+  config: ResolvedConfig,
   startTime: number,
   tracer: Tracer,
   usage: UsageTracker,
 ): Promise<HarnessResult> {
+  const { model, isGreenfield } = config;
   const sprintN = config.sprint ?? 1;
   log("HARNESS", `Sprint selection mode: targeting sprint ${sprintN}`);
 
@@ -414,52 +390,47 @@ async function sprintSelectionHarness(
   });
 
   const result = await harnessSpan.run(() =>
-    runSprintLoop(
+    runSprintLoop({
       config,
-      model,
-      isGreenfield,
       spec,
       progress,
-      [],
-      sprintN,
-      sprintN, // endSprint = startSprint (run only this sprint)
+      results: [],
+      startSprint: sprintN,
+      totalSprints: sprintN,
       startTime,
-      harnessSpan,
+      parentSpan: harnessSpan,
       usage,
       skills,
-    ),
+    }),
   );
   harnessSpan.end();
   return result;
 }
 
-async function runSprintLoop(
-  config: HarnessConfig,
-  model: string,
-  isGreenfield: boolean,
-  spec: string,
-  progress: HarnessProgress,
-  results: SprintResult[],
-  startSprint: number,
-  totalSprints: number,
-  startTime: number,
-  parentSpan: Span,
-  usage: UsageTracker,
-  skills?: AllAgentSkills,
-): Promise<HarnessResult> {
-  const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
-  const logLevel = config.logLevel ?? "normal";
-  // B3: per-agent model overrides
-  const generatorModel = config.modelGenerator ?? model;
-  const evaluatorModel = config.modelEvaluator ?? model;
-  const documenterModel = config.modelDocumenter ?? model;
+interface SprintLoopContext {
+  config: ResolvedConfig;
+  spec: string;
+  progress: HarnessProgress;
+  results: SprintResult[];
+  startSprint: number;
+  totalSprints: number;
+  startTime: number;
+  parentSpan: Span;
+  usage: UsageTracker;
+  skills?: AllAgentSkills;
+}
+
+async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
+  const { config, progress, results, startSprint, startTime, parentSpan, usage, skills } = ctx;
+  let { spec, totalSprints } = ctx;
+  const { workDir, isGreenfield } = config;
+  const gitDir = isGreenfield ? join(workDir, "app") : workDir;
 
   for (let sprint = startSprint; sprint <= totalSprints; sprint++) {
     logDivider();
     log("HARNESS", `SPRINT ${sprint}/${totalSprints}`);
     logDivider();
 
-    // Phase 2: Contract Negotiation
     progress.status = "negotiating";
     progress.currentSprint = sprint;
     progress.retryCount = 0;
@@ -487,7 +458,15 @@ async function runSprintLoop(
       try {
         contract = await negotiationSpan.run(() =>
           withTransientRetry(
-            () => negotiateContract(config.workDir, spec, sprint, generatorModel, evaluatorModel, usage),
+            () =>
+              negotiateContract(
+                config.workDir,
+                spec,
+                sprint,
+                config.modelGenerator ?? config.model,
+                config.modelEvaluator ?? config.model,
+                usage,
+              ),
             "contract negotiation",
           ),
         );
@@ -501,8 +480,7 @@ async function runSprintLoop(
       log("HARNESS", `Contract agreed: ${contract.criteria.length} criteria for ${contract.features.length} features`);
     }
 
-    // C2: Contract Preview gate
-    if ((config.interactive ?? true) && config.gateTimeout !== 0) {
+    if (config.interactive && config.gateTimeout !== 0) {
       const gate = await promptGate(
         `Sprint ${sprint} contract:\n  Features: ${contract.features.join(", ")}\n  Criteria: ${contract.criteria.length}`,
         [
@@ -510,7 +488,7 @@ async function runSprintLoop(
           { key: "x", label: "Abort", isDefault: false },
         ],
         config.gateTimeout ?? 15,
-        config.interactive ?? true,
+        config.interactive,
       );
       if (gate.key === "x") {
         log("HARNESS", "Aborted by user at contract preview.");
@@ -518,7 +496,7 @@ async function runSprintLoop(
       }
     }
 
-    // Phase 3-4: Build-Evaluate Loop
+    // Build-Evaluate Loop
     let passed = false;
     let lastEval: EvalResult | undefined;
     let attempts = 0;
@@ -541,26 +519,21 @@ async function runSprintLoop(
       progress.retryCount = retry;
       await writeProgress(config.workDir, progress);
 
+      const generatorModel = config.modelGenerator ?? config.model;
       const generatorSpan = attemptSpan.startChild("generator", { model: generatorModel, sprint, attempt: retry });
       let generatorSessionId: string | undefined;
       try {
         const result = await generatorSpan.run(() =>
           withTransientRetry(
             () =>
-              runGenerator(
-                config.workDir,
+              runGenerator({
+                config,
                 spec,
                 contract,
-                lastEval,
-                generatorModel,
-                isGreenfield,
-                logLevel,
-                retry,
-                config.noTdd,
-                skills?.generator,
-                config.sourceDir,
-                config.testDir,
-              ),
+                previousFeedback: lastEval,
+                attempt: retry,
+                skills: skills?.generator,
+              }),
             "generator",
           ),
         );
@@ -586,7 +559,7 @@ async function runSprintLoop(
             generatorSessionId,
             contract,
             retry > 0,
-            generatorModel,
+            config.modelGenerator ?? config.model,
           );
           log("HARNESS", `Commit source: ${lastCommitSource}`);
         } catch (err) {
@@ -601,7 +574,7 @@ async function runSprintLoop(
       // Build supplementary context for the evaluator
       let supplementaryContext = "";
 
-      // Regression criteria injection (Feature 1.1)
+      // Regression criteria injection
       if (!config.noBdd && sprint > 1) {
         try {
           const regressionCriteria = await readRegressionCriteria(config.workDir);
@@ -614,8 +587,7 @@ async function runSprintLoop(
         }
       }
 
-      // Static analysis execution (Feature 1.2)
-      const staticAnalysisResult = await runStaticAnalysis(config, isGreenfield);
+      const staticAnalysisResult = await runStaticAnalysis(config);
       if (staticAnalysisResult.output) {
         // Hard gate: if --lint-gate and any command failed, skip evaluator
         if (config.lintGate && staticAnalysisResult.failed) {
@@ -636,7 +608,7 @@ async function runSprintLoop(
         }
       }
 
-      // Diff-aware evaluation on retries (Feature 1.3)
+      // Diff-aware evaluation on retries
       // Ordering: regression → diff → static analysis (deterministic)
       if (retry > 0 && beforeSha) {
         const diffSection = computeDiffSection(gitDir, beforeSha, retry);
@@ -645,30 +617,23 @@ async function runSprintLoop(
         }
       }
 
-      // Static analysis injection into evaluator context (Feature 1.2)
       if (staticAnalysisResult.output) {
         supplementaryContext += `\n\n## Static Analysis Results\n\n${staticAnalysisResult.output}`;
       }
 
+      const evaluatorModel = config.modelEvaluator ?? config.model;
       const evaluatorSpan = attemptSpan.startChild("evaluator", { model: evaluatorModel, sprint, attempt: retry });
       try {
         const evalWithUsage = await evaluatorSpan.run(() =>
           withTransientRetry(
             () =>
-              runEvaluator(
-                config.workDir,
+              runEvaluator({
+                config,
                 contract,
-                config.passThreshold,
-                evaluatorModel,
-                isGreenfield,
-                logLevel,
-                retry,
-                config.noBdd,
-                skills?.evaluator,
-                config.sourceDir,
-                config.testDir,
-                supplementaryContext || undefined,
-              ),
+                attempt: retry,
+                skills: skills?.evaluator,
+                supplementaryContext: supplementaryContext || undefined,
+              }),
             "evaluator",
           ),
         );
@@ -689,14 +654,13 @@ async function runSprintLoop(
 
       if (lastEval.passed) {
         passed = true;
-        if (shouldLog("quiet", logLevel)) {
+        if (shouldLog("quiet", config.logLevel)) {
           log("HARNESS", `Sprint ${sprint} PASSED on attempt ${attempts}`);
         }
         break;
       }
 
-      // C1: Evaluator Override — let user force PASS on false negatives
-      if ((config.interactive ?? true) && config.gateTimeout !== 0 && retry < config.maxRetriesPerSprint) {
+      if (config.interactive && config.gateTimeout !== 0 && retry < config.maxRetriesPerSprint) {
         const minScore = Math.min(...Object.values(lastEval.scores));
         const gate = await promptGate(
           `Evaluator scored ${minScore}/10 (threshold: ${config.passThreshold}). Override?`,
@@ -705,7 +669,7 @@ async function runSprintLoop(
             { key: "p", label: "Force PASS — proceed to next sprint", isDefault: false },
           ],
           config.gateTimeout ?? 15,
-          config.interactive ?? true,
+          config.interactive,
         );
         if (gate.key === "p") {
           lastEval.passed = true;
@@ -717,7 +681,7 @@ async function runSprintLoop(
       }
 
       if (retry < config.maxRetriesPerSprint) {
-        if (shouldLog("normal", logLevel)) {
+        if (shouldLog("normal", config.logLevel)) {
           log("HARNESS", `Sprint ${sprint} failed attempt ${attempts}, retrying...`);
         }
       } else {
@@ -738,7 +702,6 @@ async function runSprintLoop(
     if (passed) {
       progress.completedSprints++;
 
-      // Feature 1.1: Accumulate behavioral regression criteria after passing sprint
       if (!config.noBdd) {
         try {
           await accumulateRegressionCriteria(config.workDir, contract);
@@ -767,7 +730,7 @@ async function runSprintLoop(
         `Sprint ${sprint} PASSED — checkpoint saved. To resume later: bun run claude-harness/index.ts --resume`,
       );
 
-      // Feature 1.6: Progressive Spec Refinement (only when --refine-spec is set and not last sprint)
+      // Progressive Spec Refinement (only when --refine-spec is set and not last sprint)
       if (config.refineSpec && sprint < totalSprints) {
         const refinementResult = await performSpecRefinement(
           config,
@@ -790,8 +753,7 @@ async function runSprintLoop(
         }
       }
 
-      // C4: Mid-run steering (between sprints, not after the last one)
-      if ((config.interactive ?? true) && config.gateTimeout !== 0 && sprint < totalSprints) {
+      if (config.interactive && config.gateTimeout !== 0 && sprint < totalSprints) {
         const steerOptions: import("../shared/interaction.ts").GateOption[] = [
           { key: "c", label: "Continue", isDefault: true },
           ...(config.editor ? [{ key: "e", label: "Edit spec", isDefault: false }] : []),
@@ -803,7 +765,7 @@ async function runSprintLoop(
           `Sprint ${sprint}/${totalSprints} complete. Next: Sprint ${sprint + 1}`,
           steerOptions,
           config.gateTimeout ?? 15,
-          config.interactive ?? true,
+          config.interactive,
         );
 
         if (gate.key === "x") {
@@ -844,20 +806,15 @@ async function runSprintLoop(
   progress.status = allPassed ? "complete" : "failed";
   await writeProgress(config.workDir, progress);
 
-  // OPP-13-A: Run Documenter agent after all sprints pass (best-effort)
   if (allPassed && !config.noDocs) {
-    await runDocumenterPhase(
+    await runDocumenterPhase({
       config,
-      documenterModel,
-      isGreenfield,
-      logLevel,
-      gitDir,
       parentSpan,
       usage,
-      skills?.documenter,
+      documenterSkills: skills?.documenter,
       results,
       progress,
-    );
+    });
   }
 
   const totalDuration = Date.now() - startTime;
@@ -865,7 +822,6 @@ async function runSprintLoop(
   log("HARNESS", `Harness ${allPassed ? "COMPLETED" : "FAILED"} in ${(totalDuration / 1000 / 60).toFixed(1)} minutes`);
   log("HARNESS", `Sprints: ${results.filter((r) => r.passed).length}/${results.length} passed`);
 
-  // A1: Print and save usage summary
   usage.printSummary();
   try {
     await usage.save();
@@ -876,20 +832,20 @@ async function runSprintLoop(
   return { success: allPassed, sprints: results, totalDurationMs: totalDuration };
 }
 
-// --- Documenter Phase ---
+interface DocumenterPhaseContext {
+  config: ResolvedConfig;
+  parentSpan: Span;
+  usage: UsageTracker;
+  documenterSkills?: AgentSkills;
+  results: SprintResult[];
+  progress: HarnessProgress;
+}
 
-async function runDocumenterPhase(
-  config: HarnessConfig,
-  documenterModel: string,
-  isGreenfield: boolean,
-  logLevel: string,
-  gitDir: string,
-  parentSpan: Span,
-  usage: UsageTracker,
-  documenterSkills: AgentSkills | undefined,
-  results: SprintResult[],
-  progress: HarnessProgress,
-): Promise<void> {
+async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<void> {
+  const { config, parentSpan, usage, documenterSkills, results, progress } = ctx;
+  const { isGreenfield } = config;
+  const documenterModel = config.modelDocumenter ?? config.model;
+  const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
   const documenterSpan = parentSpan.startChild("documenter", { model: documenterModel });
   try {
     // Capture HEAD SHA before documenter runs
@@ -901,16 +857,7 @@ async function runDocumenterPhase(
     }
 
     const docResult = await documenterSpan.run(() =>
-      runDocumenter(
-        config.workDir,
-        documenterModel,
-        isGreenfield,
-        logLevel as import("../shared/types.ts").LogLevel,
-        documenterSkills,
-        config.sourceDir,
-        config.testDir,
-        results,
-      ),
+      runDocumenter({ config, skills: documenterSkills, sprintResults: results }),
     );
 
     // Record usage
@@ -942,7 +889,7 @@ async function runDocumenterPhase(
       }
     }
 
-    // OPP-13-A: Validate documentation output
+    // Validate documentation output
     validateDocumentation(isGreenfield ? join(config.workDir, "app") : config.workDir);
 
     // Mark docs as generated in progress

@@ -8,25 +8,27 @@ import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 import type { Options } from "../shared/tracing.ts";
 import { query } from "../shared/tracing.ts";
-import type { CommitSource, EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
+import type { CommitSource, EvalResult, ResolvedConfig, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 
+export interface RunGeneratorOptions {
+  config: ResolvedConfig;
+  spec: string;
+  contract: SprintContract;
+  previousFeedback?: EvalResult;
+  attempt?: number;
+  skills?: AgentSkills;
+}
+
 export async function runGenerator(
-  workDir: string,
-  spec: string,
-  contract: SprintContract,
-  previousFeedback: EvalResult | undefined,
-  model: string,
-  isGreenfield: boolean,
-  logLevel?: LogLevel,
-  attempt: number = 0,
-  noTdd?: boolean,
-  skills?: AgentSkills,
-  sourceDir?: string,
-  testDir?: string,
+  opts: RunGeneratorOptions,
 ): Promise<{ response: string; sessionId?: string; sdkResult?: SDKResultFields }> {
+  const { config, spec, contract, previousFeedback, skills } = opts;
+  const attempt = opts.attempt ?? 0;
+  const { workDir, isGreenfield, noTdd, sourceDir, testDir } = config;
+  const model = config.modelGenerator ?? config.model;
+  const level = config.logLevel;
   const sprint = contract.sprintNumber;
-  const level = logLevel ?? "normal";
   log(
     "GENERATOR",
     `Sprint ${sprint} (${previousFeedback ? "retry" : "initial"}) - Building: ${contract.features.join(", ")}`,

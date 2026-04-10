@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import type { HarnessConfig, LogLevel } from "./types.ts";
+import type { HarnessConfig, LogLevel, ResolvedConfig } from "./types.ts";
 
 export const DEFAULT_CONFIG: Omit<HarnessConfig, "userPrompt" | "workDir"> = {
   maxSprints: 10,
@@ -62,8 +62,6 @@ export function printHelp(): void {
   console.log("");
 }
 
-// --- Phase 1: Configuration system ---
-
 interface ParsedCli {
   prompt?: string;
   file?: string;
@@ -80,30 +78,21 @@ interface ParsedCli {
   debug: boolean;
   editor?: string;
   gateTimeout?: number;
-  // Phase B additions
   dryRun: boolean;
   context?: string[];
   modelPlanner?: string;
   modelGenerator?: string;
   modelEvaluator?: string;
-  // Phase C additions
   branch?: string;
-  // WP2: directory conventions
   sourceDir?: string;
   testDir?: string;
-  // WP1: BDD/TDD flags
   noBdd: boolean;
   noTdd: boolean;
-  // OPP-13-A: Documenter agent
   noDocs: boolean;
   modelDocumenter?: string;
-  // Phase 1 Deepen: Static Analysis
   lintGate?: boolean;
-  // Phase 1 Deepen: Sprint Selection
   sprint?: number;
-  // Phase 1 Deepen: Progressive Spec Refinement
   refineSpec?: boolean;
-  // Help
   help?: boolean;
 }
 
@@ -132,28 +121,20 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       debug: { type: "boolean", default: false },
       editor: { type: "string" },
       "gate-timeout": { type: "string" },
-      // Phase B
       "dry-run": { type: "boolean", default: false },
       context: { type: "string", multiple: true },
       "model-planner": { type: "string" },
       "model-generator": { type: "string" },
       "model-evaluator": { type: "string" },
-      // Phase C
       branch: { type: "string" },
-      // WP2: directory conventions
       "source-dir": { type: "string" },
       "test-dir": { type: "string" },
-      // WP1: BDD/TDD flags
       "no-bdd": { type: "boolean", default: false },
       "no-tdd": { type: "boolean", default: false },
-      // OPP-13-A: Documenter agent
       "no-docs": { type: "boolean", default: false },
       "model-documenter": { type: "string" },
-      // Phase 1 Deepen: Static Analysis
       "lint-gate": { type: "boolean", default: false },
-      // Phase 1 Deepen: Sprint Selection
       sprint: { type: "string" },
-      // Phase 1 Deepen: Progressive Spec Refinement
       "refine-spec": { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -176,30 +157,21 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     debug: values.debug as boolean,
     editor: values.editor as string | undefined,
     gateTimeout: values["gate-timeout"] ? parseInt(values["gate-timeout"] as string, 10) : undefined,
-    // Phase B
     dryRun: values["dry-run"] as boolean,
     context: values.context as string[] | undefined,
     modelPlanner: values["model-planner"] as string | undefined,
     modelGenerator: values["model-generator"] as string | undefined,
     modelEvaluator: values["model-evaluator"] as string | undefined,
-    // Phase C
     branch: values.branch as string | undefined,
-    // WP2: directory conventions
     sourceDir: values["source-dir"] as string | undefined,
     testDir: values["test-dir"] as string | undefined,
-    // WP1: BDD/TDD flags
     noBdd: values["no-bdd"] as boolean,
     noTdd: values["no-tdd"] as boolean,
-    // OPP-13-A: Documenter agent
     noDocs: values["no-docs"] as boolean,
     modelDocumenter: values["model-documenter"] as string | undefined,
-    // Phase 1 Deepen: Static Analysis
     lintGate: values["lint-gate"] as boolean,
-    // Phase 1 Deepen: Sprint Selection
     sprint: values.sprint ? parseInt(values.sprint as string, 10) : undefined,
-    // Phase 1 Deepen: Progressive Spec Refinement
     refineSpec: values["refine-spec"] as boolean,
-    // Help
     help: values.help as boolean,
   };
 }
@@ -241,7 +213,7 @@ export function loadHarnessEnv(projectDir: string): void {
  * @param cli - Parsed CLI arguments from parseCli()
  * @returns Fully resolved and validated HarnessConfig
  */
-export function resolveConfig(cli: ParsedCli): HarnessConfig {
+export function resolveConfig(cli: ParsedCli): ResolvedConfig {
   // Resolve project directory
   const projectDir = cli.project ? resolve(cli.project) : process.cwd();
 
@@ -316,14 +288,12 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
   const langfuseSecretKey = process.env.LANGFUSE_SECRET_KEY || undefined;
   const langfuseBaseUrl = process.env.LANGFUSE_BASE_URL || undefined;
 
-  // Phase B: per-agent model overrides
   const modelPlanner = cli.modelPlanner ?? process.env.MODEL_PLANNER ?? undefined;
   const modelGenerator = cli.modelGenerator ?? process.env.MODEL_GENERATOR ?? undefined;
   const modelEvaluator = cli.modelEvaluator ?? process.env.MODEL_EVALUATOR ?? undefined;
-  // OPP-13-A: Documenter model override
   const modelDocumenter = cli.modelDocumenter ?? process.env.MODEL_DOCUMENTER ?? undefined;
 
-  const config: HarnessConfig = {
+  const config: ResolvedConfig = {
     userPrompt,
     workDir: projectDir,
     maxSprints,
@@ -335,35 +305,28 @@ export function resolveConfig(cli: ParsedCli): HarnessConfig {
     logLevel,
     interactive: !cli.noInteractive,
     harnessDir,
+    isDryRun: cli.dryRun || false,
+    sourceDir: cli.sourceDir ?? process.env.SOURCE_DIR ?? "src",
+    testDir: cli.testDir ?? process.env.TEST_DIR ?? "tests",
+    noBdd: cli.noBdd || false,
+    noTdd: cli.noTdd || false,
+    noDocs: cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS),
+    lintGate: cli.lintGate || false,
+    refineSpec: cli.refineSpec || false,
+    // Genuinely optional
     tzDisplay,
     langfusePublicKey,
     langfuseSecretKey,
     langfuseBaseUrl,
     editor,
     gateTimeout,
-    // Phase B
-    isDryRun: cli.dryRun || false,
     contextFiles: cli.context,
     modelPlanner,
     modelGenerator,
     modelEvaluator,
-    // Phase C
-    branch: cli.branch,
-    // WP2: directory conventions
-    sourceDir: cli.sourceDir ?? process.env.SOURCE_DIR ?? "src",
-    testDir: cli.testDir ?? process.env.TEST_DIR ?? "tests",
-    // WP1: BDD/TDD flags
-    noBdd: cli.noBdd || false,
-    noTdd: cli.noTdd || false,
-    // OPP-13-A: Documenter agent
-    noDocs: cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS),
     modelDocumenter,
-    // Phase 1 Deepen: Static Analysis
-    lintGate: cli.lintGate || false,
-    // Phase 1 Deepen: Sprint Selection
+    branch: cli.branch,
     sprint: cli.sprint,
-    // Phase 1 Deepen: Progressive Spec Refinement
-    refineSpec: cli.refineSpec || false,
   };
 
   // Validate

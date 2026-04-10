@@ -1,6 +1,6 @@
 import { type Options, query as originalQuery, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { log, logDebug } from "./logger.ts";
-import type { HarnessConfig } from "./types.ts";
+import type { ResolvedConfig } from "./types.ts";
 
 // Re-export Options type so agents can import everything from here
 export type { Options };
@@ -62,11 +62,15 @@ interface OtelSpan {
 }
 interface OtelApi {
   context: { active(): unknown; with(ctx: unknown, fn: () => unknown): unknown };
-  trace: { setSpan(ctx: unknown, span: OtelSpan): unknown; getTracer(name: string): OtelTracer };
+  trace: {
+    setSpan(ctx: unknown, span: OtelSpan): unknown;
+    getTracer(name: string): OtelTracer;
+    getActiveSpan?(): OtelSpan | undefined;
+  };
 }
 type PropagateAttrs = (attrs: Record<string, unknown>, fn: () => unknown) => unknown;
 
-export function initTracing(config: HarnessConfig): Tracer {
+export function initTracing(config: ResolvedConfig): Tracer {
   if (!config.langfusePublicKey || !config.langfuseSecretKey) {
     logDebug("HARNESS", "Langfuse tracing: disabled (no LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY)");
     return noopTracer;
@@ -104,10 +108,9 @@ export function initTracing(config: HarnessConfig): Tracer {
     // The arize instrumentation only reports input_tokens/output_tokens, missing
     // cache_read_input_tokens entirely — which makes Langfuse show wrong costs.
     //
-    // Approach: patchedQuery pushes cache usage to a FIFO queue when it sees a
-    // result message. CacheTokenEnricher (a SpanProcessor) pops from the queue
-    // in onEnd() for ClaudeAgent.query spans, setting langfuse.observation.usage_details.
-    // This works because query() calls are sequential — queue entries match spans 1:1.
+    // Primary approach: set usage_details directly on the active span when a result
+    // message arrives. Falls back to a FIFO queue + span processor if getActiveSpan()
+    // is unavailable (e.g., OTEL context doesn't propagate through async generators).
     const cacheUsageQueue: Record<string, number>[] = [];
 
     const arizeQuery = mutableSDK.query;
@@ -116,20 +119,26 @@ export function initTracing(config: HarnessConfig): Tracer {
     ): AsyncGenerator<SDKMessage, void> {
       for await (const msg of arizeQuery(params)) {
         if (msg.type === "result" && msg.usage) {
-          cacheUsageQueue.push({
+          const data = {
             input: msg.usage.input_tokens ?? 0,
             output: msg.usage.output_tokens ?? 0,
             cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
             cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
-          });
+          };
+          // Try direct span attribute setting first
+          const activeSpan = otelApi.trace.getActiveSpan?.();
+          if (activeSpan) {
+            activeSpan.setAttributes({ "langfuse.observation.usage_details": JSON.stringify(data) });
+          } else {
+            cacheUsageQueue.push(data);
+          }
         }
         yield msg;
       }
     } as typeof originalQuery;
 
-    // SpanProcessor that enriches ClaudeAgent.query spans with cache token data
-    // before they reach the Langfuse exporter. Must be registered BEFORE the
-    // LangfuseSpanProcessor in the chain so it runs first on onEnd().
+    // Fallback span processor: enriches ClaudeAgent.query spans with cache token
+    // data from the queue, only used when getActiveSpan() wasn't available above.
     const cacheTokenEnricher = {
       onStart() {},
       onEnd(span: { name: string; spanContext(): { spanId: string }; attributes: Record<string, unknown> }) {

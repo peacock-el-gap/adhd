@@ -1,13 +1,27 @@
 import { describe, expect, test } from "bun:test";
 import { initTracing, query } from "../shared/tracing.ts";
-import type { HarnessConfig } from "../shared/types.ts";
+import type { ResolvedConfig } from "../shared/types.ts";
 
-const baseConfig: HarnessConfig = {
+const baseConfig: ResolvedConfig = {
   userPrompt: "test",
   workDir: "/tmp/test",
   maxSprints: 1,
   maxRetriesPerSprint: 0,
   passThreshold: 7,
+  model: "claude-opus-4-6",
+  isGreenfield: false,
+  isResume: false,
+  logLevel: "normal",
+  interactive: true,
+  harnessDir: "/tmp/test/.adhd",
+  isDryRun: false,
+  sourceDir: "src",
+  testDir: "tests",
+  noBdd: false,
+  noTdd: false,
+  noDocs: false,
+  lintGate: false,
+  refineSpec: false,
 };
 
 describe("initTracing — noop when disabled", () => {
@@ -37,7 +51,7 @@ describe("query export", () => {
 
 describe("initTracing — with Langfuse keys", () => {
   test("returns working tracer and does not throw", () => {
-    const config: HarnessConfig = {
+    const config: ResolvedConfig = {
       ...baseConfig,
       langfusePublicKey: "pk-lf-test",
       langfuseSecretKey: "sk-lf-test",

@@ -183,13 +183,14 @@ describe("sprint selection skips planning phase", () => {
 // =====================================================
 
 describe("sprint selection runs only target sprint", () => {
-  test("runSprintLoop called with startSprint=N, endSprint=N", () => {
+  test("runSprintLoop called with startSprint=N, totalSprints=N", () => {
     const content = readFileSync("claude-harness/harness.ts", "utf-8");
     const fnStart = content.indexOf("async function sprintSelectionHarness(");
-    const fnEnd = content.indexOf("\nasync function runSprintLoop(");
+    const fnEnd = content.indexOf("\ninterface SprintLoopContext");
     const fnBody = content.slice(fnStart, fnEnd);
-    // The sprint loop is called with sprintN as both start and end
-    expect(fnBody).toContain("sprintN,\n      sprintN,");
+    // The sprint loop is called with sprintN as both start and total (run only this sprint)
+    expect(fnBody).toContain("startSprint: sprintN,");
+    expect(fnBody).toContain("totalSprints: sprintN,");
   });
 });
 
@@ -298,7 +299,7 @@ describe("sprint selection dispatch in runHarness", () => {
   test("runHarness checks config.sprint and dispatches to sprintSelectionHarness", () => {
     const content = readFileSync("claude-harness/harness.ts", "utf-8");
     expect(content).toContain("if (config.sprint !== undefined)");
-    expect(content).toContain("sprintSelectionHarness(config, model, isGreenfield, startTime, tracer, usage)");
+    expect(content).toContain("sprintSelectionHarness(config, startTime, tracer, usage)");
   });
 
   test("sprint selection path is before fresh run path", () => {

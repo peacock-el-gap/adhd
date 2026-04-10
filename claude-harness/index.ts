@@ -18,7 +18,7 @@ try {
   const config = resolveConfig(cli);
 
   // Configure logger early so debug output works from here on
-  setLogLevel(config.logLevel ?? "normal");
+  setLogLevel(config.logLevel);
   if (config.tzDisplay) {
     setDisplayTimezone(config.tzDisplay);
   }

@@ -7,20 +7,20 @@ import { log } from "../shared/logger.ts";
 import { buildDocumenterPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 import type { Options } from "../shared/tracing.ts";
-import type { LogLevel, SprintResult } from "../shared/types.ts";
+import type { ResolvedConfig, SprintResult } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 
-export async function runDocumenter(
-  workDir: string,
-  model: string,
-  isGreenfield: boolean,
-  logLevel?: LogLevel,
-  skills?: AgentSkills,
-  sourceDir?: string,
-  testDir?: string,
-  sprintResults?: SprintResult[],
-): Promise<{ sdkResult?: SDKResultFields }> {
-  const level = logLevel ?? "normal";
+export interface RunDocumenterOptions {
+  config: ResolvedConfig;
+  skills?: AgentSkills;
+  sprintResults?: SprintResult[];
+}
+
+export async function runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields }> {
+  const { config, skills, sprintResults } = opts;
+  const { workDir, isGreenfield, sourceDir, testDir } = config;
+  const model = config.modelDocumenter ?? config.model;
+  const level = config.logLevel;
   log("DOCUMENTER", "Generating project documentation...");
 
   const systemPrompt = buildDocumenterPrompt({ workDir, isGreenfield, skills, sourceDir, testDir });

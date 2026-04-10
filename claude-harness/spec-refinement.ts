@@ -12,7 +12,7 @@ import {
 } from "../shared/refinement.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 import type { Span } from "../shared/tracing.ts";
-import type { HarnessConfig } from "../shared/types.ts";
+import type { ResolvedConfig } from "../shared/types.ts";
 import type { UsageTracker } from "../shared/usage.ts";
 import { runPlanner } from "./planner.ts";
 
@@ -41,7 +41,7 @@ async function restoreRegressionData(workDir: string, originalData: string | nul
 }
 
 export async function performSpecRefinement(
-  config: HarnessConfig,
+  config: ResolvedConfig,
   currentSpec: string,
   completedSprint: number,
   currentTotalSprints: number,
@@ -126,7 +126,7 @@ export async function performSpecRefinement(
   logDivider();
 
   // Gate: accept or reject
-  const isInteractive = (config.interactive ?? true) && config.gateTimeout !== 0;
+  const isInteractive = config.interactive && config.gateTimeout !== 0;
 
   if (!isInteractive) {
     // Auto-accept in non-interactive mode
@@ -144,7 +144,7 @@ export async function performSpecRefinement(
       { key: "r", label: "Reject — keep original spec (no changes)", isDefault: false },
     ],
     config.gateTimeout ?? 30,
-    config.interactive ?? true,
+    config.interactive,
   );
 
   if (gate.key === "r") {

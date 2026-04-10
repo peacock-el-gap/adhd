@@ -5,13 +5,13 @@ import { promptGateWithText } from "../shared/interaction.ts";
 import { log } from "../shared/logger.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 import type { Span } from "../shared/tracing.ts";
-import type { HarnessConfig } from "../shared/types.ts";
+import type { ResolvedConfig } from "../shared/types.ts";
 import type { UsageTracker } from "../shared/usage.ts";
 import { UserAbortError } from "./error-handling.ts";
 import { runPlanner } from "./planner.ts";
 
 export async function specApprovalGate(
-  config: HarnessConfig,
+  config: ResolvedConfig,
   spec: string,
   parentSpan: Span,
   usage: UsageTracker,
@@ -26,7 +26,7 @@ export async function specApprovalGate(
   }
 
   // Non-interactive: auto-approve
-  if (!(config.interactive ?? true)) {
+  if (!config.interactive) {
     log("HARNESS", "Spec gate skipped (non-interactive mode). Auto-approved.");
     return spec;
   }
@@ -49,7 +49,7 @@ export async function specApprovalGate(
       `Spec written to .adhd/spec.md`,
       options,
       timeoutSec,
-      config.interactive ?? true,
+      config.interactive,
       "r", // "revise" triggers free-text input
     );
 

@@ -1,6 +1,6 @@
 import { writeProgress } from "../shared/files.ts";
 import { log, logError } from "../shared/logger.ts";
-import type { HarnessConfig, HarnessProgress, SprintResult } from "../shared/types.ts";
+import type { HarnessProgress, ResolvedConfig, SprintResult } from "../shared/types.ts";
 
 const TRANSIENT_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
 
@@ -49,7 +49,7 @@ export async function withTransientRetry<T>(fn: () => Promise<T>, label: string)
 
 export async function handleFatalError(
   err: unknown,
-  config: HarnessConfig,
+  config: ResolvedConfig,
   progress: HarnessProgress,
   results: SprintResult[],
 ): Promise<never> {

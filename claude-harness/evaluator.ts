@@ -5,26 +5,25 @@ import { log, logError, shouldLog } from "../shared/logger.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 import type { Options } from "../shared/tracing.ts";
-import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
+import type { EvalResult, ResolvedConfig, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 import { extractBalancedJson } from "./contract.ts";
 
-export async function runEvaluator(
-  workDir: string,
-  contract: SprintContract,
-  passThreshold: number,
-  model: string,
-  isGreenfield: boolean,
-  logLevel?: LogLevel,
-  attempt?: number,
-  noBdd?: boolean,
-  skills?: AgentSkills,
-  sourceDir?: string,
-  testDir?: string,
-  supplementaryContext?: string,
-): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
+export interface RunEvaluatorOptions {
+  config: ResolvedConfig;
+  contract: SprintContract;
+  attempt?: number;
+  skills?: AgentSkills;
+  supplementaryContext?: string;
+}
+
+export async function runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
+  const { config, contract, skills, supplementaryContext } = opts;
+  const attempt = opts.attempt ?? 0;
+  const { workDir, isGreenfield, noBdd, sourceDir, testDir, passThreshold } = config;
+  const model = config.modelEvaluator ?? config.model;
+  const level = config.logLevel;
   const sprint = contract.sprintNumber;
-  const level = logLevel ?? "normal";
   log("EVALUATOR", `Evaluating sprint ${sprint} against ${contract.criteria.length} criteria`);
 
   const systemPrompt = buildEvaluatorPrompt({ workDir, isGreenfield, noBdd, skills, sourceDir, testDir });
@@ -58,7 +57,7 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   };
 
   const startTime = new Date();
-  const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt ?? 0, { model, startTime });
+  const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt, { model, startTime });
 
   const streamResult = await processAgentStream(prompt, options, "EVALUATOR", level, convLog, {
     onResult() {

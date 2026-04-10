@@ -1,13 +1,14 @@
 import { join } from "node:path";
 import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
-import type { HarnessConfig } from "../shared/types.ts";
+import type { ResolvedConfig } from "../shared/types.ts";
 
 export interface StaticAnalysisResult {
   output: string;
   failed: boolean;
 }
 
-export async function runStaticAnalysis(config: HarnessConfig, isGreenfield: boolean): Promise<StaticAnalysisResult> {
+export async function runStaticAnalysis(config: ResolvedConfig): Promise<StaticAnalysisResult> {
+  const isGreenfield = config.isGreenfield;
   const projectDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
   let commands: Awaited<ReturnType<typeof detectStaticAnalysisCommands>>;
   try {

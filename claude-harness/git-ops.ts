@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { promptGate } from "../shared/interaction.ts";
 import { log, logError } from "../shared/logger.ts";
-import type { HarnessConfig, HarnessProgress } from "../shared/types.ts";
+import type { HarnessProgress, ResolvedConfig } from "../shared/types.ts";
 import { UserAbortError } from "./error-handling.ts";
 
 export async function revertToCheckpoint(
@@ -37,7 +37,7 @@ export async function revertToCheckpoint(
   }
 }
 
-export async function checkDirtyTree(config: HarnessConfig): Promise<void> {
+export async function checkDirtyTree(config: ResolvedConfig): Promise<void> {
   let status: string;
   try {
     status = execSync("git status --porcelain", { cwd: config.workDir, encoding: "utf-8" }).trim();
@@ -65,7 +65,7 @@ export async function checkDirtyTree(config: HarnessConfig): Promise<void> {
       { key: "a", label: "Abort", isDefault: false },
     ],
     0, // No timeout — blocking pre-flight check
-    config.interactive ?? true,
+    config.interactive,
   );
 
   if (result.key === "a") {
