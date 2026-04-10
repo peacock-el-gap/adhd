@@ -1,10 +1,15 @@
 #!/usr/bin/env bun
-import { loadHarnessEnv, parseCli, resolveConfig } from "../shared/config.ts";
+import { loadHarnessEnv, parseCli, printHelp, resolveConfig } from "../shared/config.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone, setLogLevel } from "../shared/logger.ts";
 import { runHarness } from "./harness.ts";
 
 try {
   const cli = parseCli();
+
+  if (cli.help) {
+    printHelp();
+    process.exit(0);
+  }
 
   // Resolve project dir early so we can load .adhd/.env
   const projectDir = cli.project ? (await import("node:path")).resolve(cli.project) : process.cwd();

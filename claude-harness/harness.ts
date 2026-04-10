@@ -682,7 +682,7 @@ async function runSprintLoop(
         }
       }
 
-      // Static analysis injection (Feature 1.2)
+      // Static analysis execution (Feature 1.2)
       const staticAnalysisResult = await runStaticAnalysis(config, isGreenfield);
       if (staticAnalysisResult.output) {
         // Hard gate: if --lint-gate and any command failed, skip evaluator
@@ -702,16 +702,20 @@ async function runSprintLoop(
           attemptSpan.end({ passed: false, lintGate: true });
           continue;
         }
-
-        supplementaryContext += `\n\n## Static Analysis Results\n\n${staticAnalysisResult.output}`;
       }
 
       // Diff-aware evaluation on retries (Feature 1.3)
+      // Ordering: regression → diff → static analysis (deterministic)
       if (retry > 0 && beforeSha) {
         const diffSection = computeDiffSection(gitDir, beforeSha, retry);
         if (diffSection) {
           supplementaryContext += diffSection;
         }
+      }
+
+      // Static analysis injection into evaluator context (Feature 1.2)
+      if (staticAnalysisResult.output) {
+        supplementaryContext += `\n\n## Static Analysis Results\n\n${staticAnalysisResult.output}`;
       }
 
       const evaluatorSpan = attemptSpan.startChild("evaluator", { model: evaluatorModel, sprint, attempt: retry });

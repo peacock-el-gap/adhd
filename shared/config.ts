@@ -17,6 +17,53 @@ export const CODEX_MODEL = "gpt-5.4";
 export const CLAUDE_MAX_TURNS = 50;
 export const CODEX_NETWORK_ACCESS = true;
 
+// --- CLI Help Text ---
+
+/** Human-readable descriptions for all CLI flags */
+export const CLI_FLAG_HELP: Record<string, string> = {
+  "--file, -f":         "Path to a file containing the prompt",
+  "--project":          "Path to the project directory (default: cwd)",
+  "--greenfield":       "Create a new project in app/ with git init",
+  "--resume":           "Resume from the last checkpoint",
+  "--model":            "LLM model to use (default: claude-opus-4-6)",
+  "--max-sprints":      "Maximum number of sprints (default: 10)",
+  "--max-retries":      "Maximum retries per sprint (default: 3)",
+  "--threshold":        "Pass threshold score 1-10 (default: 7)",
+  "--verbose":          "Enable verbose logging",
+  "--quiet":            "Suppress non-essential output",
+  "--no-interactive":   "Disable interactive gates (auto-accept defaults)",
+  "--debug":            "Enable debug-level logging",
+  "--editor":           "Editor command for spec editing (e.g., 'code --wait')",
+  "--gate-timeout":     "Timeout in seconds for interactive gates (0 = skip all)",
+  "--dry-run":          "Run planner only, show spec, then exit",
+  "--context":          "Files to inject into the planner prompt (repeatable)",
+  "--model-planner":    "Model override for the Planner agent",
+  "--model-generator":  "Model override for the Generator agent",
+  "--model-evaluator":  "Model override for the Evaluator agent",
+  "--model-documenter": "Model override for the Documenter agent",
+  "--branch":           "Create a git branch before the sprint loop",
+  "--source-dir":       "Source directory convention (default: src)",
+  "--test-dir":         "Test directory convention (default: tests)",
+  "--no-bdd":           "Disable BDD regression accumulation across sprints",
+  "--no-tdd":           "Disable TDD instructions in prompts",
+  "--no-docs":          "Skip post-run documentation generation",
+  "--lint-gate":        "Hard gate: lint/typecheck failure skips evaluator and counts as failed attempt",
+  "--sprint N":         "Run a specific sprint only (requires existing spec)",
+  "--refine-spec":      "Enable progressive spec refinement after passing sprints",
+};
+
+/** Print CLI usage/help text to stdout */
+export function printHelp(): void {
+  console.log("ADHD Harness — GAN-inspired adversarial coding tool\n");
+  console.log("Usage: bun run claude-harness/index.ts [options] [prompt]\n");
+  console.log("Options:\n");
+  const maxKeyLen = Math.max(...Object.keys(CLI_FLAG_HELP).map((k) => k.length));
+  for (const [flag, desc] of Object.entries(CLI_FLAG_HELP)) {
+    console.log(`  ${flag.padEnd(maxKeyLen + 2)} ${desc}`);
+  }
+  console.log("");
+}
+
 // --- Phase 1: Configuration system ---
 
 interface ParsedCli {
@@ -58,12 +105,15 @@ interface ParsedCli {
   sprint?: number;
   // Phase 1 Deepen: Progressive Spec Refinement
   refineSpec?: boolean;
+  // Help
+  help?: boolean;
 }
 
 export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
+      help: { type: "boolean", default: false, short: "h" },
       file: { type: "string", short: "f" },
       project: { type: "string" },
       greenfield: { type: "boolean", default: false },
@@ -145,6 +195,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     sprint: values.sprint ? parseInt(values.sprint as string, 10) : undefined,
     // Phase 1 Deepen: Progressive Spec Refinement
     refineSpec: values["refine-spec"] as boolean,
+    // Help
+    help: values.help as boolean,
   };
 }
 

@@ -10,17 +10,31 @@ export function regressionPath(workDir: string): string {
 
 /**
  * Read accumulated regression criteria from .adhd/regression.json.
- * Returns an empty array if the file does not exist or is invalid.
+ * Returns an empty array if the file does not exist.
+ * Logs a warning and returns an empty array if the file exists but contains
+ * invalid JSON or an unexpected schema (graceful degradation).
  */
 export async function readRegressionCriteria(workDir: string): Promise<RegressionCriterion[]> {
+  const filePath = regressionPath(workDir);
+  let raw: string;
   try {
-    const raw = await readFile(regressionPath(workDir), "utf-8");
+    raw = await readFile(filePath, "utf-8");
+  } catch {
+    // File does not exist — normal case, no warning needed
+    return [];
+  }
+
+  try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       return parsed as RegressionCriterion[];
     }
+    // File exists but is not an array — malformed schema
+    console.warn(`[HARNESS] Warning: regression.json has unexpected schema (expected array, got ${typeof parsed}). Proceeding without regression criteria.`);
     return [];
-  } catch {
+  } catch (err) {
+    // File exists but contains invalid JSON
+    console.warn(`[HARNESS] Warning: regression.json contains invalid JSON: ${err instanceof Error ? err.message : String(err)}. Proceeding without regression criteria.`);
     return [];
   }
 }
