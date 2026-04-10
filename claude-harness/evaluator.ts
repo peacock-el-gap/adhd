@@ -1,9 +1,9 @@
-import { type Options, query } from "../shared/tracing.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
+import { type Options, query } from "../shared/tracing.ts";
 import type { EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 import { extractBalancedJson } from "./harness.ts";
@@ -58,7 +58,6 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
 
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt ?? 0, { model, startTime });
-
 
   let fullResponse = "";
   let sdkResult: SDKResultFields | undefined;
@@ -118,7 +117,6 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
     passThreshold,
   );
   evalResult.sdkResult = sdkResult;
-
 
   if (shouldLog("normal", level)) {
     const passedCount = evalResult.feedback.filter((f) => f.score >= passThreshold).length;

@@ -3,15 +3,14 @@
  * and refinement freezes completed sprints.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { readContract, writeContract } from "./files.ts";
-import { resolveConfig } from "./config.ts";
 import {
+  computeSpecDiff,
   extractCompletedSprintSections,
   extractSprintSection,
   freezeCompletedSprints,
-  computeSpecDiff,
 } from "./refinement.ts";
 import type { SprintContract } from "./types.ts";
 
@@ -32,9 +31,7 @@ describe("sprint selection contract reuse", () => {
     const existingContract: SprintContract = {
       sprintNumber: 3,
       features: ["Feature X"],
-      criteria: [
-        { name: "x_works", description: "Feature X is functional", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "x_works", description: "Feature X is functional", threshold: 7, type: "behavioral" }],
     };
 
     await writeContract(TMP_DIR, existingContract);
@@ -58,8 +55,8 @@ describe("sprint selection contract reuse", () => {
     }
 
     expect(contract).not.toBeNull();
-    expect(contract!.sprintNumber).toBe(3);
-    expect(contract!.features).toEqual(["Feature X"]);
+    expect(contract?.sprintNumber).toBe(3);
+    expect(contract?.features).toEqual(["Feature X"]);
     expect(negotiationRan).toBe(false);
   });
 
@@ -98,7 +95,7 @@ describe("sprint selection contract reuse", () => {
     expect(loaded.sprintNumber).toBe(2);
     expect(loaded.features).toHaveLength(2);
     expect(loaded.criteria).toHaveLength(2);
-    expect(loaded.criteria[0]!.type).toBe("behavioral");
+    expect(loaded.criteria[0]?.type).toBe("behavioral");
   });
 });
 
@@ -129,10 +126,7 @@ Build admin panel.
     const proposedSpec = SPEC.replace(
       "Build authentication.",
       "Completely rewrite authentication from scratch.",
-    ).replace(
-      "Build reporting.",
-      "Build advanced reporting with charts.",
-    );
+    ).replace("Build reporting.", "Build advanced reporting with charts.");
 
     const frozen = freezeCompletedSprints(proposedSpec, originalSections);
 
@@ -154,10 +148,7 @@ Build admin panel.
   test("proposed changes to sprint 2 content are also reverted when sprint 2 is completed", () => {
     const originalSections = extractCompletedSprintSections(SPEC, 2);
 
-    const proposedSpec = SPEC.replace(
-      "Build dashboard.",
-      "Build MODIFIED dashboard.",
-    );
+    const proposedSpec = SPEC.replace("Build dashboard.", "Build MODIFIED dashboard.");
 
     const frozen = freezeCompletedSprints(proposedSpec, originalSections);
     expect(frozen).toContain("Build dashboard.");
@@ -167,9 +158,10 @@ Build admin panel.
   test("sprint 3 and 4 changes are preserved when only sprints 1-2 frozen", () => {
     const originalSections = extractCompletedSprintSections(SPEC, 2);
 
-    const proposedSpec = SPEC
-      .replace("Build reporting.", "Build reporting with analytics.")
-      .replace("Build admin panel.", "Build admin panel with RBAC.");
+    const proposedSpec = SPEC.replace("Build reporting.", "Build reporting with analytics.").replace(
+      "Build admin panel.",
+      "Build admin panel with RBAC.",
+    );
 
     const frozen = freezeCompletedSprints(proposedSpec, originalSections);
     expect(frozen).toContain("Build reporting with analytics.");

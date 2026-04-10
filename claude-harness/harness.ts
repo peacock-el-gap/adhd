@@ -2,9 +2,10 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile as readFileRaw } from "node:fs/promises";
 import { join } from "node:path";
-import { type Options, query } from "../shared/tracing.ts";
 import { CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
+import { computeDiffSection } from "../shared/diff.ts";
+import { validateDocumentation } from "../shared/doc-validation.ts";
 import {
   harnessDir,
   initWorkspace,
@@ -16,14 +17,21 @@ import {
   writeProgress,
   writeSpec,
 } from "../shared/files.ts";
-import { computeDiffSection } from "../shared/diff.ts";
-import { accumulateRegressionCriteria, buildRegressionSection, readRegressionCriteria } from "../shared/regression.ts";
-import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
 import { promptGate, promptGateWithText } from "../shared/interaction.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone, shouldLog, summarize } from "../shared/logger.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
+import {
+  buildRefinementPrompt,
+  computeSpecDiff,
+  countSprints,
+  extractCompletedSprintSections,
+  freezeCompletedSprints,
+} from "../shared/refinement.ts";
+import { accumulateRegressionCriteria, buildRegressionSection, readRegressionCriteria } from "../shared/regression.ts";
+import type { AgentSkills } from "../shared/skills.ts";
 import { resolveSkills, routeSkillsForAgent, warnIfOversized } from "../shared/skills.ts";
-import { initTracing, type Span, type Tracer } from "../shared/tracing.ts";
+import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
+import { initTracing, type Options, query, type Span, type Tracer } from "../shared/tracing.ts";
 import type {
   CommitSource,
   EvalResult,
@@ -33,20 +41,11 @@ import type {
   SprintContract,
   SprintResult,
 } from "../shared/types.ts";
-import type { AgentSkills } from "../shared/skills.ts";
 import { createUsageTracker, type UsageTracker } from "../shared/usage.ts";
-import { validateDocumentation } from "../shared/doc-validation.ts";
 import { runDocumenter } from "./documenter.ts";
 import { runEvaluator } from "./evaluator.ts";
 import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
 import { runPlanner } from "./planner.ts";
-import {
-  buildRefinementPrompt,
-  computeSpecDiff,
-  countSprints,
-  extractCompletedSprintSections,
-  freezeCompletedSprints,
-} from "../shared/refinement.ts";
 
 const TRANSIENT_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
 
@@ -154,69 +153,74 @@ export async function runHarness(config: HarnessConfig): Promise<HarnessResult> 
 
   // Wrap the entire run inside harnessSpan context so all query() calls nest under it
   return harnessSpan.run(async () => {
-  try {
-  logDebug("HARNESS", "Calling runPlanner...");
-  const plannerSpan = harnessSpan.startChild("planner", { model: config.modelPlanner ?? model });
-  const spec = await plannerSpan.run(() => runPlanner(config, undefined, usage, plannerSkills));
-  plannerSpan.end();
-  logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
-  await writeSpec(config.workDir, spec);
-  log("HARNESS", "Product spec written");
+    try {
+      logDebug("HARNESS", "Calling runPlanner...");
+      const plannerSpan = harnessSpan.startChild("planner", { model: config.modelPlanner ?? model });
+      const spec = await plannerSpan.run(() => runPlanner(config, undefined, usage, plannerSkills));
+      plannerSpan.end();
+      logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
+      await writeSpec(config.workDir, spec);
+      log("HARNESS", "Product spec written");
 
-  // A3: Spec approval gate
-  progress.status = "spec-review";
-  await writeProgress(config.workDir, progress);
-  const approvedSpec = await specApprovalGate(config, spec, harnessSpan, usage, plannerSkills);
-  progress.specApproved = true;
-  await writeProgress(config.workDir, progress);
+      // A3: Spec approval gate
+      progress.status = "spec-review";
+      await writeProgress(config.workDir, progress);
+      const approvedSpec = await specApprovalGate(config, spec, harnessSpan, usage, plannerSkills);
+      progress.specApproved = true;
+      await writeProgress(config.workDir, progress);
 
-  // B1: Dry-run exits here
-  if (config.isDryRun) {
-    log("HARNESS", "Dry-run complete. Spec approved and saved.");
-    usage.printSummary();
-    await usage.save();
-    return { success: true, sprints: [], totalDurationMs: Date.now() - startTime };
-  }
+      // B1: Dry-run exits here
+      if (config.isDryRun) {
+        log("HARNESS", "Dry-run complete. Spec approved and saved.");
+        usage.printSummary();
+        await usage.save();
+        return { success: true, sprints: [], totalDurationMs: Date.now() - startTime };
+      }
 
-  // C3: Create branch if --branch specified
-  if (config.branch) {
-    const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
-    execSync(`git checkout -b ${config.branch}`, { cwd: gitDir, stdio: "pipe" });
-    log("HARNESS", `Created branch: ${config.branch}`);
-    progress.branch = config.branch;
-    await writeProgress(config.workDir, progress);
-  }
+      // C3: Create branch if --branch specified
+      if (config.branch) {
+        const gitDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
+        execSync(`git checkout -b ${config.branch}`, { cwd: gitDir, stdio: "pipe" });
+        log("HARNESS", `Created branch: ${config.branch}`);
+        progress.branch = config.branch;
+        await writeProgress(config.workDir, progress);
+      }
 
-  // Count sprints from the (possibly edited) spec
-  const sprintMatches = approvedSpec.match(/##\s*Sprint\s+\d+/gi);
-  const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
-  progress.totalSprints = totalSprints;
+      // Count sprints from the (possibly edited) spec
+      const sprintMatches = approvedSpec.match(/##\s*Sprint\s+\d+/gi);
+      const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
+      progress.totalSprints = totalSprints;
 
-  return await runSprintLoop(
-    config,
-    model,
-    isGreenfield,
-    approvedSpec,
-    progress,
-    [],
-    1,
-    totalSprints,
-    startTime,
-    harnessSpan,
-    usage,
-    { generator: generatorSkills, evaluator: evaluatorSkills, documenter: documenterSkills, planner: plannerSkills },
-  );
-  } catch (err) {
-    if (err instanceof UserAbortError) {
-      usage.printSummary();
-      await usage.save();
-      return { success: false, sprints: [], totalDurationMs: Date.now() - startTime };
+      return await runSprintLoop(
+        config,
+        model,
+        isGreenfield,
+        approvedSpec,
+        progress,
+        [],
+        1,
+        totalSprints,
+        startTime,
+        harnessSpan,
+        usage,
+        {
+          generator: generatorSkills,
+          evaluator: evaluatorSkills,
+          documenter: documenterSkills,
+          planner: plannerSkills,
+        },
+      );
+    } catch (err) {
+      if (err instanceof UserAbortError) {
+        usage.printSummary();
+        await usage.save();
+        return { success: false, sprints: [], totalDurationMs: Date.now() - startTime };
+      }
+      throw err;
+    } finally {
+      harnessSpan.end();
+      await tracer.flush();
     }
-    throw err;
-  } finally {
-    harnessSpan.end();
-    await tracer.flush();
-  }
   }); // end harnessSpan.run()
 }
 
@@ -376,7 +380,7 @@ async function sprintSelectionHarness(
   tracer: Tracer,
   usage: UsageTracker,
 ): Promise<HarnessResult> {
-  const sprintN = config.sprint!;
+  const sprintN = config.sprint ?? 1;
   log("HARNESS", `Sprint selection mode: targeting sprint ${sprintN}`);
 
   // Check spec exists
@@ -478,7 +482,7 @@ async function sprintSelectionHarness(
 
 async function revertToCheckpoint(workDir: string, isGreenfield: boolean, progress: HarnessProgress): Promise<void> {
   const gitDir = isGreenfield ? join(workDir, "app") : workDir;
-  const sha = progress.lastPassedCommitSha!;
+  const sha = progress.lastPassedCommitSha ?? "";
 
   try {
     const currentHead = execSync("git rev-parse HEAD", { cwd: gitDir, encoding: "utf-8" }).trim();
@@ -543,7 +547,10 @@ async function runSprintLoop(
     if (config.sprint !== undefined) {
       try {
         contract = await readContract(config.workDir, sprint);
-        log("HARNESS", `Loaded existing contract for sprint ${sprint}: ${contract.criteria.length} criteria for ${contract.features.length} features`);
+        log(
+          "HARNESS",
+          `Loaded existing contract for sprint ${sprint}: ${contract.criteria.length} criteria for ${contract.features.length} features`,
+        );
       } catch {
         // No existing contract — will negotiate below
       }
@@ -1020,7 +1027,10 @@ async function runDocumenterPhase(
     documenterSpan.end();
   } catch (err) {
     documenterSpan.end({ error: String(err) });
-    log("HARNESS", `WARNING: Documenter failed: ${err instanceof Error ? err.message : String(err)}. Documentation generation skipped.`);
+    log(
+      "HARNESS",
+      `WARNING: Documenter failed: ${err instanceof Error ? err.message : String(err)}. Documentation generation skipped.`,
+    );
     // docsGenerated remains false/undefined so resume can re-attempt
   }
 }
@@ -1032,10 +1042,7 @@ interface StaticAnalysisResult {
   failed: boolean;
 }
 
-async function runStaticAnalysis(
-  config: HarnessConfig,
-  isGreenfield: boolean,
-): Promise<StaticAnalysisResult> {
+async function runStaticAnalysis(config: HarnessConfig, isGreenfield: boolean): Promise<StaticAnalysisResult> {
   const projectDir = isGreenfield ? join(config.workDir, "app") : config.workDir;
   let commands: Awaited<ReturnType<typeof detectStaticAnalysisCommands>>;
   try {
@@ -1119,12 +1126,7 @@ async function performSpecRefinement(
     const refinementPrompt = buildRefinementPrompt(currentSpec, completedSprintNumbers, remainingSprintNumbers);
 
     proposedSpec = await refinementSpan.run(() =>
-      runPlanner(
-        { ...config, userPrompt: refinementPrompt },
-        undefined,
-        usage,
-        plannerSkills,
-      ),
+      runPlanner({ ...config, userPrompt: refinementPrompt }, undefined, usage, plannerSkills),
     );
     refinementSpan.end();
 
@@ -1134,7 +1136,10 @@ async function performSpecRefinement(
       return { specChanged: false, spec: originalSpec, newSprintCount: currentTotalSprints };
     }
   } catch (err) {
-    log("HARNESS", `Warning: Spec refinement failed: ${err instanceof Error ? err.message : String(err)}. Preserving original spec.`);
+    log(
+      "HARNESS",
+      `Warning: Spec refinement failed: ${err instanceof Error ? err.message : String(err)}. Preserving original spec.`,
+    );
     await writeSpec(config.workDir, originalSpec);
     await restoreRegressionData(config.workDir, originalRegressionData);
     return { specChanged: false, spec: originalSpec, newSprintCount: currentTotalSprints };
@@ -1251,7 +1256,7 @@ async function withTransientRetry<T>(fn: () => Promise<T>, label: string): Promi
       return await fn();
     } catch (err) {
       if (attempt < TRANSIENT_RETRY_DELAYS.length && isTransientError(err)) {
-        const delay = TRANSIENT_RETRY_DELAYS[attempt]!;
+        const delay = TRANSIENT_RETRY_DELAYS[attempt] ?? 1000;
         log("HARNESS", `Transient error during ${label}, retrying in ${delay / 1000}s... (${err})`);
         await new Promise((resolve) => setTimeout(resolve, delay));
         continue;

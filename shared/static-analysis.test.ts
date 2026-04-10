@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  detectStaticAnalysisCommands,
-  truncateStaticAnalysisOutput,
-} from "./static-analysis.ts";
+import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "./static-analysis.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_sa_unit__");
 
@@ -18,28 +15,20 @@ afterEach(() => {
 
 describe("detectStaticAnalysisCommands", () => {
   test("finds lint script from package.json", async () => {
-    writeFileSync(
-      join(TMP_DIR, "package.json"),
-      JSON.stringify({ scripts: { lint: "eslint ." } }),
-      "utf-8",
-    );
+    writeFileSync(join(TMP_DIR, "package.json"), JSON.stringify({ scripts: { lint: "eslint ." } }), "utf-8");
 
     const commands = await detectStaticAnalysisCommands(TMP_DIR);
     expect(commands).toHaveLength(1);
-    expect(commands[0]!.name).toBe("lint");
-    expect(commands[0]!.script).toBe("npm run lint");
+    expect(commands[0]?.name).toBe("lint");
+    expect(commands[0]?.script).toBe("npm run lint");
   });
 
   test("finds typecheck script from package.json", async () => {
-    writeFileSync(
-      join(TMP_DIR, "package.json"),
-      JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }),
-      "utf-8",
-    );
+    writeFileSync(join(TMP_DIR, "package.json"), JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }), "utf-8");
 
     const commands = await detectStaticAnalysisCommands(TMP_DIR);
     expect(commands).toHaveLength(1);
-    expect(commands[0]!.name).toBe("typecheck");
+    expect(commands[0]?.name).toBe("typecheck");
   });
 
   test("finds type-check script from package.json", async () => {
@@ -51,7 +40,7 @@ describe("detectStaticAnalysisCommands", () => {
 
     const commands = await detectStaticAnalysisCommands(TMP_DIR);
     expect(commands).toHaveLength(1);
-    expect(commands[0]!.name).toBe("type-check");
+    expect(commands[0]?.name).toBe("type-check");
   });
 
   test("returns empty array when no package.json exists", async () => {
@@ -71,11 +60,7 @@ describe("detectStaticAnalysisCommands", () => {
   });
 
   test("returns empty array when package.json has no scripts field", async () => {
-    writeFileSync(
-      join(TMP_DIR, "package.json"),
-      JSON.stringify({ name: "test-pkg" }),
-      "utf-8",
-    );
+    writeFileSync(join(TMP_DIR, "package.json"), JSON.stringify({ name: "test-pkg" }), "utf-8");
 
     const commands = await detectStaticAnalysisCommands(TMP_DIR);
     expect(commands).toEqual([]);

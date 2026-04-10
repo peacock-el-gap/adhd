@@ -282,7 +282,7 @@ describe("resolveConfig", () => {
     const quiet = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: true, noInteractive: false, debug: false, dryRun: false, noBdd: false, noTdd: false, noDocs: false });
     expect(quiet.logLevel).toBe("quiet");
 
-    const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true, dryRun: false, noBdd: false, noTdd: false });
+    const debug = resolveConfig({ prompt: "test", greenfield: false, resume: false, verbose: false, quiet: false, noInteractive: false, debug: true, dryRun: false, noBdd: false, noTdd: false, noDocs: false });
     expect(debug.logLevel).toBe("debug");
   });
 

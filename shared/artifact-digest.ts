@@ -40,7 +40,7 @@ export function buildArtifactDigest(options: ArtifactDigestOptions): string {
     for (const file of files) {
       const match = file.match(/^sprint-(\d+)\.json$/);
       if (match) {
-        const sprint = parseInt(match[1]!, 10);
+        const sprint = parseInt(match[1] ?? "", 10);
         contracts.push({
           sprint,
           content: readFileSync(join(contractsDir, file), "utf-8"),
@@ -62,14 +62,14 @@ export function buildArtifactDigest(options: ArtifactDigestOptions): string {
     for (const file of files) {
       const match = file.match(/^sprint-(\d+)-round-(\d+)\.json$/);
       if (match) {
-        const sprint = parseInt(match[1]!, 10);
-        const round = parseInt(match[2]!, 10);
+        const sprint = parseInt(match[1] ?? "", 10);
+        const round = parseInt(match[2] ?? "", 10);
         const existing = bySprintMax.get(sprint);
 
         // If we have sprintResults, only include feedback for the final passing attempt
         if (sprintResults) {
           const result = sprintResults.find((r) => r.sprintNumber === sprint);
-          if (result && result.passed) {
+          if (result?.passed) {
             // The final passing attempt is at round = (attempts - 1)
             const finalRound = result.attempts - 1;
             if (round === finalRound) {

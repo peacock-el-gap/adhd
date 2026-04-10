@@ -1,11 +1,11 @@
 import { execSync } from "node:child_process";
-import { type Options, query } from "../shared/tracing.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logDebug, shouldLog, summarize } from "../shared/logger.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
+import { type Options, query } from "../shared/tracing.ts";
 import type { CommitSource, EvalResult, LogLevel, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 
@@ -60,7 +60,6 @@ export async function runGenerator(
 
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Generator", sprint, attempt, { model, startTime });
-
 
   let fullResponse = "";
   let sessionId: string | undefined;

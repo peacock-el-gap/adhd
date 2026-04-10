@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   accumulateRegressionCriteria,
@@ -7,7 +7,7 @@ import {
   readRegressionCriteria,
   regressionPath,
 } from "./regression.ts";
-import type { SprintContract, RegressionCriterion } from "./types.ts";
+import type { RegressionCriterion, SprintContract } from "./types.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_regression_unit__");
 const ADHD_DIR = join(TMP_DIR, ".adhd");
@@ -47,8 +47,8 @@ describe("readRegressionCriteria", () => {
 
     const result = await readRegressionCriteria(TMP_DIR);
     expect(result).toHaveLength(1);
-    expect(result[0]!.name).toBe("test_crit");
-    expect(result[0]!.sprintNumber).toBe(1);
+    expect(result[0]?.name).toBe("test_crit");
+    expect(result[0]?.sprintNumber).toBe(1);
   });
 });
 
@@ -76,9 +76,7 @@ describe("accumulateRegressionCriteria", () => {
     const contract: SprintContract = {
       sprintNumber: 1,
       features: ["Feature A"],
-      criteria: [
-        { name: "code_clean", description: "No lint errors", threshold: 7, type: "implementation" },
-      ],
+      criteria: [{ name: "code_clean", description: "No lint errors", threshold: 7, type: "implementation" }],
     };
 
     await accumulateRegressionCriteria(TMP_DIR, contract);
@@ -89,16 +87,12 @@ describe("accumulateRegressionCriteria", () => {
     const contract1: SprintContract = {
       sprintNumber: 1,
       features: ["Feature A"],
-      criteria: [
-        { name: "api_responds", description: "v1", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "api_responds", description: "v1", threshold: 7, type: "behavioral" }],
     };
     const contract2: SprintContract = {
       sprintNumber: 2,
       features: ["Feature B"],
-      criteria: [
-        { name: "api_responds", description: "v2", threshold: 8, type: "behavioral" },
-      ],
+      criteria: [{ name: "api_responds", description: "v2", threshold: 8, type: "behavioral" }],
     };
 
     await accumulateRegressionCriteria(TMP_DIR, contract1);
@@ -115,16 +109,12 @@ describe("accumulateRegressionCriteria", () => {
     const contract1: SprintContract = {
       sprintNumber: 1,
       features: ["Feature A"],
-      criteria: [
-        { name: "api_responds", description: "API returns 200", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "api_responds", description: "API returns 200", threshold: 7, type: "behavioral" }],
     };
     const contract2: SprintContract = {
       sprintNumber: 2,
       features: ["Feature B"],
-      criteria: [
-        { name: "db_persists", description: "Data persists", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "db_persists", description: "Data persists", threshold: 7, type: "behavioral" }],
     };
 
     await accumulateRegressionCriteria(TMP_DIR, contract1);
@@ -156,9 +146,7 @@ describe("buildRegressionSection", () => {
   });
 
   test("includes instruction text about scoring", () => {
-    const criteria: RegressionCriterion[] = [
-      { name: "test", description: "Test", threshold: 7, sprintNumber: 1 },
-    ];
+    const criteria: RegressionCriterion[] = [{ name: "test", description: "Test", threshold: 7, sprintNumber: 1 }];
 
     const section = buildRegressionSection(criteria);
     expect(section).toContain("MUST still pass");

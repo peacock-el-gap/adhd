@@ -30,11 +30,15 @@ export async function readRegressionCriteria(workDir: string): Promise<Regressio
       return parsed as RegressionCriterion[];
     }
     // File exists but is not an array — malformed schema
-    console.warn(`[HARNESS] Warning: regression.json has unexpected schema (expected array, got ${typeof parsed}). Proceeding without regression criteria.`);
+    console.warn(
+      `[HARNESS] Warning: regression.json has unexpected schema (expected array, got ${typeof parsed}). Proceeding without regression criteria.`,
+    );
     return [];
   } catch (err) {
     // File exists but contains invalid JSON
-    console.warn(`[HARNESS] Warning: regression.json contains invalid JSON: ${err instanceof Error ? err.message : String(err)}. Proceeding without regression criteria.`);
+    console.warn(
+      `[HARNESS] Warning: regression.json contains invalid JSON: ${err instanceof Error ? err.message : String(err)}. Proceeding without regression criteria.`,
+    );
     return [];
   }
 }
@@ -44,10 +48,7 @@ export async function readRegressionCriteria(workDir: string): Promise<Regressio
  * Criteria with type !== "behavioral" are excluded.
  * Deduplicates by name — newer criteria (higher sprintNumber) replace older ones.
  */
-export async function accumulateRegressionCriteria(
-  workDir: string,
-  contract: SprintContract,
-): Promise<void> {
+export async function accumulateRegressionCriteria(workDir: string, contract: SprintContract): Promise<void> {
   const behavioralCriteria = contract.criteria.filter((c) => c.type === "behavioral");
   if (behavioralCriteria.length === 0) return;
 

@@ -8,11 +8,7 @@ const MAX_DIFF_CHARS = 8000;
  * Returns a formatted "## Changes Since Last Attempt" section string for injection into
  * the Evaluator's supplementaryContext.
  */
-export function computeDiffSection(
-  workDir: string,
-  beforeSha: string,
-  attempt: number,
-): string | undefined {
+export function computeDiffSection(workDir: string, beforeSha: string, attempt: number): string | undefined {
   // Skip on first attempt
   if (attempt <= 0) return undefined;
 

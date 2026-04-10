@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { type Options, query } from "../shared/tracing.ts";
 import { CLAUDE_MAX_TURNS, CLAUDE_MODEL } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logDebug, logError, shouldLog, summarize } from "../shared/logger.ts";
 import { buildPlannerPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
+import { type Options, query } from "../shared/tracing.ts";
 import type { HarnessConfig } from "../shared/types.ts";
 import type { SDKResultFields, UsageTracker } from "../shared/usage.ts";
 
@@ -112,7 +112,6 @@ export async function runPlanner(
 
   const startTime = new Date();
   const convLog = createConversationLog(workDir, "Planner", undefined, undefined, { model, startTime });
-
 
   let fullResponse = "";
   let completed = false;

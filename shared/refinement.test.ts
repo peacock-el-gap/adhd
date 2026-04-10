@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
-  extractSprintSection,
-  extractCompletedSprintSections,
-  freezeCompletedSprints,
-  countSprints,
-  computeSpecDiff,
   buildRefinementPrompt,
+  computeSpecDiff,
+  countSprints,
+  extractCompletedSprintSections,
+  extractSprintSection,
+  freezeCompletedSprints,
 } from "./refinement.ts";
 
 const SAMPLE_SPEC = `# Product Spec
@@ -92,9 +92,10 @@ describe("freezeCompletedSprints", () => {
   test("replaces modified completed sections with originals", () => {
     const originalSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
 
-    const proposedSpec = SAMPLE_SPEC
-      .replace("Build the base layer.", "Build the MODIFIED base layer.")
-      .replace("Add user-facing features.", "Add MODIFIED features.");
+    const proposedSpec = SAMPLE_SPEC.replace("Build the base layer.", "Build the MODIFIED base layer.").replace(
+      "Add user-facing features.",
+      "Add MODIFIED features.",
+    );
 
     const frozen = freezeCompletedSprints(proposedSpec, originalSections);
     expect(frozen).toContain("Build the base layer.");
@@ -106,10 +107,7 @@ describe("freezeCompletedSprints", () => {
   test("preserves changes to non-completed sprints", () => {
     const originalSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
 
-    const proposedSpec = SAMPLE_SPEC.replace(
-      "Final polish and testing.",
-      "Completely rewritten sprint 3.",
-    );
+    const proposedSpec = SAMPLE_SPEC.replace("Final polish and testing.", "Completely rewritten sprint 3.");
 
     const frozen = freezeCompletedSprints(proposedSpec, originalSections);
     expect(frozen).toContain("Completely rewritten sprint 3.");
@@ -132,7 +130,7 @@ describe("countSprints", () => {
   });
 
   test("counts correctly when sprint is added", () => {
-    const extended = SAMPLE_SPEC + "\n## Sprint 5\n\nNew sprint.\n";
+    const extended = `${SAMPLE_SPEC}\n## Sprint 5\n\nNew sprint.\n`;
     expect(countSprints(extended)).toBe(5);
   });
 });

@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { log } from "./logger.ts";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ export function parseSkillYaml(yamlContent: string): SkillManifest {
 
     // Inside routing block
     // Check for agent line (2-space indent)
-    const agentMatch = line.match(/^  (\w+):\s*(.*)$/);
+    const agentMatch = line.match(/^ {2}(\w+):\s*(.*)$/);
     if (agentMatch) {
       const name = agentMatch[1] as string;
       const rest = (agentMatch[2] ?? "").trim();
@@ -121,7 +121,7 @@ export function parseSkillYaml(yamlContent: string): SkillManifest {
     }
 
     // Agent sub-properties (4-space indent)
-    const propMatch = line.match(/^    (\w+):\s*(.+)$/);
+    const propMatch = line.match(/^ {4}(\w+):\s*(.+)$/);
     if (propMatch && currentAgent) {
       const key = propMatch[1] as string;
       const val = (propMatch[2] ?? "").trim();
@@ -201,11 +201,7 @@ export function parseLocalSkill(mdContent: string, filePath: string): ResolvedSk
 
 // ── Resolution ─────────────────────────────────────────────────────
 
-function resolveExternalSkill(
-  skillDir: string,
-  yamlPath: string,
-  source: SkillSource,
-): ResolvedSkill | null {
+function resolveExternalSkill(skillDir: string, yamlPath: string, source: SkillSource): ResolvedSkill | null {
   try {
     const yamlContent = readFileSync(yamlPath, "utf-8");
     const manifest = parseSkillYaml(yamlContent);
@@ -254,12 +250,13 @@ export function scanSkillsDir(dir: string, source: SkillSource): ResolvedSkill[]
 
   for (const entry of entries) {
     const fullPath = join(dir, entry);
-    let stat;
+    let stat: ReturnType<typeof statSync> | undefined;
     try {
       stat = statSync(fullPath);
     } catch {
       continue;
     }
+    if (!stat) continue;
 
     if (stat.isDirectory()) {
       // Special subdirectories for project scope
@@ -354,9 +351,7 @@ export function resolveSkills(
     for (const agent of allAgents) {
       const routing = skill.routing[agent];
       if (routing && routing.tier === "inject" && !routing.content) {
-        routing.content = routing.files
-          .filter((f) => existsSync(f))
-          .map((f) => readFileSync(f, "utf-8"));
+        routing.content = routing.files.filter((f) => existsSync(f)).map((f) => readFileSync(f, "utf-8"));
       }
     }
   }

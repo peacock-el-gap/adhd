@@ -10,9 +10,7 @@
  * Returns the content of "## Sprint N" through to the next "## Sprint" or end of string.
  */
 export function extractSprintSection(spec: string, sprintNumber: number): string | null {
-  const pattern = new RegExp(
-    `(##\\s*Sprint\\s+${sprintNumber}\\b[^\\n]*\\n)([\\s\\S]*?)(?=##\\s*Sprint\\s+\\d|$)`,
-  );
+  const pattern = new RegExp(`(##\\s*Sprint\\s+${sprintNumber}\\b[^\\n]*\\n)([\\s\\S]*?)(?=##\\s*Sprint\\s+\\d|$)`);
   const match = spec.match(pattern);
   if (!match) return null;
   return ((match[1] ?? "") + (match[2] ?? "")).trimEnd();
@@ -22,10 +20,7 @@ export function extractSprintSection(spec: string, sprintNumber: number): string
  * Extract all completed sprint sections (sprints 1..completedSprint) from a spec.
  * Returns a map of sprint number -> section content.
  */
-export function extractCompletedSprintSections(
-  spec: string,
-  completedSprint: number,
-): Map<number, string> {
+export function extractCompletedSprintSections(spec: string, completedSprint: number): Map<number, string> {
   const sections = new Map<number, string>();
   for (let i = 1; i <= completedSprint; i++) {
     const section = extractSprintSection(spec, i);
@@ -40,10 +35,7 @@ export function extractCompletedSprintSections(
  * Freeze completed sprint sections in a proposed spec by replacing them
  * with the original sections. This ensures completed sprints cannot be modified.
  */
-export function freezeCompletedSprints(
-  proposedSpec: string,
-  originalSections: Map<number, string>,
-): string {
+export function freezeCompletedSprints(proposedSpec: string, originalSections: Map<number, string>): string {
   let result = proposedSpec;
   for (const [sprintNumber, originalContent] of originalSections) {
     const proposedSection = extractSprintSection(result, sprintNumber);
@@ -79,9 +71,9 @@ export function computeSpecDiff(oldSpec: string, newSpec: string): string | null
 
   // Build index of old lines
   for (let i = 0; i < oldLines.length; i++) {
-    const line = oldLines[i]!;
+    const line = oldLines[i] ?? "";
     if (!oldSet.has(line)) oldSet.set(line, []);
-    oldSet.get(line)!.push(i);
+    oldSet.get(line)?.push(i);
   }
 
   // Use a simple diff algorithm: walk both arrays

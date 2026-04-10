@@ -58,9 +58,9 @@ describe("parseCli Phase 1 Deepen flags", () => {
 
 describe("resolveConfig --sprint and --resume mutual exclusion", () => {
   test("throws exact error message when both --sprint and --resume are set", () => {
-    expect(() =>
-      resolveConfig({ ...baseCli, sprint: 3, resume: true })
-    ).toThrow("Cannot use --sprint and --resume together.");
+    expect(() => resolveConfig({ ...baseCli, sprint: 3, resume: true })).toThrow(
+      "Cannot use --sprint and --resume together.",
+    );
   });
 
   test("--sprint alone works", () => {
@@ -83,21 +83,15 @@ describe("resolveConfig --sprint validation", () => {
   });
 
   test("rejects --sprint 0 as invalid", () => {
-    expect(() =>
-      resolveConfig({ ...baseCli, sprint: 0 })
-    ).toThrow("Invalid --sprint value");
+    expect(() => resolveConfig({ ...baseCli, sprint: 0 })).toThrow("Invalid --sprint value");
   });
 
   test("rejects --sprint -1 as invalid", () => {
-    expect(() =>
-      resolveConfig({ ...baseCli, sprint: -1 })
-    ).toThrow("Invalid --sprint value");
+    expect(() => resolveConfig({ ...baseCli, sprint: -1 })).toThrow("Invalid --sprint value");
   });
 
   test("rejects non-integer sprint (NaN)", () => {
-    expect(() =>
-      resolveConfig({ ...baseCli, sprint: NaN })
-    ).toThrow("Invalid --sprint value");
+    expect(() => resolveConfig({ ...baseCli, sprint: NaN })).toThrow("Invalid --sprint value");
   });
 
   test("accepts --sprint 1 (minimum valid)", () => {

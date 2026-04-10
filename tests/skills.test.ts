@@ -347,6 +347,7 @@ describe("routeSkillsForAgent", () => {
         planner: { tier: "exclude", files: [] },
         generator: { tier: "exclude", files: [] },
         evaluator: { tier: "exclude", files: [] },
+        documenter: { tier: "exclude", files: [] },
       },
       ...overrides,
     };
@@ -360,6 +361,7 @@ describe("routeSkillsForAgent", () => {
           planner: { tier: "inject", files: ["/a.md"], content: ["Content A"] },
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
+          documenter: { tier: "exclude", files: [] },
         },
       }),
       makeSkill({
@@ -368,6 +370,7 @@ describe("routeSkillsForAgent", () => {
           planner: { tier: "inject", files: ["/b.md"], content: ["Content B"] },
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
+          documenter: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -384,6 +387,7 @@ describe("routeSkillsForAgent", () => {
           planner: { tier: "exclude", files: [] },
           generator: { tier: "reference", files: ["/skills/ref/guide.md", "/skills/ref/examples.md"] },
           evaluator: { tier: "exclude", files: [] },
+          documenter: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -405,6 +409,7 @@ describe("routeSkillsForAgent", () => {
             tier: "reference",
             files: ["/skills/eval/a.md", "/skills/eval/b.md", "/skills/other/c.md"],
           },
+          documenter: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -421,6 +426,7 @@ describe("routeSkillsForAgent", () => {
           planner: { tier: "exclude", files: [] },
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
+          documenter: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -439,6 +445,7 @@ describe("routeSkillsForAgent", () => {
           planner: { tier: "inject", files: ["/a.md"], content: ["Stuff"] },
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
+          documenter: { tier: "exclude", files: [] },
         },
       }),
     ];

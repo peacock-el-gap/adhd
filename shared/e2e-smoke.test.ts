@@ -6,35 +6,20 @@
  * LLM calls and subprocess execution are mocked.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { resolveConfig } from "./config.ts";
+import { computeDiffSection } from "./diff.ts";
+import { readContract, readSpec, writeContract, writeSpec } from "./files.ts";
+import { countSprints } from "./refinement.ts";
 import {
-  readRegressionCriteria,
-  buildRegressionSection,
   accumulateRegressionCriteria,
+  buildRegressionSection,
+  readRegressionCriteria,
   regressionPath,
 } from "./regression.ts";
-import {
-  detectStaticAnalysisCommands,
-  truncateStaticAnalysisOutput,
-} from "./static-analysis.ts";
-import { computeDiffSection } from "./diff.ts";
-import { readContract, writeContract, writeSpec, readSpec } from "./files.ts";
-import { resolveConfig, parseCli } from "./config.ts";
-import {
-  extractCompletedSprintSections,
-  freezeCompletedSprints,
-  computeSpecDiff,
-  countSprints,
-  buildRefinementPrompt,
-} from "./refinement.ts";
-import type {
-  EvalResult,
-  HarnessConfig,
-  SprintContract,
-  SprintResult,
-  RegressionCriterion,
-} from "./types.ts";
+import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "./static-analysis.ts";
+import type { EvalResult, SprintContract, SprintResult } from "./types.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_e2e_smoke__");
 const ADHD_DIR = join(TMP_DIR, ".adhd");
@@ -201,9 +186,7 @@ Build features.
     // Seed a regression criterion from a "previous" sprint
     writeFileSync(
       regressionPath(TMP_DIR),
-      JSON.stringify([
-        { name: "prior_feature", description: "Prior feature works", threshold: 7, sprintNumber: 0 },
-      ]),
+      JSON.stringify([{ name: "prior_feature", description: "Prior feature works", threshold: 7, sprintNumber: 0 }]),
       "utf-8",
     );
 
@@ -245,7 +228,7 @@ Build features.
 
     expect(result.passed).toBe(false);
     expect(evalResult.overallSummary).toContain("lint-gate");
-    expect(evalResult.feedback[0]!.details).toContain("lint-gate");
+    expect(evalResult.feedback[0]?.details).toContain("lint-gate");
   });
 
   test("completes without unhandled errors with all features enabled", async () => {
@@ -345,9 +328,7 @@ Build features.
     const c2: SprintContract = {
       sprintNumber: 2,
       features: ["Dashboard"],
-      criteria: [
-        { name: "dashboard_renders", description: "Dashboard shows data", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "dashboard_renders", description: "Dashboard shows data", threshold: 7, type: "behavioral" }],
     };
     await writeContract(TMP_DIR, c2);
 
@@ -372,9 +353,7 @@ Build features.
     const c: SprintContract = {
       sprintNumber: 1,
       features: ["Feature"],
-      criteria: [
-        { name: "feature_works", description: "Works", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "feature_works", description: "Works", threshold: 7, type: "behavioral" }],
     };
     await writeContract(TMP_DIR, c);
 

@@ -9,21 +9,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { CLI_FLAG_HELP, parseCli, resolveConfig } from "./config.ts";
+import { buildRefinementPrompt, extractCompletedSprintSections, freezeCompletedSprints } from "./refinement.ts";
 import {
   accumulateRegressionCriteria,
   buildRegressionSection,
   readRegressionCriteria,
   regressionPath,
 } from "./regression.ts";
-import {
-  buildRefinementPrompt,
-  extractCompletedSprintSections,
-  freezeCompletedSprints,
-} from "./refinement.ts";
-import { CLI_FLAG_HELP, parseCli, resolveConfig } from "./config.ts";
-import { writeContract, readContract } from "./files.ts";
-import { computeDiffSection } from "./diff.ts";
-import { truncateStaticAnalysisOutput } from "./static-analysis.ts";
 import type { RegressionCriterion, SprintContract } from "./types.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_cross_feature__");
@@ -47,9 +40,7 @@ describe("sprint selection with regression injection", () => {
     const sprint1: SprintContract = {
       sprintNumber: 1,
       features: ["Auth"],
-      criteria: [
-        { name: "login_works", description: "User can log in", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "login_works", description: "User can log in", threshold: 7, type: "behavioral" }],
     };
     const sprint2: SprintContract = {
       sprintNumber: 2,
@@ -94,7 +85,7 @@ describe("sprint selection with lint-gate", () => {
     // Simulate the harness logic: lint-gate check is independent of sprint selection
     const lintGate = true;
     const staticAnalysisFailed = true;
-    const staticAnalysisOutput = "Error: 5 lint errors";
+    const _staticAnalysisOutput = "Error: 5 lint errors";
 
     let evaluatorSkipped = false;
     let attemptFailed = false;
@@ -184,7 +175,8 @@ describe("diff and static analysis coexist in evaluator context", () => {
     }
 
     // Diff section (comes second)
-    const diffSection = "\n\n## Changes Since Last Attempt\n\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-old code\n+new code";
+    const diffSection =
+      "\n\n## Changes Since Last Attempt\n\n--- a/src/main.ts\n+++ b/src/main.ts\n@@ -1 +1 @@\n-old code\n+new code";
     supplementaryContext += diffSection;
 
     // Static analysis section (comes third)
@@ -241,9 +233,18 @@ describe("all new CLI flags in help and documented", () => {
     expect(cli.lintGate).toBe(true);
     // Resolved
     const config = resolveConfig({
-      prompt: "test", greenfield: false, resume: false, verbose: false,
-      quiet: false, noInteractive: false, debug: false, dryRun: false,
-      noBdd: false, noTdd: false, noDocs: false, lintGate: true,
+      prompt: "test",
+      greenfield: false,
+      resume: false,
+      verbose: false,
+      quiet: false,
+      noInteractive: false,
+      debug: false,
+      dryRun: false,
+      noBdd: false,
+      noTdd: false,
+      noDocs: false,
+      lintGate: true,
     });
     expect(config.lintGate).toBe(true);
     // In help
@@ -254,9 +255,17 @@ describe("all new CLI flags in help and documented", () => {
     const cli = parseCli(["--sprint", "3"]);
     expect(cli.sprint).toBe(3);
     const config = resolveConfig({
-      greenfield: false, resume: false, verbose: false,
-      quiet: false, noInteractive: false, debug: false, dryRun: false,
-      noBdd: false, noTdd: false, noDocs: false, sprint: 3,
+      greenfield: false,
+      resume: false,
+      verbose: false,
+      quiet: false,
+      noInteractive: false,
+      debug: false,
+      dryRun: false,
+      noBdd: false,
+      noTdd: false,
+      noDocs: false,
+      sprint: 3,
     });
     expect(config.sprint).toBe(3);
     expect(CLI_FLAG_HELP["--sprint N"]).toBeDefined();
@@ -266,9 +275,18 @@ describe("all new CLI flags in help and documented", () => {
     const cli = parseCli(["--refine-spec", "test"]);
     expect(cli.refineSpec).toBe(true);
     const config = resolveConfig({
-      prompt: "test", greenfield: false, resume: false, verbose: false,
-      quiet: false, noInteractive: false, debug: false, dryRun: false,
-      noBdd: false, noTdd: false, noDocs: false, refineSpec: true,
+      prompt: "test",
+      greenfield: false,
+      resume: false,
+      verbose: false,
+      quiet: false,
+      noInteractive: false,
+      debug: false,
+      dryRun: false,
+      noBdd: false,
+      noTdd: false,
+      noDocs: false,
+      refineSpec: true,
     });
     expect(config.refineSpec).toBe(true);
     expect(CLI_FLAG_HELP["--refine-spec"]).toBeDefined();
@@ -278,9 +296,17 @@ describe("all new CLI flags in help and documented", () => {
     const cli = parseCli(["--no-bdd", "test"]);
     expect(cli.noBdd).toBe(true);
     const config = resolveConfig({
-      prompt: "test", greenfield: false, resume: false, verbose: false,
-      quiet: false, noInteractive: false, debug: false, dryRun: false,
-      noBdd: true, noTdd: false, noDocs: false,
+      prompt: "test",
+      greenfield: false,
+      resume: false,
+      verbose: false,
+      quiet: false,
+      noInteractive: false,
+      debug: false,
+      dryRun: false,
+      noBdd: true,
+      noTdd: false,
+      noDocs: false,
     });
     expect(config.noBdd).toBe(true);
     expect(CLI_FLAG_HELP["--no-bdd"]).toBeDefined();
@@ -359,9 +385,7 @@ describe("no-bdd disables regression in sprint selection mode", () => {
 describe("regression.json survives resume and sprint selection", () => {
   test("cleanHarnessArtifacts does not delete regression.json", async () => {
     // Write regression.json
-    const criteria: RegressionCriterion[] = [
-      { name: "test_crit", description: "Test", threshold: 7, sprintNumber: 1 },
-    ];
+    const criteria: RegressionCriterion[] = [{ name: "test_crit", description: "Test", threshold: 7, sprintNumber: 1 }];
     writeFileSync(regressionPath(TMP_DIR), JSON.stringify(criteria, null, 2), "utf-8");
 
     expect(existsSync(regressionPath(TMP_DIR))).toBe(true);
@@ -382,9 +406,7 @@ describe("regression.json survives resume and sprint selection", () => {
   });
 
   test("initWorkspace with resume=true does not delete regression.json", async () => {
-    const criteria: RegressionCriterion[] = [
-      { name: "test_crit", description: "Test", threshold: 7, sprintNumber: 1 },
-    ];
+    const criteria: RegressionCriterion[] = [{ name: "test_crit", description: "Test", threshold: 7, sprintNumber: 1 }];
     writeFileSync(regressionPath(TMP_DIR), JSON.stringify(criteria, null, 2), "utf-8");
 
     const { initWorkspace } = await import("./files.ts");
@@ -399,25 +421,33 @@ describe("regression.json survives resume and sprint selection", () => {
 // ============================================================
 describe("invalid sprint values handled gracefully", () => {
   const baseCli = {
-    greenfield: false, resume: false, verbose: false,
-    quiet: false, noInteractive: false, debug: false, dryRun: false,
-    noBdd: false, noTdd: false, noDocs: false,
+    greenfield: false,
+    resume: false,
+    verbose: false,
+    quiet: false,
+    noInteractive: false,
+    debug: false,
+    dryRun: false,
+    noBdd: false,
+    noTdd: false,
+    noDocs: false,
   };
 
   test("--sprint 0 produces a descriptive error", () => {
-    expect(() => resolveConfig({ ...baseCli, sprint: 0 }))
-      .toThrow("Invalid --sprint value: 0. Must be a positive integer.");
+    expect(() => resolveConfig({ ...baseCli, sprint: 0 })).toThrow(
+      "Invalid --sprint value: 0. Must be a positive integer.",
+    );
   });
 
   test("--sprint -1 produces a descriptive error", () => {
-    expect(() => resolveConfig({ ...baseCli, sprint: -1 }))
-      .toThrow("Invalid --sprint value: -1. Must be a positive integer.");
+    expect(() => resolveConfig({ ...baseCli, sprint: -1 })).toThrow(
+      "Invalid --sprint value: -1. Must be a positive integer.",
+    );
   });
 
   test("--sprint NaN (from non-numeric input) produces a descriptive error", () => {
     // parseCli converts "abc" to NaN via parseInt
-    expect(() => resolveConfig({ ...baseCli, sprint: NaN }))
-      .toThrow("Invalid --sprint value");
+    expect(() => resolveConfig({ ...baseCli, sprint: NaN })).toThrow("Invalid --sprint value");
   });
 
   test("parseCli converts non-numeric --sprint value to NaN which resolveConfig rejects", () => {

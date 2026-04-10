@@ -4,8 +4,8 @@
 import { describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { computeDiffSection } from "./diff.ts";
 import type { EvalResult } from "./types.ts";
 
@@ -64,10 +64,10 @@ describe("lint-gate hard mode", () => {
     }
 
     expect(evalResult).not.toBeNull();
-    expect(evalResult!.passed).toBe(false);
-    expect(evalResult!.overallSummary).toContain("lint-gate");
-    expect(evalResult!.overallSummary).toContain(lintOutput);
-    expect(evalResult!.feedback[0]!.details).toContain("Static analysis failed");
+    expect(evalResult?.passed).toBe(false);
+    expect(evalResult?.overallSummary).toContain("lint-gate");
+    expect(evalResult?.overallSummary).toContain(lintOutput);
+    expect(evalResult?.feedback[0]?.details).toContain("Static analysis failed");
   });
 
   test("when lintGate is true and lint passes, evaluator runs normally", () => {
@@ -181,9 +181,7 @@ describe("diff-aware retry integration", () => {
       const diffSection = computeDiffSection(dir, beforeSha, 2);
 
       const basePrompt = "Evaluate the following sprint criteria...";
-      const evaluatorPrompt = diffSection
-        ? `${basePrompt}\n${diffSection}`
-        : basePrompt;
+      const evaluatorPrompt = diffSection ? `${basePrompt}\n${diffSection}` : basePrompt;
 
       expect(evaluatorPrompt).toContain("## Changes Since Last Attempt");
       expect(evaluatorPrompt).toContain("new file content");

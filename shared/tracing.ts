@@ -1,4 +1,4 @@
-import { query as originalQuery, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { type Options, query as originalQuery } from "@anthropic-ai/claude-agent-sdk";
 import { log, logDebug } from "./logger.ts";
 import type { HarnessConfig } from "./types.ts";
 
@@ -67,19 +67,17 @@ export function initTracing(config: HarnessConfig): Tracer {
     }
 
     // Dynamic imports to avoid loading when tracing is disabled
-    // biome-ignore lint/style/noVar: dynamic require
+    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
     var { NodeSDK } = require("@opentelemetry/sdk-node");
-    // biome-ignore lint/style/noVar: dynamic require
+    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
     var { LangfuseSpanProcessor, isDefaultExportSpan } = require("@langfuse/otel");
-    // biome-ignore lint/style/noVar: dynamic require
-    var { ClaudeAgentSDKInstrumentation } = require(
-      "@arizeai/openinference-instrumentation-claude-agent-sdk",
-    );
-    // biome-ignore lint/style/noVar: dynamic require
+    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
+    var { ClaudeAgentSDKInstrumentation } = require("@arizeai/openinference-instrumentation-claude-agent-sdk");
+    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
     var ClaudeAgentSDKModule = require("@anthropic-ai/claude-agent-sdk");
-    // biome-ignore lint/style/noVar: dynamic require
+    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
     var otelApi = require("@opentelemetry/api");
-    // biome-ignore lint/style/noVar: dynamic require
+    // biome-ignore lint/correctness/noInnerDeclarations: dynamic require needs var hoisting
     var { propagateAttributes } = require("@langfuse/core");
 
     // Create a mutable copy — Bun's module namespace objects are frozen
@@ -99,7 +97,7 @@ export function initTracing(config: HarnessConfig): Tracer {
     const cacheUsageQueue: Record<string, number>[] = [];
 
     const arizeQuery = mutableSDK.query;
-    activeQuery = (async function* patchedQuery(params: any): any {
+    activeQuery = async function* patchedQuery(params: any): any {
       for await (const msg of arizeQuery(params)) {
         if (msg.type === "result" && msg.usage) {
           cacheUsageQueue.push({
@@ -111,7 +109,7 @@ export function initTracing(config: HarnessConfig): Tracer {
         }
         yield msg;
       }
-    }) as typeof originalQuery;
+    } as typeof originalQuery;
 
     // SpanProcessor that enriches ClaudeAgent.query spans with cache token data
     // before they reach the Langfuse exporter. Must be registered BEFORE the

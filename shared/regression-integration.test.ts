@@ -3,7 +3,7 @@
  * and --no-bdd flag behavior.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   accumulateRegressionCriteria,
@@ -11,7 +11,7 @@ import {
   readRegressionCriteria,
   regressionPath,
 } from "./regression.ts";
-import type { SprintContract, RegressionCriterion } from "./types.ts";
+import type { RegressionCriterion, SprintContract } from "./types.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_regression_integration__");
 const ADHD_DIR = join(TMP_DIR, ".adhd");
@@ -42,9 +42,7 @@ describe("regression accumulation integration", () => {
     const sprint2: SprintContract = {
       sprintNumber: 2,
       features: ["Dashboard"],
-      criteria: [
-        { name: "dashboard_loads", description: "Dashboard renders data", threshold: 8, type: "behavioral" },
-      ],
+      criteria: [{ name: "dashboard_loads", description: "Dashboard renders data", threshold: 8, type: "behavioral" }],
     };
 
     await accumulateRegressionCriteria(TMP_DIR, sprint1);
@@ -58,10 +56,12 @@ describe("regression accumulation integration", () => {
     expect(names).toEqual(["dashboard_loads", "login_works", "session_persists"]);
 
     // Verify sprintNumber fields
-    const login = data.find((d) => d.name === "login_works")!;
-    expect(login.sprintNumber).toBe(1);
-    const dashboard = data.find((d) => d.name === "dashboard_loads")!;
-    expect(dashboard.sprintNumber).toBe(2);
+    const login = data.find((d) => d.name === "login_works");
+    expect(login).toBeDefined();
+    expect(login?.sprintNumber).toBe(1);
+    const dashboard = data.find((d) => d.name === "dashboard_loads");
+    expect(dashboard).toBeDefined();
+    expect(dashboard?.sprintNumber).toBe(2);
 
     // Verify no implementation criterion is present
     expect(data.find((d) => d.name === "clean_code")).toBeUndefined();
@@ -80,9 +80,7 @@ describe("regression accumulation integration", () => {
     const sprint2: SprintContract = {
       sprintNumber: 2,
       features: ["Dashboard"],
-      criteria: [
-        { name: "dashboard_loads", description: "Dashboard renders data", threshold: 8, type: "behavioral" },
-      ],
+      criteria: [{ name: "dashboard_loads", description: "Dashboard renders data", threshold: 8, type: "behavioral" }],
     };
 
     await accumulateRegressionCriteria(TMP_DIR, sprint1);
@@ -103,9 +101,7 @@ describe("noBdd skips regression", () => {
     const contract: SprintContract = {
       sprintNumber: 1,
       features: ["Feature A"],
-      criteria: [
-        { name: "api_responds", description: "API returns 200", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "api_responds", description: "API returns 200", threshold: 7, type: "behavioral" }],
     };
 
     // Simulate the harness behavior: when noBdd is true, skip regression
@@ -130,9 +126,7 @@ describe("noBdd skips regression", () => {
     const contract: SprintContract = {
       sprintNumber: 1,
       features: ["Feature A"],
-      criteria: [
-        { name: "api_responds", description: "API returns 200", threshold: 7, type: "behavioral" },
-      ],
+      criteria: [{ name: "api_responds", description: "API returns 200", threshold: 7, type: "behavioral" }],
     };
 
     const noBdd = false;

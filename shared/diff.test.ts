@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { computeDiffSection } from "./diff.ts";
 
 function gitExec(cmd: string, cwd: string): string {
@@ -80,7 +80,7 @@ describe("computeDiffSection", () => {
     const dir = makeTmp();
     try {
       const beforeSha = initGitRepo(dir);
-      const largeContent = "x".repeat(10000) + "\n";
+      const largeContent = `${"x".repeat(10000)}\n`;
       writeFileSync(join(dir, "large.txt"), largeContent);
       gitExec("git add -A && git commit -m 'large change'", dir);
 

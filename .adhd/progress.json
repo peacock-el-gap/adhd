@@ -1,11 +1,11 @@
 {
   "status": "building",
-  "currentSprint": 5,
+  "currentSprint": 6,
   "totalSprints": 6,
-  "completedSprints": 4,
+  "completedSprints": 5,
   "retryCount": 0,
   "specApproved": true,
-  "lastPassedCommitSha": "edb2b83b452f312d8d400eafd19000365eb0d483",
+  "lastPassedCommitSha": "e6839ea136e062b8647c70eb0af6f3998658aa3b",
   "sprintResults": [
     {
       "sprintNumber": 1,
@@ -596,6 +596,154 @@
           "permission_denials": [],
           "fast_mode_state": "off",
           "uuid": "6167e0c8-ab04-4efd-8de2-12294ddb163c"
+        }
+      }
+    },
+    {
+      "sprintNumber": 5,
+      "passed": true,
+      "attempts": 1,
+      "evalResult": {
+        "passed": true,
+        "scores": {
+          "sprint_selection_with_regression_injection": 9,
+          "sprint_selection_with_lint_gate": 8,
+          "refinement_preserves_regression_criteria": 9,
+          "diff_and_static_analysis_coexist_in_evaluator_context": 9,
+          "regression_section_and_diff_section_ordering": 9,
+          "all_new_cli_flags_in_help_and_documented": 9,
+          "combined_flags_no_crash": 9,
+          "no_bdd_disables_regression_in_sprint_selection_mode": 9,
+          "regression_json_survives_resume_and_sprint_selection": 9,
+          "invalid_sprint_values_handled_gracefully": 9,
+          "malformed_regression_json_handled_gracefully": 9,
+          "existing_tests_still_pass": 10,
+          "new_integration_tests_added": 9,
+          "type_safety_no_typescript_errors": 8,
+          "code_quality_no_dead_code_or_duplication": 8
+        },
+        "feedback": [
+          {
+            "criterion": "sprint_selection_with_regression_injection",
+            "score": 9,
+            "details": "Integration test in cross-feature-integration.test.ts simulates sprints 1-2 accumulating behavioral criteria, then verifies buildRegressionSection output is non-empty and contains 'login_works' and 'dashboard_loads' from prior sprints. Also correctly excludes 'code_style' (implementation type). harness.ts line 673 confirms the guard `!config.noBdd && sprint > 1` enables regression injection for sprint selection paths."
+          },
+          {
+            "criterion": "sprint_selection_with_lint_gate",
+            "score": 8,
+            "details": "harness.ts lines 689-703 show lint-gate logic is in the main retry loop, independent of sprint selection entry path — it runs the same code path regardless. The test in cross-feature-integration.test.ts verifies config resolves correctly with both --sprint and --lint-gate. The lint-gate integration test also mirrors the harness logic. However, the tests simulate the logic rather than calling actual harness code, which is a minor gap (acceptable given the harness requires LLM calls)."
+          },
+          {
+            "criterion": "refinement_preserves_regression_criteria",
+            "score": 9,
+            "details": "cross-feature-integration.test.ts writes regression.json, calls freezeCompletedSprints and buildRefinementPrompt, then asserts byte-identical content. The test correctly demonstrates these functions only operate on spec strings, not regression.json. Additionally, harness.ts lines 1103-1104 show the actual harness saves and restores regression data during refinement."
+          },
+          {
+            "criterion": "diff_and_static_analysis_coexist_in_evaluator_context",
+            "score": 9,
+            "details": "harness.ts lines 670-719 show supplementaryContext is built by appending regression section, then diff section (retry > 0), then static analysis results — all via string concatenation. No clobbering possible. Test in cross-feature-integration.test.ts verifies all three sections coexist in a single string with their respective content intact."
+          },
+          {
+            "criterion": "regression_section_and_diff_section_ordering",
+            "score": 9,
+            "details": "harness.ts confirms deterministic ordering: regression (line 678), diff (line 712), static analysis (line 718). Comment on line 708 explicitly documents 'Ordering: regression → diff → static analysis (deterministic)'. Test verifies indexOf values are in ascending order."
+          },
+          {
+            "criterion": "all_new_cli_flags_in_help_and_documented",
+            "score": 9,
+            "details": "All four flags verified: (a) parsed in parseCli via parseArgs options, (b) resolved in resolveConfig into HarnessConfig fields, (c) defined in types.ts HarnessConfig interface (lintGate line 42, sprint line 44, refineSpec line 46, noBdd line 36), (d) present in CLI_FLAG_HELP map with descriptions. --help output confirmed showing all four flags. Comprehensive tests in cross-feature-integration.test.ts verify each flag across all four locations."
+          },
+          {
+            "criterion": "combined_flags_no_crash",
+            "score": 9,
+            "details": "Test in cross-feature-integration.test.ts explicitly calls resolveConfig with sprint=2, lintGate=true, refineSpec=true, noBdd=true and asserts all four values are correctly resolved. No crash occurs."
+          },
+          {
+            "criterion": "no_bdd_disables_regression_in_sprint_selection_mode",
+            "score": 9,
+            "details": "harness.ts line 673: `if (!config.noBdd && sprint > 1)` — when noBdd=true, this guard prevents regression injection. Test in cross-feature-integration.test.ts writes regression.json, simulates noBdd=true + sprint=3, and asserts supplementaryContext is empty."
+          },
+          {
+            "criterion": "regression_json_survives_resume_and_sprint_selection",
+            "score": 9,
+            "details": "files.ts cleanHarnessArtifacts (lines 68-76) only removes contracts/, feedback/, spec.md, and progress.json — regression.json is not in the list. Test in cross-feature-integration.test.ts writes regression.json, calls initWorkspace with resume=false (which triggers cleanup), then asserts regression.json still exists with correct contents. A second test verifies resume=true also preserves it."
+          },
+          {
+            "criterion": "invalid_sprint_values_handled_gracefully",
+            "score": 9,
+            "details": "config.ts lines 247-251 validate sprint: `if (!Number.isInteger(cli.sprint) || cli.sprint < 1)` throws descriptive error. Tests cover --sprint 0, --sprint -1, NaN (from non-numeric input), and the full parseCli→resolveConfig pipeline with 'abc'. All produce descriptive errors, not unhandled exceptions."
+          },
+          {
+            "criterion": "malformed_regression_json_handled_gracefully",
+            "score": 9,
+            "details": "regression.ts readRegressionCriteria separates file-not-found from parse errors. Lines 27-39 handle invalid JSON (catch with console.warn) and unexpected schema (non-array, with console.warn). Tests cover: broken JSON, empty object, truncated file, null, and empty string — all return [] without crash."
+          },
+          {
+            "criterion": "existing_tests_still_pass",
+            "score": 10,
+            "details": "Running `bun test shared/` produces 124 pass, 0 fail across 10 test files. Exit code 0. No regressions."
+          },
+          {
+            "criterion": "new_integration_tests_added",
+            "score": 9,
+            "details": "cross-feature-integration.test.ts is a new file with 24 test cases covering all required cross-feature interactions: (1) sprint selection + regression injection, (2) combined CLI flags no crash, (3) refinement + regression preservation, plus additional coverage for lint-gate + sprint, no-bdd + sprint, cleanup survival, invalid sprints, and malformed regression.json. Well over the minimum 3 required tests."
+          },
+          {
+            "criterion": "type_safety_no_typescript_errors",
+            "score": 8,
+            "details": "Running `bunx tsc --noEmit` produces 0 errors in shared/ and claude-harness/ directories. There are 8 pre-existing errors in tests/ (missing noDocs and documenter properties), but these are from prior sprints, not sprint 5. No `any` casts found in sprint 5 changes."
+          },
+          {
+            "criterion": "code_quality_no_dead_code_or_duplication",
+            "score": 8,
+            "details": "Sprint 5 changes are clean: CLI_FLAG_HELP map added with no duplication, regression.ts readRegressionCriteria refactored for better error handling, harness.ts supplementaryContext ordering fixed by moving static analysis append after diff section. The import of truncateStaticAnalysisOutput in cross-feature-integration.test.ts appears unused (imported but not directly called in test assertions), which is a minor issue. No significant dead code or duplication introduced."
+          }
+        ],
+        "overallSummary": "Sprint 5 is well-executed. All cross-feature integration tests pass (124/124), the harness code correctly composes features 1.1-1.6 under combined flag usage, CLI help documentation covers all Phase 1 Deepen flags, and edge cases (invalid sprint values, malformed regression.json) are handled gracefully. The supplementaryContext ordering in harness.ts is deterministic (regression → diff → static analysis). TypeScript is clean in production code. The new cross-feature-integration.test.ts provides thorough coverage with 24 test cases. All criteria meet or exceed the threshold.",
+        "sdkResult": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 148216,
+          "duration_api_ms": 142833,
+          "num_turns": 33,
+          "result": "The ordering is confirmed: regression → diff → static analysis. The lint-gate `continue` properly skips the evaluator. The `!config.noBdd && sprint > 1` guard is correct.\n\nNow I have all the information needed. Let me produce the evaluation:\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"sprint_selection_with_regression_injection\": 9,\n    \"sprint_selection_with_lint_gate\": 8,\n    \"refinement_preserves_regression_criteria\": 9,\n    \"diff_and_static_analysis_coexist_in_evaluator_context\": 9,\n    \"regression_section_and_diff_section_ordering\": 9,\n    \"all_new_cli_flags_in_help_and_documented\": 9,\n    \"combined_flags_no_crash\": 9,\n    \"no_bdd_disables_regression_in_sprint_selection_mode\": 9,\n    \"regression_json_survives_resume_and_sprint_selection\": 9,\n    \"invalid_sprint_values_handled_gracefully\": 9,\n    \"malformed_regression_json_handled_gracefully\": 9,\n    \"existing_tests_still_pass\": 10,\n    \"new_integration_tests_added\": 9,\n    \"type_safety_no_typescript_errors\": 8,\n    \"code_quality_no_dead_code_or_duplication\": 8\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"sprint_selection_with_regression_injection\",\n      \"score\": 9,\n      \"details\": \"Integration test in cross-feature-integration.test.ts simulates sprints 1-2 accumulating behavioral criteria, then verifies buildRegressionSection output is non-empty and contains 'login_works' and 'dashboard_loads' from prior sprints. Also correctly excludes 'code_style' (implementation type). harness.ts line 673 confirms the guard `!config.noBdd && sprint > 1` enables regression injection for sprint selection paths.\"\n    },\n    {\n      \"criterion\": \"sprint_selection_with_lint_gate\",\n      \"score\": 8,\n      \"details\": \"harness.ts lines 689-703 show lint-gate logic is in the main retry loop, independent of sprint selection entry path — it runs the same code path regardless. The test in cross-feature-integration.test.ts verifies config resolves correctly with both --sprint and --lint-gate. The lint-gate integration test also mirrors the harness logic. However, the tests simulate the logic rather than calling actual harness code, which is a minor gap (acceptable given the harness requires LLM calls).\"\n    },\n    {\n      \"criterion\": \"refinement_preserves_regression_criteria\",\n      \"score\": 9,\n      \"details\": \"cross-feature-integration.test.ts writes regression.json, calls freezeCompletedSprints and buildRefinementPrompt, then asserts byte-identical content. The test correctly demonstrates these functions only operate on spec strings, not regression.json. Additionally, harness.ts lines 1103-1104 show the actual harness saves and restores regression data during refinement.\"\n    },\n    {\n      \"criterion\": \"diff_and_static_analysis_coexist_in_evaluator_context\",\n      \"score\": 9,\n      \"details\": \"harness.ts lines 670-719 show supplementaryContext is built by appending regression section, then diff section (retry > 0), then static analysis results — all via string concatenation. No clobbering possible. Test in cross-feature-integration.test.ts verifies all three sections coexist in a single string with their respective content intact.\"\n    },\n    {\n      \"criterion\": \"regression_section_and_diff_section_ordering\",\n      \"score\": 9,\n      \"details\": \"harness.ts confirms deterministic ordering: regression (line 678), diff (line 712), static analysis (line 718). Comment on line 708 explicitly documents 'Ordering: regression → diff → static analysis (deterministic)'. Test verifies indexOf values are in ascending order.\"\n    },\n    {\n      \"criterion\": \"all_new_cli_flags_in_help_and_documented\",\n      \"score\": 9,\n      \"details\": \"All four flags verified: (a) parsed in parseCli via parseArgs options, (b) resolved in resolveConfig into HarnessConfig fields, (c) defined in types.ts HarnessConfig interface (lintGate line 42, sprint line 44, refineSpec line 46, noBdd line 36), (d) present in CLI_FLAG_HELP map with descriptions. --help output confirmed showing all four flags. Comprehensive tests in cross-feature-integration.test.ts verify each flag across all four locations.\"\n    },\n    {\n      \"criterion\": \"combined_flags_no_crash\",\n      \"score\": 9,\n      \"details\": \"Test in cross-feature-integration.test.ts explicitly calls resolveConfig with sprint=2, lintGate=true, refineSpec=true, noBdd=true and asserts all four values are correctly resolved. No crash occurs.\"\n    },\n    {\n      \"criterion\": \"no_bdd_disables_regression_in_sprint_selection_mode\",\n      \"score\": 9,\n      \"details\": \"harness.ts line 673: `if (!config.noBdd && sprint > 1)` — when noBdd=true, this guard prevents regression injection. Test in cross-feature-integration.test.ts writes regression.json, simulates noBdd=true + sprint=3, and asserts supplementaryContext is empty.\"\n    },\n    {\n      \"criterion\": \"regression_json_survives_resume_and_sprint_selection\",\n      \"score\": 9,\n      \"details\": \"files.ts cleanHarnessArtifacts (lines 68-76) only removes contracts/, feedback/, spec.md, and progress.json — regression.json is not in the list. Test in cross-feature-integration.test.ts writes regression.json, calls initWorkspace with resume=false (which triggers cleanup), then asserts regression.json still exists with correct contents. A second test verifies resume=true also preserves it.\"\n    },\n    {\n      \"criterion\": \"invalid_sprint_values_handled_gracefully\",\n      \"score\": 9,\n      \"details\": \"config.ts lines 247-251 validate sprint: `if (!Number.isInteger(cli.sprint) || cli.sprint < 1)` throws descriptive error. Tests cover --sprint 0, --sprint -1, NaN (from non-numeric input), and the full parseCli→resolveConfig pipeline with 'abc'. All produce descriptive errors, not unhandled exceptions.\"\n    },\n    {\n      \"criterion\": \"malformed_regression_json_handled_gracefully\",\n      \"score\": 9,\n      \"details\": \"regression.ts readRegressionCriteria separates file-not-found from parse errors. Lines 27-39 handle invalid JSON (catch with console.warn) and unexpected schema (non-array, with console.warn). Tests cover: broken JSON, empty object, truncated file, null, and empty string — all return [] without crash.\"\n    },\n    {\n      \"criterion\": \"existing_tests_still_pass\",\n      \"score\": 10,\n      \"details\": \"Running `bun test shared/` produces 124 pass, 0 fail across 10 test files. Exit code 0. No regressions.\"\n    },\n    {\n      \"criterion\": \"new_integration_tests_added\",\n      \"score\": 9,\n      \"details\": \"cross-feature-integration.test.ts is a new file with 24 test cases covering all required cross-feature interactions: (1) sprint selection + regression injection, (2) combined CLI flags no crash, (3) refinement + regression preservation, plus additional coverage for lint-gate + sprint, no-bdd + sprint, cleanup survival, invalid sprints, and malformed regression.json. Well over the minimum 3 required tests.\"\n    },\n    {\n      \"criterion\": \"type_safety_no_typescript_errors\",\n      \"score\": 8,\n      \"details\": \"Running `bunx tsc --noEmit` produces 0 errors in shared/ and claude-harness/ directories. There are 8 pre-existing errors in tests/ (missing noDocs and documenter properties), but these are from prior sprints, not sprint 5. No `any` casts found in sprint 5 changes.\"\n    },\n    {\n      \"criterion\": \"code_quality_no_dead_code_or_duplication\",\n      \"score\": 8,\n      \"details\": \"Sprint 5 changes are clean: CLI_FLAG_HELP map added with no duplication, regression.ts readRegressionCriteria refactored for better error handling, harness.ts supplementaryContext ordering fixed by moving static analysis append after diff section. The import of truncateStaticAnalysisOutput in cross-feature-integration.test.ts appears unused (imported but not directly called in test assertions), which is a minor issue. No significant dead code or duplication introduced.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 5 is well-executed. All cross-feature integration tests pass (124/124), the harness code correctly composes features 1.1-1.6 under combined flag usage, CLI help documentation covers all Phase 1 Deepen flags, and edge cases (invalid sprint values, malformed regression.json) are handled gracefully. The supplementaryContext ordering in harness.ts is deterministic (regression → diff → static analysis). TypeScript is clean in production code. The new cross-feature-integration.test.ts provides thorough coverage with 24 test cases. All criteria meet or exceed the threshold.\"\n}\n```",
+          "stop_reason": "end_turn",
+          "session_id": "a80b1300-29e8-424a-b2f4-e2ffdf600d54",
+          "total_cost_usd": 1.067934,
+          "usage": {
+            "input_tokens": 1324,
+            "cache_creation_input_tokens": 69044,
+            "cache_read_input_tokens": 975078,
+            "output_tokens": 5690,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 69044,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-opus-4-6": {
+              "inputTokens": 1324,
+              "outputTokens": 5690,
+              "cacheReadInputTokens": 975078,
+              "cacheCreationInputTokens": 69044,
+              "webSearchRequests": 0,
+              "costUSD": 1.067934,
+              "contextWindow": 200000,
+              "maxOutputTokens": 64000
+            }
+          },
+          "permission_denials": [],
+          "fast_mode_state": "off",
+          "uuid": "f837aed7-a13b-4788-9757-1429deb87e45"
         }
       }
     }

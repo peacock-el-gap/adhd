@@ -207,9 +207,7 @@ Quality criteria (naming conventions, code duplication, error handling patterns,
 }
 
 export function buildDocumenterPrompt(ctx: PromptContext): string {
-  const docTarget = ctx.isGreenfield
-    ? `the \`app/\` directory`
-    : `the project root directory`;
+  const docTarget = ctx.isGreenfield ? `the \`app/\` directory` : `the project root directory`;
 
   const prompt = `You are a technical documentation specialist. Your job is to synthesize the codebase and build artifacts into polished, accurate project documentation.
 
