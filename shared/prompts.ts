@@ -1,4 +1,4 @@
-// --- Dynamic prompt builders (used by claude-harness) ---
+// --- Dynamic prompt builders (used by harness-claude) ---
 
 import type { AgentSkills } from "./skills.ts";
 

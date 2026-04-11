@@ -1,10 +1,10 @@
-import { processAgentStream } from "../shared/agent-stream.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { logError } from "../shared/logger.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
-import type { Options } from "../shared/tracing.ts";
 import type { SprintContract } from "../shared/types.ts";
 import type { UsageTracker } from "../shared/usage.ts";
+import { processAgentStream } from "./agent-stream.ts";
+import type { Options } from "./tracing-claude.ts";
 
 export async function negotiateContract(
   workDir: string,

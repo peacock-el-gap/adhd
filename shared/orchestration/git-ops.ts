@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
-import { gitDir } from "../shared/files.ts";
-import { promptGate } from "../shared/interaction.ts";
-import { log, logError } from "../shared/logger.ts";
-import type { HarnessProgress, ResolvedConfig } from "../shared/types.ts";
+import { gitDir } from "../files.ts";
+import { promptGate } from "../interaction.ts";
+import { log, logError } from "../logger.ts";
+import type { HarnessProgress, ResolvedConfig } from "../types.ts";
 import { UserAbortError } from "./error-handling.ts";
 
 export async function revertToCheckpoint(

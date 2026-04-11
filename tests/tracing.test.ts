@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { initTracing, query } from "../shared/tracing.ts";
+import { initTracing, query } from "../harness-claude/tracing-claude.ts";
 import type { ResolvedConfig } from "../shared/types.ts";
 
 const baseConfig: ResolvedConfig = {

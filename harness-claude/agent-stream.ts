@@ -1,9 +1,9 @@
-import type { ConversationLogger } from "./conversation-logger.ts";
-import { type AgentRole, log, logDebug, shouldLog, summarize } from "./logger.ts";
-import type { Options } from "./tracing.ts";
-import { query } from "./tracing.ts";
-import type { LogLevel } from "./types.ts";
-import type { SDKResultFields } from "./usage.ts";
+import type { ConversationLogger } from "../shared/conversation-logger.ts";
+import { type AgentRole, log, logDebug, shouldLog, summarize } from "../shared/logger.ts";
+import type { LogLevel } from "../shared/types.ts";
+import type { SDKResultFields } from "../shared/usage.ts";
+import type { Options } from "./tracing-claude.ts";
+import { query } from "./tracing-claude.ts";
 
 /** Callbacks for agent-specific handling of streaming events. */
 export interface StreamCallbacks {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseEvalResult } from "../claude-harness/evaluator.ts";
+import { parseEvalResult } from "../harness-claude/evaluator.ts";
 import type { SprintContract } from "../shared/types.ts";
 
 const contract: SprintContract = {

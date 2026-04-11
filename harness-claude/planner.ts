@@ -1,16 +1,16 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logDebug, logError } from "../shared/logger.ts";
 import { buildPlannerPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
-import type { Options } from "../shared/tracing.ts";
 import type { ResolvedConfig } from "../shared/types.ts";
 import type { UsageTracker } from "../shared/usage.ts";
+import { processAgentStream } from "./agent-stream.ts";
+import type { Options } from "./tracing-claude.ts";
 
 export async function runPlanner(
   config: ResolvedConfig,

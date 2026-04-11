@@ -1,22 +1,16 @@
-import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { gitDir } from "../shared/files.ts";
 import { log, logError, shouldLog } from "../shared/logger.ts";
+import type { RunEvaluatorOptions } from "../shared/orchestration/types.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
-import type { AgentSkills } from "../shared/skills.ts";
-import type { Options } from "../shared/tracing.ts";
-import type { EvalResult, ResolvedConfig, SprintContract } from "../shared/types.ts";
+import type { EvalResult, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
+import { processAgentStream } from "./agent-stream.ts";
 import { extractBalancedJson } from "./contract.ts";
+import type { Options } from "./tracing-claude.ts";
 
-export interface RunEvaluatorOptions {
-  config: ResolvedConfig;
-  contract: SprintContract;
-  attempt?: number;
-  skills?: AgentSkills;
-  supplementaryContext?: string;
-}
+export type { RunEvaluatorOptions };
 
 export async function runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
   const { config, contract, skills, supplementaryContext } = opts;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { extractBalancedJson } from "../claude-harness/contract.ts";
+import { extractBalancedJson } from "../harness-claude/contract.ts";
 
 describe("extractBalancedJson", () => {
   test("extracts simple JSON object", () => {

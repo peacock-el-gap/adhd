@@ -53,7 +53,7 @@ export const CLI_FLAG_HELP: Record<string, string> = {
  */
 export function printHelp(): void {
   console.log("ADHD Harness — GAN-inspired adversarial coding tool\n");
-  console.log("Usage: bun run claude-harness/index.ts [options] [prompt]\n");
+  console.log("Usage: bun run harness-claude/index.ts [options] [prompt]\n");
   console.log("Options:\n");
   const maxKeyLen = Math.max(...Object.keys(CLI_FLAG_HELP).map((k) => k.length));
   for (const [flag, desc] of Object.entries(CLI_FLAG_HELP)) {

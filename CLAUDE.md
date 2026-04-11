@@ -12,17 +12,55 @@ adhd "Your prompt here"
 adhd --greenfield --file spec.md
 
 # Or from the harness directory:
-bun run start -- "Your prompt here"         # Claude harness
-bun run start:codex -- "Your prompt here"   # Codex harness (frozen)
+bun run start -- "Your prompt here"
 ```
 
 ## Architecture
 
-This section serves as the project's architecture reference. See README.md "The Architecture" section for full details.
+### Directory Structure
 
-- `shared/` — Types, config, prompts, file I/O, logging, tracing (used by both harnesses)
-- `claude-harness/` — Claude Agent SDK implementation (actively developed)
-- `codex-harness/` — Codex SDK implementation (frozen — no new features planned)
+```
+shared/                    # SDK-independent utilities, domain types, pure logic
+  orchestration/           # Sprint loop coordination (SDK-independent)
+    harness.ts             # Main orchestrator — accepts AgentRunners interface
+    sprint-attempts.ts     # Generator→evaluator retry loop
+    sprint-success.ts      # Checkpoint, refinement, documenter phase
+    gates.ts               # Spec approval with editor/revise loop
+    git-ops.ts             # Git revert, dirty tree check
+    error-handling.ts      # Transient retry, fatal error, custom errors
+    static-analysis-runner.ts  # Run lint/test commands
+    spec-refinement.ts     # Mid-run spec evolution
+    types.ts               # AgentRunners interface + context types
+  (flat files)             # Types, config, prompts, files, logging, etc.
+
+harness-claude/            # Claude Agent SDK specific ONLY
+  index.ts                 # CLI entry — constructs AgentRunners, calls orchestration
+  planner.ts               # Claude SDK agent wrapper
+  generator.ts             # Claude SDK agent wrapper
+  evaluator.ts             # Claude SDK agent wrapper
+  documenter.ts            # Claude SDK agent wrapper
+  contract.ts              # Sprint contract negotiation via Claude SDK
+  agent-stream.ts          # Claude SDK message stream processing
+  tracing-claude.ts        # Langfuse/OTEL instrumentation for Claude SDK
+```
+
+### SDK Independence Rule
+
+**`shared/` must have zero imports from any LLM SDK.** This is enforced by design:
+- `shared/tracing.ts` defines abstract `Tracer`/`Span` interfaces only
+- `shared/orchestration/types.ts` defines the `AgentRunners` interface
+- `harness-claude/` provides the Claude-specific implementations
+
+### Adding a New Harness (e.g. harness-gemini)
+
+1. Create `harness-gemini/` with SDK-specific agent wrappers
+2. Each wrapper implements the signatures defined in `AgentRunners`
+3. Create `harness-gemini/index.ts` that constructs the `AgentRunners` record and calls `runHarness(config, agents)` from `shared/orchestration/harness.ts`
+4. No changes to `shared/` needed
+
+### Naming Convention
+
+Harness directories use `harness-{provider}` format (e.g., `harness-claude`, `harness-gemini`).
 
 ## Development
 
@@ -30,7 +68,7 @@ This section serves as the project's architecture reference. See README.md "The 
 bun run typecheck    # Type checking
 bun run lint         # Biome lint + format check
 bun run lint:fix     # Auto-fix lint/format issues
-bun run test         # Unit tests
+bun run test         # Unit + integration + smoke tests (460 tests)
 ```
 
 ## Agent SDK Reference

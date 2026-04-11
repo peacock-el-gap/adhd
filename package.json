@@ -4,10 +4,10 @@
   "type": "module",
   "private": true,
   "bin": {
-    "adhd": "claude-harness/index.ts"
+    "adhd": "harness-claude/index.ts"
   },
   "scripts": {
-    "start": "bun run claude-harness/index.ts",
+    "start": "bun run harness-claude/index.ts",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test",
     "lint": "bunx biome check .",

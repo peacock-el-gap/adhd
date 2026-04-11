@@ -1,20 +1,20 @@
 import { readFile as readFileRaw, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { harnessDir, writeSpec } from "../shared/files.ts";
-import { promptGate } from "../shared/interaction.ts";
-import { log, logDivider } from "../shared/logger.ts";
+import { harnessDir, writeSpec } from "../files.ts";
+import { promptGate } from "../interaction.ts";
+import { log, logDivider } from "../logger.ts";
 import {
   buildRefinementPrompt,
   computeSpecDiff,
   countSprints,
   extractCompletedSprintSections,
   freezeCompletedSprints,
-} from "../shared/refinement.ts";
-import type { AgentSkills } from "../shared/skills.ts";
-import type { Span } from "../shared/tracing.ts";
-import type { ResolvedConfig } from "../shared/types.ts";
-import type { UsageTracker } from "../shared/usage.ts";
-import { runPlanner } from "./planner.ts";
+} from "../refinement.ts";
+import type { AgentSkills } from "../skills.ts";
+import type { Span } from "../tracing.ts";
+import type { ResolvedConfig } from "../types.ts";
+import type { UsageTracker } from "../usage.ts";
+import type { PlannerFn } from "./types.ts";
 
 export interface RefinementResult {
   specChanged: boolean;
@@ -47,6 +47,7 @@ export async function performSpecRefinement(
   currentTotalSprints: number,
   parentSpan: Span,
   usage: UsageTracker,
+  plannerFn: PlannerFn,
   plannerSkills?: AgentSkills,
 ): Promise<RefinementResult> {
   log("HARNESS", `Spec refinement: invoking Planner for sprints ${completedSprint + 1}-${currentTotalSprints}...`);
@@ -70,7 +71,7 @@ export async function performSpecRefinement(
     const refinementPrompt = buildRefinementPrompt(currentSpec, completedSprintNumbers, remainingSprintNumbers);
 
     proposedSpec = await refinementSpan.run(() =>
-      runPlanner({ ...config, userPrompt: refinementPrompt }, undefined, usage, plannerSkills),
+      plannerFn({ ...config, userPrompt: refinementPrompt }, undefined, usage, plannerSkills),
     );
     refinementSpan.end();
 

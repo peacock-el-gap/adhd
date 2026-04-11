@@ -1,6 +1,6 @@
-import { gitDir } from "../shared/files.ts";
-import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../shared/static-analysis.ts";
-import type { ResolvedConfig } from "../shared/types.ts";
+import { gitDir } from "../files.ts";
+import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../static-analysis.ts";
+import type { ResolvedConfig } from "../types.ts";
 
 export interface StaticAnalysisResult {
   output: string;

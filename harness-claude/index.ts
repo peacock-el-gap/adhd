@@ -1,7 +1,14 @@
 #!/usr/bin/env bun
 import { loadHarnessEnv, parseCli, printHelp, resolveConfig } from "../shared/config.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone, setLogLevel } from "../shared/logger.ts";
-import { runHarness } from "./harness.ts";
+import { runHarness } from "../shared/orchestration/harness.ts";
+import type { AgentRunners } from "../shared/orchestration/types.ts";
+import { negotiateContract } from "./contract.ts";
+import { runDocumenter } from "./documenter.ts";
+import { runEvaluator } from "./evaluator.ts";
+import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
+import { runPlanner } from "./planner.ts";
+import { initTracing } from "./tracing-claude.ts";
 
 try {
   const cli = parseCli();
@@ -42,8 +49,19 @@ try {
   }
   logDivider();
 
+  // Construct AgentRunners — wires Claude-specific implementations into the shared orchestration
+  const agents: AgentRunners = {
+    initTracing,
+    runPlanner,
+    runGenerator,
+    runEvaluator,
+    runDocumenter,
+    negotiateContract,
+    ensureGeneratorCommit,
+  };
+
   logDebug("HARNESS", "Calling runHarness...");
-  const result = await runHarness(config);
+  const result = await runHarness(config, agents);
 
   logDivider();
   if (result.success) {

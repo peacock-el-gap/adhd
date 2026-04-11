@@ -19,6 +19,6 @@
     "lineWidth": 120
   },
   "files": {
-    "includes": ["shared/**", "claude-harness/**", "codex-harness/**", "*.json", "*.ts"]
+    "includes": ["shared/**", "harness-claude/**", "*.json", "*.ts"]
   }
 }

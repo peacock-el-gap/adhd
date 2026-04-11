@@ -1,20 +1,15 @@
-import { processAgentStream } from "../shared/agent-stream.ts";
 import { buildArtifactDigest } from "../shared/artifact-digest.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { gitDir, harnessDir } from "../shared/files.ts";
 import { log } from "../shared/logger.ts";
+import type { RunDocumenterOptions } from "../shared/orchestration/types.ts";
 import { buildDocumenterPrompt } from "../shared/prompts.ts";
-import type { AgentSkills } from "../shared/skills.ts";
-import type { Options } from "../shared/tracing.ts";
-import type { ResolvedConfig, SprintResult } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
+import { processAgentStream } from "./agent-stream.ts";
+import type { Options } from "./tracing-claude.ts";
 
-export interface RunDocumenterOptions {
-  config: ResolvedConfig;
-  skills?: AgentSkills;
-  sprintResults?: SprintResult[];
-}
+export type { RunDocumenterOptions };
 
 export async function runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields }> {
   const { config, skills, sprintResults } = opts;

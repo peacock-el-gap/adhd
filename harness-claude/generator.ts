@@ -1,28 +1,18 @@
 import { execSync } from "node:child_process";
-import { processAgentStream } from "../shared/agent-stream.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { gitDir, harnessDir } from "../shared/files.ts";
 import { log, shouldLog } from "../shared/logger.ts";
+import type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions } from "../shared/orchestration/types.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
-import type { AgentSkills } from "../shared/skills.ts";
-import type { Options } from "../shared/tracing.ts";
-import { query } from "../shared/tracing.ts";
-import type { CommitSource, EvalResult, ResolvedConfig, SprintContract } from "../shared/types.ts";
-import type { SDKResultFields } from "../shared/usage.ts";
+import type { CommitSource } from "../shared/types.ts";
+import { processAgentStream } from "./agent-stream.ts";
+import type { Options } from "./tracing-claude.ts";
+import { query } from "./tracing-claude.ts";
 
-export interface RunGeneratorOptions {
-  config: ResolvedConfig;
-  spec: string;
-  contract: SprintContract;
-  previousFeedback?: EvalResult;
-  attempt?: number;
-  skills?: AgentSkills;
-}
+export type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions };
 
-export async function runGenerator(
-  opts: RunGeneratorOptions,
-): Promise<{ response: string; sessionId?: string; sdkResult?: SDKResultFields }> {
+export async function runGenerator(opts: RunGeneratorOptions): Promise<GeneratorResult> {
   const { config, spec, contract, previousFeedback, skills } = opts;
   const attempt = opts.attempt ?? 0;
   const { workDir, isGreenfield, noTdd, sourceDir, testDir } = config;
@@ -85,16 +75,6 @@ export async function runGenerator(
   }
 
   return result;
-}
-
-export interface EnsureCommitOptions {
-  workDir: string;
-  gitDir: string;
-  beforeSha: string;
-  sessionId: string | undefined;
-  contract: SprintContract;
-  isRetry: boolean;
-  model: string;
 }
 
 /**

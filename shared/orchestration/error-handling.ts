@@ -1,6 +1,6 @@
-import { writeProgress } from "../shared/files.ts";
-import { log, logError } from "../shared/logger.ts";
-import type { HarnessProgress, ResolvedConfig, SprintResult } from "../shared/types.ts";
+import { writeProgress } from "../files.ts";
+import { log, logError } from "../logger.ts";
+import type { HarnessProgress, ResolvedConfig, SprintResult } from "../types.ts";
 
 const TRANSIENT_RETRY_DELAYS = [30_000, 60_000, 120_000]; // 30s, 60s, 120s
 
@@ -65,7 +65,7 @@ export async function handleFatalError(
   }));
   try {
     await writeProgress(config.workDir, progress);
-    log("HARNESS", "Progress saved. Resume with: bun run claude-harness/index.ts --resume");
+    log("HARNESS", "Progress saved. Resume with: bun run harness-claude/index.ts --resume");
   } catch {
     logError("HARNESS", "Failed to save progress checkpoint");
   }

@@ -1,20 +1,21 @@
 import { readFile as readFileRaw } from "node:fs/promises";
 import { join } from "node:path";
-import { harnessDir, writeSpec } from "../shared/files.ts";
-import { promptGateWithText } from "../shared/interaction.ts";
-import { log } from "../shared/logger.ts";
-import type { AgentSkills } from "../shared/skills.ts";
-import type { Span } from "../shared/tracing.ts";
-import type { ResolvedConfig } from "../shared/types.ts";
-import type { UsageTracker } from "../shared/usage.ts";
+import { harnessDir, writeSpec } from "../files.ts";
+import { promptGateWithText } from "../interaction.ts";
+import { log } from "../logger.ts";
+import type { AgentSkills } from "../skills.ts";
+import type { Span } from "../tracing.ts";
+import type { ResolvedConfig } from "../types.ts";
+import type { UsageTracker } from "../usage.ts";
 import { UserAbortError } from "./error-handling.ts";
-import { runPlanner } from "./planner.ts";
+import type { PlannerFn } from "./types.ts";
 
 export async function specApprovalGate(
   config: ResolvedConfig,
   spec: string,
   parentSpan: Span,
   usage: UsageTracker,
+  plannerFn: PlannerFn,
   plannerSkills?: AgentSkills,
 ): Promise<string> {
   const specPath = join(harnessDir(config.workDir), "spec.md");
@@ -34,7 +35,7 @@ export async function specApprovalGate(
   const timeoutSec = config.gateTimeout ?? 120;
 
   // Build options — hide Edit if no editor configured
-  const options: import("../shared/interaction.ts").GateOption[] = [
+  const options: import("../interaction.ts").GateOption[] = [
     { key: "a", label: "Approve — proceed to building", isDefault: false },
     ...(config.editor ? [{ key: "e", label: `Edit — open in ${config.editor.split(" ")[0]}`, isDefault: false }] : []),
     { key: "r", label: "Revise — give feedback, planner rewrites", isDefault: false },
@@ -78,7 +79,7 @@ export async function specApprovalGate(
       // Re-run planner with feedback
       log("HARNESS", "Re-running planner with your feedback...");
       const revisionSpan = parentSpan.startChild("planner-revision");
-      const revisedSpec = await revisionSpan.run(() => runPlanner(config, result.freeText, usage, plannerSkills));
+      const revisedSpec = await revisionSpan.run(() => plannerFn(config, result.freeText, usage, plannerSkills));
       revisionSpan.end();
       currentSpec = revisedSpec;
       await writeSpec(config.workDir, currentSpec);
