@@ -62,13 +62,22 @@ harness-claude/            # Claude Agent SDK specific ONLY
 
 Harness directories use `harness-{provider}` format (e.g., `harness-claude`, `harness-gemini`).
 
+## Documentation Maintenance
+
+### docs/ROADMAP.md
+
+The roadmap is a living forward-looking document. When a roadmap item is completed:
+- **Remove it** from Part 2 (opportunities) and Part 3 (roadmap tables)
+- If the completed work introduces a new capability, **describe it in Part 1** (inventory)
+- Do **not** mark items as "done", use strikethrough, or add implementation details — the roadmap should only contain planned work
+
 ## Development
 
 ```bash
 bun run typecheck    # Type checking
 bun run lint         # Biome lint + format check
 bun run lint:fix     # Auto-fix lint/format issues
-bun run test         # Unit + integration + smoke tests (460 tests)
+bun run test         # Unit + integration + smoke tests
 ```
 
 ## Agent SDK Reference

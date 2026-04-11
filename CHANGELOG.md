@@ -100,7 +100,7 @@ Closes the highest-impact quality gaps in the harness -- cross-sprint regression
 - Added JSDoc comments with `@description` and `@param` tags to all exported functions in `shared/regression.ts`, `shared/diff.ts`, `shared/static-analysis.ts`, `shared/refinement.ts`, and `shared/config.ts`
 - Ensured every `.ts` module in `shared/` has a corresponding `.test.ts` file
 - Verified `bunx tsc --noEmit` produces zero errors across the entire project
-- Verified `bunx biome check shared/ claude-harness/` produces zero errors/warnings
+- Verified `bunx biome check shared/ harness-claude/` produces zero errors/warnings
 - No `any` type casts in Phase 1 code
 - All `JSON.parse` call sites in `shared/` wrapped in try-catch with descriptive error handling
 - All sprint 5 criteria verified as non-regressed

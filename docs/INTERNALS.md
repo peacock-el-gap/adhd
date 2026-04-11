@@ -144,41 +144,45 @@ The base `--model` applies to any agent without its own override.
 ## Project Structure
 
 ```
-harness/
-├── shared/                        # Shared types, config, prompts, utilities
-│   ├── types.ts                   # TypeScript interfaces (HarnessConfig, contracts, eval, usage)
-│   ├── config.ts                  # CLI parsing, env loading, config resolution
-│   ├── prompts.ts                 # Agent system prompts (dynamic builders + static constants)
-│   ├── logger.ts                  # Leveled logging (quiet/normal/verbose/debug) with timezone support
-│   ├── files.ts                   # File I/O for .adhd/ metadata
-│   ├── conversation-logger.ts     # Markdown conversation log writer
-│   ├── interaction.ts             # Interactive gate prompts (timed single-keypress input)
-│   ├── usage.ts                   # Per-stage cost tracking and usage.json persistence
-│   ├── tracing.ts                 # Langfuse tracing (no-op when disabled)
-│   ├── artifact-digest.ts         # Builds structured summary of .adhd/ artifacts for Documenter
-│   └── doc-validation.ts          # Advisory validation of generated documentation
-├── claude-harness/                # Claude Agent SDK implementation (actively developed)
-│   ├── index.ts                   # CLI entry point
-│   ├── harness.ts                 # Orchestration loop (checkpoint, resume, retry, gates)
-│   ├── planner.ts                 # Planner agent (async generator + interactive mode)
-│   ├── generator.ts               # Generator agent (full tool access) + commit enforcement
-│   ├── evaluator.ts               # Evaluator agent (read-only tools)
-│   └── documenter.ts              # Documenter agent (post-run documentation synthesis)
-├── codex-harness/                 # Codex SDK implementation (frozen)
-│   ├── index.ts                   # CLI entry point
-│   ├── harness.ts                 # Orchestration loop
-│   ├── planner.ts                 # Planner agent
-│   ├── generator.ts               # Generator agent
-│   └── evaluator.ts               # Evaluator agent
-├── example-prompts/               # Sample spec files for reference
-├── tests/                         # Unit tests (bun test)
-├── biome.json                     # Linter/formatter config
-└── CLAUDE.md                      # Project instructions for Claude Code
+adhd/
+├── shared/                            # SDK-independent utilities, domain types, pure logic
+│   ├── orchestration/                 # Sprint loop coordination (SDK-independent)
+│   │   ├── harness.ts                 # Main orchestrator — accepts AgentRunners interface
+│   │   ├── sprint-attempts.ts         # Generator→evaluator retry loop
+│   │   ├── sprint-success.ts          # Checkpoint, refinement, documenter phase
+│   │   ├── gates.ts                   # Spec approval with editor/revise loop
+│   │   ├── git-ops.ts                 # Git revert, dirty tree check
+│   │   ├── error-handling.ts          # Transient retry, fatal error, custom errors
+│   │   ├── static-analysis-runner.ts  # Run lint/test commands
+│   │   ├── spec-refinement.ts         # Mid-run spec evolution
+│   │   └── types.ts                   # AgentRunners interface + context types
+│   ├── types.ts                       # TypeScript interfaces (HarnessConfig, contracts, eval, usage)
+│   ├── config.ts                      # CLI parsing, env loading, config resolution
+│   ├── prompts.ts                     # Agent system prompts (dynamic builders + static constants)
+│   ├── logger.ts                      # Leveled logging (quiet/normal/verbose/debug) with timezone support
+│   ├── files.ts                       # File I/O for .adhd/ metadata
+│   ├── conversation-logger.ts         # Markdown conversation log writer
+│   ├── interaction.ts                 # Interactive gate prompts (timed single-keypress input)
+│   ├── usage.ts                       # Per-stage cost tracking and usage.json persistence
+│   ├── tracing.ts                     # Abstract Tracer/Span interfaces (SDK-independent)
+│   ├── artifact-digest.ts             # Builds structured summary of .adhd/ artifacts for Documenter
+│   └── doc-validation.ts              # Advisory validation of generated documentation
+├── harness-claude/                    # Claude Agent SDK specific ONLY
+│   ├── index.ts                       # CLI entry point — constructs AgentRunners, calls orchestration
+│   ├── planner.ts                     # Planner agent (async generator + interactive mode)
+│   ├── generator.ts                   # Generator agent (full tool access) + commit enforcement
+│   ├── evaluator.ts                   # Evaluator agent (read-only tools)
+│   ├── documenter.ts                  # Documenter agent (post-run documentation synthesis)
+│   ├── contract.ts                    # Sprint contract negotiation via Claude SDK
+│   ├── agent-stream.ts               # Claude SDK message stream processing
+│   └── tracing-claude.ts             # Langfuse/OTEL instrumentation for Claude SDK
+├── example-prompts/                   # Sample spec files for reference
+├── tests/                             # Unit + integration + smoke tests (bun test)
+├── biome.json                         # Linter/formatter config
+└── CLAUDE.md                          # Project instructions for Claude Code
 ```
 
-The Claude harness uses dynamic prompt builders from `shared/prompts.ts` that interpolate the working directory and mode. The Codex harness uses static prompt constants from the same file -- these are frozen and should not be modified without checking codex-harness compatibility.
-
-Both harnesses share the same types, config defaults, file I/O, and logging. The differences are SDK-specific: `query()` async generators for Claude, `Codex` threads for Codex.
+The harness uses dynamic prompt builders from `shared/prompts.ts` that interpolate the working directory and mode. The `shared/orchestration/` module is SDK-independent — it accepts an `AgentRunners` interface (defined in `types.ts`) and delegates all LLM calls to the harness implementation. `harness-claude/` provides the Claude-specific implementations.
 
 ## Development
 

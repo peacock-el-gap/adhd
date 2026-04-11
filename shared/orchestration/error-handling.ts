@@ -65,7 +65,7 @@ export async function handleFatalError(
   }));
   try {
     await writeProgress(config.workDir, progress);
-    log("HARNESS", "Progress saved. Resume with: bun run harness-claude/index.ts --resume");
+    log("HARNESS", "Progress saved. Resume with --resume flag.");
   } catch {
     logError("HARNESS", "Failed to save progress checkpoint");
   }

@@ -31,7 +31,7 @@ After `bun link`, you can run `adhd` from any directory -- it operates on the cu
 
 > **Alternative:** If you prefer not to use `bun link`, you can create a shell alias:
 > ```bash
-> alias adhd='bun run /path/to/adhd/claude-harness/index.ts'
+> alias adhd='bun run /path/to/adhd/harness-claude/index.ts'
 > ```
 > Or run directly from the ADHD harness directory with `bun run start -- [flags]`.
 
@@ -372,37 +372,48 @@ LANGFUSE_SECRET_KEY=sk-lf-...
 
 ```
 adhd/
-├── claude-harness/        # Main harness (Claude Agent SDK)
-│   ├── index.ts           # CLI entry point
-│   ├── harness.ts         # Orchestration loop (sprint loop, retry, gates)
-│   ├── planner.ts         # Planner agent invocation
-│   ├── generator.ts       # Generator agent invocation
-│   ├── evaluator.ts       # Evaluator agent invocation
-│   └── documenter.ts      # Documenter agent invocation
-├── shared/                # Shared infrastructure
-│   ├── types.ts           # Core type definitions (HarnessConfig, SprintContract, etc.)
-│   ├── config.ts          # CLI parsing, config resolution, validation
-│   ├── prompts.ts         # System prompts for all agents + negotiation prompts
-│   ├── files.ts           # .adhd/ file I/O (contracts, feedback, progress, spec)
-│   ├── skills.ts          # Skills resolution, routing, and injection
-│   ├── regression.ts      # BDD regression accumulation and injection
-│   ├── diff.ts            # Git diff computation for retry-aware evaluation
-│   ├── static-analysis.ts # Lint/typecheck detection and execution
-│   ├── refinement.ts      # Progressive spec refinement logic
-│   ├── logger.ts          # Terminal output with log levels and ANSI colors
-│   ├── interaction.ts     # Interactive gate prompts (approve/reject/edit)
-│   ├── usage.ts           # Per-stage cost and token tracking
-│   ├── tracing.ts         # Langfuse OTEL tracing integration
-│   ├── conversation-logger.ts  # Markdown conversation log writer
-│   ├── doc-validation.ts  # Documentation validation utilities
-│   ├── artifact-digest.ts # Build artifact digest generation
-│   └── skills/            # Built-in harness skills (YAML + markdown)
-├── codex-harness/         # Alternative harness (OpenAI Codex SDK, frozen)
-├── tests/                 # Test files (Bun test runner)
-├── example-prompts/       # Sample spec files for reference
-├── package.json           # Dependencies and scripts
-├── tsconfig.json          # TypeScript config (strict mode)
-└── biome.json             # Linter/formatter config
+├── shared/                    # SDK-independent utilities, domain types, pure logic
+│   ├── orchestration/         # Sprint loop coordination (SDK-independent)
+│   │   ├── harness.ts         # Main orchestrator — accepts AgentRunners interface
+│   │   ├── sprint-attempts.ts # Generator→evaluator retry loop
+│   │   ├── sprint-success.ts  # Checkpoint, refinement, documenter phase
+│   │   ├── gates.ts           # Spec approval with editor/revise loop
+│   │   ├── git-ops.ts         # Git revert, dirty tree check
+│   │   ├── error-handling.ts  # Transient retry, fatal error, custom errors
+│   │   ├── static-analysis-runner.ts  # Run lint/test commands
+│   │   ├── spec-refinement.ts # Mid-run spec evolution
+│   │   └── types.ts           # AgentRunners interface + context types
+│   ├── types.ts               # Core type definitions (HarnessConfig, SprintContract, etc.)
+│   ├── config.ts              # CLI parsing, config resolution, validation
+│   ├── prompts.ts             # System prompts for all agents + negotiation prompts
+│   ├── files.ts               # .adhd/ file I/O (contracts, feedback, progress, spec)
+│   ├── skills.ts              # Skills resolution, routing, and injection
+│   ├── regression.ts          # BDD regression accumulation and injection
+│   ├── diff.ts                # Git diff computation for retry-aware evaluation
+│   ├── static-analysis.ts     # Lint/typecheck detection and execution
+│   ├── refinement.ts          # Progressive spec refinement logic
+│   ├── logger.ts              # Terminal output with log levels and ANSI colors
+│   ├── interaction.ts         # Interactive gate prompts (approve/reject/edit)
+│   ├── usage.ts               # Per-stage cost and token tracking
+│   ├── tracing.ts             # Abstract Tracer/Span interfaces (SDK-independent)
+│   ├── conversation-logger.ts # Markdown conversation log writer
+│   ├── doc-validation.ts      # Documentation validation utilities
+│   ├── artifact-digest.ts     # Build artifact digest generation
+│   └── skills/                # Built-in harness skills (YAML + markdown)
+├── harness-claude/            # Claude Agent SDK specific ONLY
+│   ├── index.ts               # CLI entry point
+│   ├── planner.ts             # Planner agent invocation
+│   ├── generator.ts           # Generator agent invocation
+│   ├── evaluator.ts           # Evaluator agent invocation
+│   ├── documenter.ts          # Documenter agent invocation
+│   ├── contract.ts            # Sprint contract negotiation via Claude SDK
+│   ├── agent-stream.ts        # Claude SDK message stream processing
+│   └── tracing-claude.ts      # Langfuse/OTEL instrumentation for Claude SDK
+├── tests/                     # Test files (Bun test runner)
+├── example-prompts/           # Sample spec files for reference
+├── package.json               # Dependencies and scripts
+├── tsconfig.json              # TypeScript config (strict mode)
+└── biome.json                 # Linter/formatter config
 ```
 
 The harness follows a GAN-inspired architecture where the generator and evaluator operate in adversarial tension. The generator builds; the evaluator tries to break it. Failed evaluations feed detailed feedback back to the generator, creating an iterative improvement loop.
@@ -447,17 +458,6 @@ Key data flow:
 ## Example Prompts
 
 The `example-prompts/` directory contains sample spec files for reference -- a RAG chat application and an initiative tracker. These show the level of detail that produces good results with the planner.
-
-## Codex Harness
-
-> **Note:** The Codex harness is frozen -- it works as-is but no new features are planned.
-
-The Codex harness uses greenfield-only mode, building into `workspace/codex/app/`. It does not support `--project`, `--resume`, or configuration flags.
-
-```bash
-# From the harness directory:
-bun run start:codex -- "Build a task manager with REST API and dashboard"
-```
 
 ## Development
 

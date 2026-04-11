@@ -389,12 +389,11 @@ These items use the existing skills system and contract negotiation prompts. The
 | 1.5.3 | **Resume contract skip** | OPP-14 | S | Reuse `--sprint N` contract-reuse logic for `--resume` |
 | 1.5.4 | **`.adhd/` artifact commits + revert fix** | OPP-14 | M | Commit `.adhd/` before Generator; switch to `git reset --hard` |
 | 1.5.5 | **Contract parse error logging** | OPP-14 | S | Log raw text + diagnostic file on parse failure |
-| 1.5.6 | **Delete Codex harness** | — | Trivial | Remove `codex-harness/`, npm script, `@openai/codex-sdk` dep |
-| 1.5.7 | **Progress `"documenting"` status** | OPP-14 | Trivial | |
-| 1.5.8 | **HITL notifications** | OPP-15 | S | Terminal bell + `--notify` flag |
-| 1.5.9 | **`--commit-adhd` / `--commit-adhd-logs` flags** | OPP-15 | S | Opt-in git commits for `.adhd/` artifacts |
+| 1.5.6 | **Progress `"documenting"` status** | OPP-14 | Trivial | |
+| 1.5.7 | **HITL notifications** | OPP-15 | S | Terminal bell + `--notify` flag |
+| 1.5.8 | **`--commit-adhd` / `--commit-adhd-logs` flags** | OPP-15 | S | Opt-in git commits for `.adhd/` artifacts |
 
-**Rationale for ordering**: Item 1.5.1 is the highest-ROI fix (one-line regex change eliminates phantom sprints). Items 1.5.2-1.5.3 solve the log overwrite and resume re-negotiation problems. Item 1.5.4 is the largest single item — it combines `.adhd/` pre-commit with the revert mechanism fix (the pre-commit eliminates the dirty-tree condition that causes revert failures). Items 1.5.5-1.5.9 are smaller independent improvements.
+**Rationale for ordering**: Item 1.5.1 is the highest-ROI fix (one-line regex change eliminates phantom sprints). Items 1.5.2-1.5.3 solve the log overwrite and resume re-negotiation problems. Item 1.5.4 is the largest single item — it combines `.adhd/` pre-commit with the revert mechanism fix (the pre-commit eliminates the dirty-tree condition that causes revert failures). Items 1.5.5-1.5.8 are smaller independent improvements.
 
 ---
 
@@ -436,10 +435,9 @@ These items use the existing skills system and contract negotiation prompts. The
 | | 1.5.3 | Resume contract skip | OPP-14 | Reuse `--sprint N` logic for `--resume` |
 | | 1.5.4 | `.adhd/` artifact commits + revert fix | OPP-14 | Commit before Generator; `reset --hard` |
 | | 1.5.5 | Contract parse error logging | OPP-14 | Observability on parse failures |
-| | 1.5.6 | Delete Codex harness | — | Remove `codex-harness/`, deps, scripts |
-| | 1.5.7 | Progress `"documenting"` status | OPP-14 | Accurate real-time progress |
-| | 1.5.8 | HITL notifications | OPP-15 | Terminal bell + `--notify` |
-| | 1.5.9 | `--commit-adhd` / `--commit-adhd-logs` | OPP-15 | Opt-in `.adhd/` git commits |
+| | 1.5.6 | Progress `"documenting"` status | OPP-14 | Accurate real-time progress |
+| | 1.5.7 | HITL notifications | OPP-15 | Terminal bell + `--notify` |
+| | 1.5.8 | `--commit-adhd` / `--commit-adhd-logs` | OPP-15 | Opt-in `.adhd/` git commits |
 | --- | --- | --- | --- | --- |
 | **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag |
 | | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |

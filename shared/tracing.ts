@@ -6,7 +6,7 @@ export interface Tracer {
 }
 
 export interface Span {
-  /** Run a function within this span's OTEL context. Auto-instrumented query() calls inside will nest under this span. */
+  /** Run a function within this span's OTEL context. SDK calls inside will nest under this span. */
   run<T>(fn: () => Promise<T>): Promise<T>;
   startChild(name: string, metadata?: Record<string, unknown>): Span;
   end(metadata?: Record<string, unknown>): void;
