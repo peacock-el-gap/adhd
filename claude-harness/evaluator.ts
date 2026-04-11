@@ -113,10 +113,16 @@ export function parseEvalResult(response: string, contract: SprintContract, pass
 
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate) as EvalResult;
-      if (parsed.feedback && Array.isArray(parsed.feedback)) {
-        parsed.passed = parsed.feedback.every((f) => f.score >= passThreshold);
-        return parsed;
+      const parsed: unknown = JSON.parse(candidate);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "feedback" in parsed &&
+        Array.isArray((parsed as { feedback: unknown }).feedback)
+      ) {
+        const result = parsed as EvalResult;
+        result.passed = result.feedback.every((f) => f.score >= passThreshold);
+        return result;
       }
     } catch {
       // Try next candidate

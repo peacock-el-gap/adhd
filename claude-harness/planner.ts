@@ -10,7 +10,7 @@ import { buildPlannerPrompt } from "../shared/prompts.ts";
 import type { AgentSkills } from "../shared/skills.ts";
 import type { Options } from "../shared/tracing.ts";
 import type { ResolvedConfig } from "../shared/types.ts";
-import type { SDKResultFields, UsageTracker } from "../shared/usage.ts";
+import type { UsageTracker } from "../shared/usage.ts";
 
 export async function runPlanner(
   config: ResolvedConfig,
@@ -119,7 +119,7 @@ export async function runPlanner(
     onResult(result) {
       completed = true;
       if (usage) {
-        usage.recordStage(reviseFeedback ? "planner-revision" : "planner", result as SDKResultFields);
+        usage.recordStage(reviseFeedback ? "planner-revision" : "planner", result);
       }
       log("PLANNER", `Planning complete (session: ${result.session_id?.slice(0, 8)}...)`);
     },
