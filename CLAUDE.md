@@ -26,7 +26,7 @@ shared/                    # SDK-independent utilities, domain types, pure logic
     sprint-attempts.ts     # Generator→evaluator retry loop
     sprint-success.ts      # Checkpoint, refinement, documenter phase
     gates.ts               # Spec approval with editor/revise loop
-    git-ops.ts             # Git revert, dirty tree check
+    git-ops.ts             # Git revert, dirty tree check, ensureAgentCommit primitive
     error-handling.ts      # Transient retry, fatal error, custom errors
     static-analysis-runner.ts  # Run lint/test commands
     spec-refinement.ts     # Mid-run spec evolution

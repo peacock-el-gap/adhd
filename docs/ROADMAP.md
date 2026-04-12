@@ -89,13 +89,13 @@ All gates support `[w]` to pause the timer. All are skippable via `--gate-timeou
 
 ### 1.8 Three-Tier Commit Enforcement
 
-Safety net ensuring every generator run produces a git commit:
+Safety net ensuring every agent run that produces changes also produces a git commit. Applied uniformly to both the Generator and the Documenter via a shared `ensureAgentCommit` primitive in `shared/orchestration/git-ops.ts`:
 
 1. **Check** — Did the agent commit on its own? (Compare HEAD before/after)
-2. **Resume** — If uncommitted changes exist, resume the session with a commit-only prompt (max 3 turns, Bash-only)
-3. **Fallback** — Harness runs `git add -A && git commit` with a contextual message tagged `[auto-commit]`
+2. **Resume** — If uncommitted changes exist, resume the agent's SDK session with a commit-only prompt (max 3 turns, Bash-only) using the SDK's `resume` field to load the original conversation history
+3. **Fallback** — Harness runs `git add -A && git commit` with a contextual message referencing the sprint and features (tagged `[auto-commit]` for the Generator, `[docs]` for the Documenter)
 
-`commitSource` field ("agent" | "resume" | "fallback") tracked in each SprintResult for compliance monitoring.
+`commitSource` field ("agent" | "resume" | "fallback" | "none") tracked in each SprintResult for compliance monitoring.
 
 ### 1.9 Checkpoint & Resume
 
@@ -148,7 +148,7 @@ Key properties:
 - Per-agent model override via `--model-documenter`
 - Non-fatal: documentation failure does not fail the run
 - Resume-aware: re-attempts documentation if a previous run failed at this stage
-- Commit enforcement: Documenter commits with `[docs]` prefix, detected via git SHA comparison
+- Commit enforcement: uses the same three-tier `ensureAgentCommit` primitive as the Generator (§1.8), with `[docs]`-prefixed fallback message referencing the sprints it documented
 
 ### 1.13 Additional Operational Features
 
