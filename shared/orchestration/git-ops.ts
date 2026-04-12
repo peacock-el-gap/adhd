@@ -5,8 +5,78 @@ import { gitDir } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { log, logError } from "../logger.ts";
 import { notify } from "../notifications.ts";
-import type { HarnessProgress, ResolvedConfig } from "../types.ts";
+import type { CommitSource, HarnessProgress, ResolvedConfig } from "../types.ts";
 import { UserAbortError } from "./error-handling.ts";
+
+/** Options for the shared agent-directed commit primitive. */
+export interface EnsureAgentCommitOptions {
+  workDir: string;
+  gitDir: string;
+  agentLabel: "generator" | "documenter";
+  beforeSha: string;
+  /** Message for the harness-level fallback auto-commit. Must be a complete sentence. */
+  fallbackMessage: string;
+  /**
+   * Injected resume-runner that asks the agent (via its SDK session) to commit.
+   * Implementations construct the appropriate SDK query() call; this primitive
+   * stays SDK-independent. Returning normally means "resume attempt finished";
+   * the primitive re-checks the tree to decide whether it actually committed.
+   * If omitted, the primitive skips the resume tier and goes straight to fallback.
+   */
+  runResume?: () => Promise<void>;
+}
+
+/**
+ * Three-tier agent-directed commit recovery. Shared by generator and documenter.
+ *
+ * 1. Agent committed and tree is clean → "agent".
+ * 2. Tree dirty → invoke runResume, re-check tree. Clean → "resume".
+ * 3. Still dirty → harness-level fallback auto-commit with fallbackMessage → "fallback".
+ * 4. HEAD unchanged and tree clean → "none" (agent produced no output).
+ */
+export async function ensureAgentCommit(opts: EnsureAgentCommitOptions): Promise<CommitSource> {
+  const { gitDir: gDir, agentLabel, beforeSha, fallbackMessage, runResume } = opts;
+
+  const currentSha = execSync("git rev-parse HEAD", { cwd: gDir, encoding: "utf-8" }).trim();
+  const dirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
+
+  if (currentSha !== beforeSha && !dirty) {
+    return "agent";
+  }
+
+  if (!dirty) {
+    log("HARNESS", `WARNING: ${agentLabel} produced no file changes and no commits`);
+    return "none";
+  }
+
+  if (runResume) {
+    log("HARNESS", `${agentLabel} left uncommitted changes — requesting commit via session resume...`);
+    try {
+      await runResume();
+    } catch (err) {
+      const e = err as { message?: string; stderr?: unknown; stdout?: unknown; cause?: unknown };
+      const detail = [
+        e.message ?? String(err),
+        e.stderr ? `stderr=${String(e.stderr).slice(0, 500)}` : "",
+        e.stdout ? `stdout=${String(e.stdout).slice(0, 500)}` : "",
+        e.cause ? `cause=${String(e.cause).slice(0, 200)}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      log("HARNESS", `WARNING: Resume session for ${agentLabel} commit failed: ${detail}`);
+    }
+
+    const postResumeDirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
+    if (!postResumeDirty) {
+      log("HARNESS", `${agentLabel} committed via session resume`);
+      return "resume";
+    }
+  }
+
+  log("HARNESS", `WARNING: ${agentLabel} still did not commit — harness fallback auto-commit`);
+  execSync(`git add -A && git commit -m ${JSON.stringify(fallbackMessage)}`, { cwd: gDir, stdio: "pipe" });
+  return "fallback";
+}
 
 /**
  * Commit all pending .adhd/ files (contracts, progress, feedback, etc.)

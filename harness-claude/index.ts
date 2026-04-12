@@ -5,7 +5,7 @@ import { notify } from "../shared/notifications.ts";
 import { runHarness } from "../shared/orchestration/harness.ts";
 import type { AgentRunners } from "../shared/orchestration/types.ts";
 import { negotiateContract } from "./contract.ts";
-import { runDocumenter } from "./documenter.ts";
+import { ensureDocumenterCommit, runDocumenter } from "./documenter.ts";
 import { runEvaluator } from "./evaluator.ts";
 import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
 import { runPlanner } from "./planner.ts";
@@ -61,6 +61,7 @@ try {
     runDocumenter,
     negotiateContract,
     ensureGeneratorCommit,
+    ensureDocumenterCommit,
   };
 
   logDebug("HARNESS", "Calling runHarness...");

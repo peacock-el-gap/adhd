@@ -58,6 +58,15 @@ export interface EnsureCommitOptions {
   model: string;
 }
 
+export interface EnsureDocumenterCommitOptions {
+  workDir: string;
+  gitDir: string;
+  beforeSha: string;
+  sessionId: string | undefined;
+  sprintResults: SprintResult[];
+  model: string;
+}
+
 // --- AgentRunners: dependency-injected interface for SDK-specific agent implementations ---
 
 export interface AgentRunners {
@@ -71,7 +80,7 @@ export interface AgentRunners {
   ): Promise<string>;
   runGenerator(opts: RunGeneratorOptions): Promise<GeneratorResult>;
   runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }>;
-  runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields }>;
+  runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields; sessionId?: string }>;
   negotiateContract(
     workDir: string,
     spec: string,
@@ -82,6 +91,7 @@ export interface AgentRunners {
     logTimestamp?: string,
   ): Promise<SprintContract>;
   ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<CommitSource>;
+  ensureDocumenterCommit(opts: EnsureDocumenterCommitOptions): Promise<CommitSource>;
 }
 
 /** Convenience type for the planner function signature, used by gates and spec-refinement. */

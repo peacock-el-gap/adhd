@@ -1,8 +1,8 @@
-import { execSync } from "node:child_process";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { gitDir, harnessDir } from "../shared/files.ts";
 import { log, shouldLog } from "../shared/logger.ts";
+import { ensureAgentCommit } from "../shared/orchestration/git-ops.ts";
 import type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions } from "../shared/orchestration/types.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { CommitSource } from "../shared/types.ts";
@@ -78,77 +78,56 @@ export async function runGenerator(opts: RunGeneratorOptions): Promise<Generator
 }
 
 /**
- * Ensure the generator committed its work. If uncommitted changes remain,
- * resume the generator session to request a meaningful commit, then fall back
- * to a harness-level auto-commit if the agent still doesn't comply.
+ * Ensure the generator committed its work. Delegates to the shared
+ * ensureAgentCommit primitive; this function only constructs the
+ * SDK-specific resume runner and the generator's fallback message.
  */
 export async function ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<CommitSource> {
   const { workDir, gitDir: gDir, beforeSha, sessionId, contract, isRetry, model } = opts;
-  const currentSha = execSync("git rev-parse HEAD", { cwd: gDir, encoding: "utf-8" }).trim();
-  const dirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
-
-  // Case A: Agent committed and tree is clean
-  if (currentSha !== beforeSha && !dirty) {
-    return "agent";
-  }
-
-  // Case B: Agent committed some work but left uncommitted changes
-  // Case C: Agent didn't commit at all but has changes
-  if (!dirty) {
-    // HEAD same, tree clean — generator produced no file changes (unusual)
-    log("HARNESS", "WARNING: Generator produced no file changes and no commits");
-    return "none";
-  }
-
-  // Resume the generator session to request a commit
-  log("HARNESS", "Generator left uncommitted changes — requesting commit via session resume...");
 
   const resumePrompt = isRetry
     ? "STOP. Do not write any more code. You addressed evaluation feedback but left uncommitted changes. Run `git add` for the relevant files and `git commit` with a descriptive message summarizing what you fixed. Do nothing else."
     : "STOP. Do not write any more code. You built features but left uncommitted changes. Run `git add` for the relevant files and `git commit` with a descriptive message summarizing what you implemented. Do nothing else.";
 
-  const resumeOptions: Options = {
-    cwd: workDir,
-    systemPrompt:
-      "You are finishing up a coding session. Your ONLY job is to commit uncommitted changes with a meaningful git commit message. Do NOT write or modify any code.",
-    permissionMode: "bypassPermissions",
-    allowDangerouslySkipPermissions: true,
-    tools: ["Bash"],
-    model,
-    maxTurns: 3,
-    persistSession: false,
-    ...(sessionId ? { sessionId } : {}),
-  };
-
-  try {
-    for await (const msg of query({ prompt: resumePrompt, options: resumeOptions })) {
-      if (msg.type === "assistant") {
-        for (const block of msg.message.content) {
-          if (block.type === "tool_use") {
-            log("HARNESS", `  Commit resume tool: ${block.name}`);
-          }
-        }
-      }
-    }
-  } catch (err) {
-    log("HARNESS", `WARNING: Resume session for commit failed: ${err}`);
-  }
-
-  // Check if the resume succeeded
-  const postResumeDirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
-  if (!postResumeDirty) {
-    log("HARNESS", "Generator committed via session resume");
-    return "resume";
-  }
-
-  // Final fallback: harness auto-commit with as much context as possible
   const features = contract.features.join(", ");
   const sprint = contract.sprintNumber;
   const prefix = isRetry ? "fixes for" : "work on";
-  const message = `[auto-commit] Sprint ${sprint}: uncommitted ${prefix}: ${features} (generator did not commit)`;
+  const fallbackMessage = `[auto-commit] Sprint ${sprint}: uncommitted ${prefix}: ${features} (generator did not commit)`;
 
-  log("HARNESS", `WARNING: Generator still did not commit — harness fallback auto-commit`);
-  execSync(`git add -A && git commit -m ${JSON.stringify(message)}`, { cwd: gDir, stdio: "pipe" });
+  const runResume = sessionId
+    ? async () => {
+        // Per sdk.d.ts:1159-1167: `resume` loads conversation history from the
+        // given session, while `sessionId` would (incorrectly) try to create a
+        // new session with a colliding UUID. Use `resume` here.
+        const resumeOptions: Options = {
+          cwd: workDir,
+          systemPrompt:
+            "You are finishing up a coding session. Your ONLY job is to commit uncommitted changes with a meaningful git commit message. Do NOT write or modify any code.",
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+          tools: ["Bash"],
+          model,
+          maxTurns: 3,
+          resume: sessionId,
+        };
+        for await (const msg of query({ prompt: resumePrompt, options: resumeOptions })) {
+          if (msg.type === "assistant") {
+            for (const block of msg.message.content) {
+              if (block.type === "tool_use") {
+                log("HARNESS", `  Commit resume tool: ${block.name}`);
+              }
+            }
+          }
+        }
+      }
+    : undefined;
 
-  return "fallback";
+  return ensureAgentCommit({
+    workDir,
+    gitDir: gDir,
+    agentLabel: "generator",
+    beforeSha,
+    fallbackMessage,
+    runResume,
+  });
 }

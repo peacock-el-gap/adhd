@@ -155,24 +155,27 @@ describe("ensureGeneratorCommit", () => {
     expect(result).toBe("fallback");
   });
 
-  test("passes sessionId to resume query options when available", async () => {
+  test("passes resume (not sessionId) to query options when available", async () => {
+    // Per sdk.d.ts:1161 `resume` loads history; `sessionId` assigns a new UUID.
+    // This test locks in the fix: the resume tier must use `resume`.
     setupExecSync(["abc123\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-42", contract: CONTRACT, isRetry: false, model: "test-model" });
 
     const queryCall = queryMock.mock.calls[0]?.[0];
-    expect(queryCall?.options?.sessionId).toBe("sess-42");
+    expect(queryCall?.options?.resume).toBe("sess-42");
+    expect(queryCall?.options?.sessionId).toBeUndefined();
   });
 
-  test("omits sessionId from resume query when undefined", async () => {
+  test("skips resume query entirely when sessionId is undefined", async () => {
+    // Without a session to resume, we jump straight to fallback.
     setupExecSync(["abc123\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: undefined, contract: CONTRACT, isRetry: false, model: "test-model" });
 
-    const queryCall = queryMock.mock.calls[0]?.[0];
-    expect(queryCall?.options?.sessionId).toBeUndefined();
+    expect(queryMock).not.toHaveBeenCalled();
   });
 
   test("resume query uses Bash-only tools with maxTurns 3", async () => {

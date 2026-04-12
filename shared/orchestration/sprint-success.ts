@@ -134,25 +134,18 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
       usage.recordStage("documenter", docResult.sdkResult);
     }
 
-    // Git commit enforcement for documenter
+    // Git commit enforcement for documenter — unified with generator via ensureAgentCommit
     if (beforeDocsSha) {
       try {
-        const afterDocsSha = execSync("git rev-parse HEAD", { cwd: gDir, encoding: "utf-8" }).trim();
-        const docsDirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
-
-        if (afterDocsSha !== beforeDocsSha && !docsDirty) {
-          log("HARNESS", "Documenter commit source: agent");
-        } else if (docsDirty) {
-          // Fallback auto-commit with [docs] prefix
-          log("HARNESS", "Documenter left uncommitted changes — fallback auto-commit");
-          execSync(`git add -A && git commit -m "[docs] Add project documentation"`, {
-            cwd: gDir,
-            stdio: "pipe",
-          });
-          log("HARNESS", "Documenter commit source: fallback");
-        } else {
-          log("HARNESS", "Documenter commit source: none (no changes)");
-        }
+        const source = await agents.ensureDocumenterCommit({
+          workDir: config.workDir,
+          gitDir: gDir,
+          beforeSha: beforeDocsSha,
+          sessionId: docResult.sessionId,
+          sprintResults: results,
+          model: documenterModel,
+        });
+        log("HARNESS", `Documenter commit source: ${source}`);
       } catch (err) {
         log("HARNESS", `WARNING: Documenter commit enforcement failed: ${err}`);
       }
