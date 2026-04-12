@@ -1,11 +1,11 @@
 {
   "status": "building",
-  "currentSprint": 3,
+  "currentSprint": 4,
   "totalSprints": 5,
-  "completedSprints": 2,
+  "completedSprints": 3,
   "retryCount": 0,
   "specApproved": true,
-  "lastPassedCommitSha": "b55ae4b50e00d9030b8098d47c1b73bc474b0e2e",
+  "lastPassedCommitSha": "635af98745c4e1c298ab632a50f9e83ba9339339",
   "sprintResults": [
     {
       "sprintNumber": 1,
@@ -336,6 +336,256 @@
           "permission_denials": [],
           "fast_mode_state": "off",
           "uuid": "bbcd47a0-2bb0-4e11-812c-8b7826412d63"
+        }
+      }
+    },
+    {
+      "sprintNumber": 3,
+      "passed": true,
+      "attempts": 1,
+      "evalResult": {
+        "passed": true,
+        "scores": {
+          "adhd_artifacts_committed_before_generator": 8,
+          "adhd_commit_message_format": 8,
+          "clean_working_tree_for_generator": 8,
+          "revert_uses_git_reset_hard": 9,
+          "adhd_files_survive_revert": 8,
+          "stash_unstash_error_handling": 8,
+          "documenting_status_type": 9,
+          "documenting_status_set_before_documenter": 9,
+          "complete_status_after_documenter": 9,
+          "no_regression_on_existing_revert_callers": 8,
+          "commit_is_noop_when_no_changes": 9,
+          "code_quality_naming_and_structure": 7,
+          "sdk_separation_respected": 9,
+          "regex_anchored_line_start": 10,
+          "inline_sprint_references_not_counted": 10,
+          "standard_multiline_spec_counted_correctly": 10,
+          "log_filename_timestamp_format": 10,
+          "resume_does_not_overwrite_logs": 10,
+          "contract_negotiation_logs_timestamped": 9,
+          "all_agent_log_types_timestamped": 9,
+          "timestamp_uses_configured_timezone": 8,
+          "langfuse_span_names_aligned": 8,
+          "regex_fix_has_test_coverage": 10,
+          "existing_contract_reused_on_resume": 8,
+          "missing_contract_triggers_negotiation": 8,
+          "loaded_contract_logged": 8,
+          "contract_file_validation": 8,
+          "parse_failure_writes_diagnostic_file": 8,
+          "parse_failure_logs_truncated_preview": 8,
+          "successful_parse_no_diagnostic_file": 8,
+          "diagnostic_directory_created_on_demand": 7,
+          "truncation_length_reasonable": 7
+        },
+        "feedback": [
+          {
+            "criterion": "adhd_artifacts_committed_before_generator",
+            "score": 8,
+            "details": "commitAdhdArtifacts is called in sprint-attempts.ts line 39, immediately before the generator invocation. It stages .adhd/ files and commits with [adhd] prefix. Tests pass in isolation (9/9 in git-ops.test.ts) but fail in parallel full-suite runs due to what appears to be test environment contention with temporary git repos. The implementation is correct."
+          },
+          {
+            "criterion": "adhd_commit_message_format",
+            "score": 8,
+            "details": "git-ops.ts line 38: commit message is `[adhd] Sprint ${sprint}: artifacts` which starts with '[adhd]' and includes the sprint number. Tests verify this pattern with toMatch(/^\\[adhd\\]/) and toContain('Sprint 2'). Tests pass when run individually."
+          },
+          {
+            "criterion": "clean_working_tree_for_generator",
+            "score": 8,
+            "details": "After commitAdhdArtifacts runs (line 29-36 in git-ops.ts), all .adhd/ files are staged and committed. Test on line 91-102 verifies `git status --porcelain -- .adhd/` returns empty string after commit. The generator starts with clean .adhd/ working tree."
+          },
+          {
+            "criterion": "revert_uses_git_reset_hard",
+            "score": 9,
+            "details": "git-ops.ts line 119: `execSync('git reset --hard ${sha}')`. No calls to `git revert` remain anywhere in the revert code path. The only mention of 'git revert' is a comment on line 118 explaining the old approach was replaced. Grep confirms no other 'git revert' calls in shared/."
+          },
+          {
+            "criterion": "adhd_files_survive_revert",
+            "score": 8,
+            "details": "stashAdhdFiles (line 50-76) stages and stashes .adhd/ files before reset. unstashAdhdFiles (line 81-95) pops stash after reset. Test on line 148-181 creates .adhd/ files after checkpoint, runs revert, and verifies files still exist with correct contents. Tests pass in isolation."
+          },
+          {
+            "criterion": "stash_unstash_error_handling",
+            "score": 8,
+            "details": "stashAdhdFiles catches errors (line 72-75) and returns false with a logged message. unstashAdhdFiles catches errors (line 85-94) with a logged message and attempts fallback resolution. The outer revertToCheckpoint catches overall failures (line 126-128). The reset still completes even if stash fails because stash failure returns false and the code proceeds to reset --hard. Test on line 203-224 verifies no throw on edge cases."
+          },
+          {
+            "criterion": "documenting_status_type",
+            "score": 9,
+            "details": "types.ts line 116: HarnessProgress status union includes 'documenting' alongside all other values. TypeScript compilation of source files succeeds (only test files have minor type errors). Test in documenting-status.test.ts confirms all status values including 'documenting' are valid."
+          },
+          {
+            "criterion": "documenting_status_set_before_documenter",
+            "score": 9,
+            "details": "harness.ts lines 549-550: `progress.status = 'documenting'; await writeProgress(config.workDir, progress);` occurs before `await runDocumenterPhase(...)` on line 552. This is inside the `if (allPassed && !config.noDocs)` block."
+          },
+          {
+            "criterion": "complete_status_after_documenter",
+            "score": 9,
+            "details": "harness.ts line 563: `progress.status = allPassed ? 'complete' : 'failed';` followed by writeProgress on line 564. This runs after runDocumenterPhase completes (or is skipped via !config.noDocs). The 'documenting' status is transient."
+          },
+          {
+            "criterion": "no_regression_on_existing_revert_callers",
+            "score": 8,
+            "details": "Only one call site exists: harness.ts line 273 `await revertToCheckpoint(config.workDir, isGreenfield, progress)`. The function signature is unchanged (workDir, isGreenfield, progress). The resume flow logic is intact and the function handles edge cases (no SHA, HEAD matches checkpoint) gracefully."
+          },
+          {
+            "criterion": "commit_is_noop_when_no_changes",
+            "score": 9,
+            "details": "git-ops.ts lines 26-36: checks if .adhd/ dir exists (returns if not), stages files, then checks `git diff --cached --name-only -- .adhd/` and returns without committing if nothing staged. Test on lines 81-89 verifies no commit is created when no .adhd/ changes exist."
+          },
+          {
+            "criterion": "code_quality_naming_and_structure",
+            "score": 7,
+            "details": "Functions have descriptive names: commitAdhdArtifacts, stashAdhdFiles, unstashAdhdFiles, revertToCheckpoint. Error handling uses try/catch with meaningful messages. However: (1) gitExec helper is defined but unused (lint warning), suggesting incomplete refactoring. (2) The pattern of `(result ?? '').toString().trim()` is repeated across functions rather than using the defined gitExec helper. (3) Lint reports 8 errors including formatting issues in harness-claude/contract.ts. These issues are minor but reflect incomplete cleanup."
+          },
+          {
+            "criterion": "sdk_separation_respected",
+            "score": 9,
+            "details": "All new orchestration logic (commitAdhdArtifacts, stashAdhdFiles, unstashAdhdFiles, revertToCheckpoint) lives in shared/orchestration/git-ops.ts. Status updates and progress writes are in shared/. No SDK imports found in shared/ directory. AgentRunners DI boundary is maintained."
+          },
+          {
+            "criterion": "regex_anchored_line_start",
+            "score": 10,
+            "details": "sprint-count.ts uses /^##\\s*Sprint\\s+\\d+/gim with ^ anchor and m (multiline) flag. Tests confirm inline references are not matched."
+          },
+          {
+            "criterion": "inline_sprint_references_not_counted",
+            "score": 10,
+            "details": "sprint-count.test.ts line 23-31 verifies that a spec with '## Sprint 1' and '## Sprint 2' headings plus prose 'Sprint 3' and 'Sprint 4' references yields count 2. Test passes."
+          },
+          {
+            "criterion": "standard_multiline_spec_counted_correctly",
+            "score": 10,
+            "details": "sprint-count.test.ts line 5-21 verifies 4 standard headings yields count 4. Test passes."
+          },
+          {
+            "criterion": "log_filename_timestamp_format",
+            "score": 10,
+            "details": "conversation-logger.ts line 44: `${ts}-${baseName}` where ts comes from fileTimestamp() which produces YYYY.MM.DD-HH.MM.SS format. All log filenames follow this pattern."
+          },
+          {
+            "criterion": "resume_does_not_overwrite_logs",
+            "score": 10,
+            "details": "Each log file gets a unique timestamp prefix from fileTimestamp(). Resume runs generate new timestamps, creating new files rather than overwriting. This is structural — no overwrite logic exists."
+          },
+          {
+            "criterion": "contract_negotiation_logs_timestamped",
+            "score": 9,
+            "details": "harness.ts line 435-436: negotiationTs from fileTimestamp() is passed to negotiateContract and used in span name. The contract.ts in harness-claude creates conversation logs using this timestamp."
+          },
+          {
+            "criterion": "all_agent_log_types_timestamped",
+            "score": 9,
+            "details": "All agent calls (planner, generator, evaluator, documenter, contract negotiation) generate a timestamp via fileTimestamp() and pass it to the conversation logger. No log files are written without timestamp prefixes."
+          },
+          {
+            "criterion": "timestamp_uses_configured_timezone",
+            "score": 8,
+            "details": "logger.ts has setDisplayTimezone and fileTimestamp functions. fileTimestamp uses Intl.DateTimeFormat with the configured timezone. Tests in logger.test.ts verify timezone handling."
+          },
+          {
+            "criterion": "langfuse_span_names_aligned",
+            "score": 8,
+            "details": "Span names include the same timestamp prefix used in log filenames (e.g., generatorTs is used both in span name and passed to conversation logger). This enables cross-referencing."
+          },
+          {
+            "criterion": "regex_fix_has_test_coverage",
+            "score": 10,
+            "details": "sprint-count.test.ts has comprehensive tests: standard headings counted (line 5), inline prose not counted (line 23), blockquoted headings not counted (line 33), indented headings not counted (line 46). All pass."
+          },
+          {
+            "criterion": "existing_contract_reused_on_resume",
+            "score": 8,
+            "details": "harness.ts lines 422-431: When isResume, loadExistingContract is called. If it returns a contract, no negotiation occurs. resume-contract-skip.test.ts verifies this behavior."
+          },
+          {
+            "criterion": "missing_contract_triggers_negotiation",
+            "score": 8,
+            "details": "harness.ts line 433: if (!contract) triggers negotiation. loadExistingContract returns null for missing files. Tests verify this flow."
+          },
+          {
+            "criterion": "loaded_contract_logged",
+            "score": 8,
+            "details": "harness.ts lines 426-429: `Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria` is logged when contract is loaded from disk."
+          },
+          {
+            "criterion": "contract_file_validation",
+            "score": 8,
+            "details": "files.ts lines 147-166: loadExistingContract validates JSON structure — checks for empty content, valid JSON parse, criteria array with length > 0, and features array. Returns null on any validation failure."
+          },
+          {
+            "criterion": "parse_failure_writes_diagnostic_file",
+            "score": 8,
+            "details": "contract-parse-error.test.ts tests verify diagnostic files are written. Test output shows 'Wrote contract parse error diagnostic' messages. Tests pass."
+          },
+          {
+            "criterion": "parse_failure_logs_truncated_preview",
+            "score": 8,
+            "details": "Test output shows truncated previews with '... (truncated, N chars total)' suffix. Both short and long texts are handled appropriately."
+          },
+          {
+            "criterion": "successful_parse_no_diagnostic_file",
+            "score": 8,
+            "details": "contract-parse-error.test.ts includes tests for successful parses. Tests pass confirming no diagnostic files are created on success."
+          },
+          {
+            "criterion": "diagnostic_directory_created_on_demand",
+            "score": 7,
+            "details": "Test output shows the directory creation works for valid paths and gracefully handles impossible paths ('/dev/null/impossible/path') by logging a failure message rather than crashing."
+          },
+          {
+            "criterion": "truncation_length_reasonable",
+            "score": 7,
+            "details": "Test output shows truncation working with appropriate preview lengths. The 500-char 'x' string is shown with truncation indicator, and the 2000-char string shows truncation at a reasonable length."
+          }
+        ],
+        "overallSummary": "Sprint 3 implementation is solid. The .adhd/ artifact commit system works correctly with [adhd]-prefixed commit messages and no-op on empty changes. The revert system properly uses git reset --hard with stash/unstash for .adhd/ file preservation. The 'documenting' status is properly added to the type union and set/cleared at the right lifecycle points. Code lives in shared/ with no SDK imports, respecting the DI boundary. Main concerns: unused gitExec helper function suggesting incomplete refactoring, test flakiness when running in parallel (tests pass individually), and some lint issues. All regression criteria from sprints 1-2 continue to pass.",
+        "sdkResult": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 215314,
+          "duration_api_ms": 198514,
+          "num_turns": 35,
+          "result": "I have enough information to evaluate. Let me consolidate my findings:\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"adhd_artifacts_committed_before_generator\": 8,\n    \"adhd_commit_message_format\": 8,\n    \"clean_working_tree_for_generator\": 8,\n    \"revert_uses_git_reset_hard\": 9,\n    \"adhd_files_survive_revert\": 8,\n    \"stash_unstash_error_handling\": 8,\n    \"documenting_status_type\": 9,\n    \"documenting_status_set_before_documenter\": 9,\n    \"complete_status_after_documenter\": 9,\n    \"no_regression_on_existing_revert_callers\": 8,\n    \"commit_is_noop_when_no_changes\": 9,\n    \"code_quality_naming_and_structure\": 7,\n    \"sdk_separation_respected\": 9,\n    \"regex_anchored_line_start\": 10,\n    \"inline_sprint_references_not_counted\": 10,\n    \"standard_multiline_spec_counted_correctly\": 10,\n    \"log_filename_timestamp_format\": 10,\n    \"resume_does_not_overwrite_logs\": 10,\n    \"contract_negotiation_logs_timestamped\": 9,\n    \"all_agent_log_types_timestamped\": 9,\n    \"timestamp_uses_configured_timezone\": 8,\n    \"langfuse_span_names_aligned\": 8,\n    \"regex_fix_has_test_coverage\": 10,\n    \"existing_contract_reused_on_resume\": 8,\n    \"missing_contract_triggers_negotiation\": 8,\n    \"loaded_contract_logged\": 8,\n    \"contract_file_validation\": 8,\n    \"parse_failure_writes_diagnostic_file\": 8,\n    \"parse_failure_logs_truncated_preview\": 8,\n    \"successful_parse_no_diagnostic_file\": 8,\n    \"diagnostic_directory_created_on_demand\": 7,\n    \"truncation_length_reasonable\": 7\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"adhd_artifacts_committed_before_generator\",\n      \"score\": 8,\n      \"details\": \"commitAdhdArtifacts is called in sprint-attempts.ts line 39, immediately before the generator invocation. It stages .adhd/ files and commits with [adhd] prefix. Tests pass in isolation (9/9 in git-ops.test.ts) but fail in parallel full-suite runs due to what appears to be test environment contention with temporary git repos. The implementation is correct.\"\n    },\n    {\n      \"criterion\": \"adhd_commit_message_format\",\n      \"score\": 8,\n      \"details\": \"git-ops.ts line 38: commit message is `[adhd] Sprint ${sprint}: artifacts` which starts with '[adhd]' and includes the sprint number. Tests verify this pattern with toMatch(/^\\\\[adhd\\\\]/) and toContain('Sprint 2'). Tests pass when run individually.\"\n    },\n    {\n      \"criterion\": \"clean_working_tree_for_generator\",\n      \"score\": 8,\n      \"details\": \"After commitAdhdArtifacts runs (line 29-36 in git-ops.ts), all .adhd/ files are staged and committed. Test on line 91-102 verifies `git status --porcelain -- .adhd/` returns empty string after commit. The generator starts with clean .adhd/ working tree.\"\n    },\n    {\n      \"criterion\": \"revert_uses_git_reset_hard\",\n      \"score\": 9,\n      \"details\": \"git-ops.ts line 119: `execSync('git reset --hard ${sha}')`. No calls to `git revert` remain anywhere in the revert code path. The only mention of 'git revert' is a comment on line 118 explaining the old approach was replaced. Grep confirms no other 'git revert' calls in shared/.\"\n    },\n    {\n      \"criterion\": \"adhd_files_survive_revert\",\n      \"score\": 8,\n      \"details\": \"stashAdhdFiles (line 50-76) stages and stashes .adhd/ files before reset. unstashAdhdFiles (line 81-95) pops stash after reset. Test on line 148-181 creates .adhd/ files after checkpoint, runs revert, and verifies files still exist with correct contents. Tests pass in isolation.\"\n    },\n    {\n      \"criterion\": \"stash_unstash_error_handling\",\n      \"score\": 8,\n      \"details\": \"stashAdhdFiles catches errors (line 72-75) and returns false with a logged message. unstashAdhdFiles catches errors (line 85-94) with a logged message and attempts fallback resolution. The outer revertToCheckpoint catches overall failures (line 126-128). The reset still completes even if stash fails because stash failure returns false and the code proceeds to reset --hard. Test on line 203-224 verifies no throw on edge cases.\"\n    },\n    {\n      \"criterion\": \"documenting_status_type\",\n      \"score\": 9,\n      \"details\": \"types.ts line 116: HarnessProgress status union includes 'documenting' alongside all other values. TypeScript compilation of source files succeeds (only test files have minor type errors). Test in documenting-status.test.ts confirms all status values including 'documenting' are valid.\"\n    },\n    {\n      \"criterion\": \"documenting_status_set_before_documenter\",\n      \"score\": 9,\n      \"details\": \"harness.ts lines 549-550: `progress.status = 'documenting'; await writeProgress(config.workDir, progress);` occurs before `await runDocumenterPhase(...)` on line 552. This is inside the `if (allPassed && !config.noDocs)` block.\"\n    },\n    {\n      \"criterion\": \"complete_status_after_documenter\",\n      \"score\": 9,\n      \"details\": \"harness.ts line 563: `progress.status = allPassed ? 'complete' : 'failed';` followed by writeProgress on line 564. This runs after runDocumenterPhase completes (or is skipped via !config.noDocs). The 'documenting' status is transient.\"\n    },\n    {\n      \"criterion\": \"no_regression_on_existing_revert_callers\",\n      \"score\": 8,\n      \"details\": \"Only one call site exists: harness.ts line 273 `await revertToCheckpoint(config.workDir, isGreenfield, progress)`. The function signature is unchanged (workDir, isGreenfield, progress). The resume flow logic is intact and the function handles edge cases (no SHA, HEAD matches checkpoint) gracefully.\"\n    },\n    {\n      \"criterion\": \"commit_is_noop_when_no_changes\",\n      \"score\": 9,\n      \"details\": \"git-ops.ts lines 26-36: checks if .adhd/ dir exists (returns if not), stages files, then checks `git diff --cached --name-only -- .adhd/` and returns without committing if nothing staged. Test on lines 81-89 verifies no commit is created when no .adhd/ changes exist.\"\n    },\n    {\n      \"criterion\": \"code_quality_naming_and_structure\",\n      \"score\": 7,\n      \"details\": \"Functions have descriptive names: commitAdhdArtifacts, stashAdhdFiles, unstashAdhdFiles, revertToCheckpoint. Error handling uses try/catch with meaningful messages. However: (1) gitExec helper is defined but unused (lint warning), suggesting incomplete refactoring. (2) The pattern of `(result ?? '').toString().trim()` is repeated across functions rather than using the defined gitExec helper. (3) Lint reports 8 errors including formatting issues in harness-claude/contract.ts. These issues are minor but reflect incomplete cleanup.\"\n    },\n    {\n      \"criterion\": \"sdk_separation_respected\",\n      \"score\": 9,\n      \"details\": \"All new orchestration logic (commitAdhdArtifacts, stashAdhdFiles, unstashAdhdFiles, revertToCheckpoint) lives in shared/orchestration/git-ops.ts. Status updates and progress writes are in shared/. No SDK imports found in shared/ directory. AgentRunners DI boundary is maintained.\"\n    },\n    {\n      \"criterion\": \"regex_anchored_line_start\",\n      \"score\": 10,\n      \"details\": \"sprint-count.ts uses /^##\\\\s*Sprint\\\\s+\\\\d+/gim with ^ anchor and m (multiline) flag. Tests confirm inline references are not matched.\"\n    },\n    {\n      \"criterion\": \"inline_sprint_references_not_counted\",\n      \"score\": 10,\n      \"details\": \"sprint-count.test.ts line 23-31 verifies that a spec with '## Sprint 1' and '## Sprint 2' headings plus prose 'Sprint 3' and 'Sprint 4' references yields count 2. Test passes.\"\n    },\n    {\n      \"criterion\": \"standard_multiline_spec_counted_correctly\",\n      \"score\": 10,\n      \"details\": \"sprint-count.test.ts line 5-21 verifies 4 standard headings yields count 4. Test passes.\"\n    },\n    {\n      \"criterion\": \"log_filename_timestamp_format\",\n      \"score\": 10,\n      \"details\": \"conversation-logger.ts line 44: `${ts}-${baseName}` where ts comes from fileTimestamp() which produces YYYY.MM.DD-HH.MM.SS format. All log filenames follow this pattern.\"\n    },\n    {\n      \"criterion\": \"resume_does_not_overwrite_logs\",\n      \"score\": 10,\n      \"details\": \"Each log file gets a unique timestamp prefix from fileTimestamp(). Resume runs generate new timestamps, creating new files rather than overwriting. This is structural — no overwrite logic exists.\"\n    },\n    {\n      \"criterion\": \"contract_negotiation_logs_timestamped\",\n      \"score\": 9,\n      \"details\": \"harness.ts line 435-436: negotiationTs from fileTimestamp() is passed to negotiateContract and used in span name. The contract.ts in harness-claude creates conversation logs using this timestamp.\"\n    },\n    {\n      \"criterion\": \"all_agent_log_types_timestamped\",\n      \"score\": 9,\n      \"details\": \"All agent calls (planner, generator, evaluator, documenter, contract negotiation) generate a timestamp via fileTimestamp() and pass it to the conversation logger. No log files are written without timestamp prefixes.\"\n    },\n    {\n      \"criterion\": \"timestamp_uses_configured_timezone\",\n      \"score\": 8,\n      \"details\": \"logger.ts has setDisplayTimezone and fileTimestamp functions. fileTimestamp uses Intl.DateTimeFormat with the configured timezone. Tests in logger.test.ts verify timezone handling.\"\n    },\n    {\n      \"criterion\": \"langfuse_span_names_aligned\",\n      \"score\": 8,\n      \"details\": \"Span names include the same timestamp prefix used in log filenames (e.g., generatorTs is used both in span name and passed to conversation logger). This enables cross-referencing.\"\n    },\n    {\n      \"criterion\": \"regex_fix_has_test_coverage\",\n      \"score\": 10,\n      \"details\": \"sprint-count.test.ts has comprehensive tests: standard headings counted (line 5), inline prose not counted (line 23), blockquoted headings not counted (line 33), indented headings not counted (line 46). All pass.\"\n    },\n    {\n      \"criterion\": \"existing_contract_reused_on_resume\",\n      \"score\": 8,\n      \"details\": \"harness.ts lines 422-431: When isResume, loadExistingContract is called. If it returns a contract, no negotiation occurs. resume-contract-skip.test.ts verifies this behavior.\"\n    },\n    {\n      \"criterion\": \"missing_contract_triggers_negotiation\",\n      \"score\": 8,\n      \"details\": \"harness.ts line 433: if (!contract) triggers negotiation. loadExistingContract returns null for missing files. Tests verify this flow.\"\n    },\n    {\n      \"criterion\": \"loaded_contract_logged\",\n      \"score\": 8,\n      \"details\": \"harness.ts lines 426-429: `Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria` is logged when contract is loaded from disk.\"\n    },\n    {\n      \"criterion\": \"contract_file_validation\",\n      \"score\": 8,\n      \"details\": \"files.ts lines 147-166: loadExistingContract validates JSON structure — checks for empty content, valid JSON parse, criteria array with length > 0, and features array. Returns null on any validation failure.\"\n    },\n    {\n      \"criterion\": \"parse_failure_writes_diagnostic_file\",\n      \"score\": 8,\n      \"details\": \"contract-parse-error.test.ts tests verify diagnostic files are written. Test output shows 'Wrote contract parse error diagnostic' messages. Tests pass.\"\n    },\n    {\n      \"criterion\": \"parse_failure_logs_truncated_preview\",\n      \"score\": 8,\n      \"details\": \"Test output shows truncated previews with '... (truncated, N chars total)' suffix. Both short and long texts are handled appropriately.\"\n    },\n    {\n      \"criterion\": \"successful_parse_no_diagnostic_file\",\n      \"score\": 8,\n      \"details\": \"contract-parse-error.test.ts includes tests for successful parses. Tests pass confirming no diagnostic files are created on success.\"\n    },\n    {\n      \"criterion\": \"diagnostic_directory_created_on_demand\",\n      \"score\": 7,\n      \"details\": \"Test output shows the directory creation works for valid paths and gracefully handles impossible paths ('/dev/null/impossible/path') by logging a failure message rather than crashing.\"\n    },\n    {\n      \"criterion\": \"truncation_length_reasonable\",\n      \"score\": 7,\n      \"details\": \"Test output shows truncation working with appropriate preview lengths. The 500-char 'x' string is shown with truncation indicator, and the 2000-char string shows truncation at a reasonable length.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 3 implementation is solid. The .adhd/ artifact commit system works correctly with [adhd]-prefixed commit messages and no-op on empty changes. The revert system properly uses git reset --hard with stash/unstash for .adhd/ file preservation. The 'documenting' status is properly added to the type union and set/cleared at the right lifecycle points. Code lives in shared/ with no SDK imports, respecting the DI boundary. Main concerns: unused gitExec helper function suggesting incomplete refactoring, test flakiness when running in parallel (tests pass individually), and some lint issues. All regression criteria from sprints 1-2 continue to pass.\"\n}",
+          "stop_reason": "end_turn",
+          "session_id": "8c8f8d9d-545a-4a8e-851a-c9ef8ddc43be",
+          "total_cost_usd": 1.3415314999999999,
+          "usage": {
+            "input_tokens": 732,
+            "cache_creation_input_tokens": 71066,
+            "cache_read_input_tokens": 1400918,
+            "output_tokens": 7730,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 71066,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-opus-4-6": {
+              "inputTokens": 732,
+              "outputTokens": 7730,
+              "cacheReadInputTokens": 1400918,
+              "cacheCreationInputTokens": 71066,
+              "webSearchRequests": 0,
+              "costUSD": 1.3415314999999999,
+              "contextWindow": 200000,
+              "maxOutputTokens": 64000
+            }
+          },
+          "permission_denials": [],
+          "fast_mode_state": "off",
+          "uuid": "9c3201d7-b219-448e-a605-a3ad56a83f4c"
         }
       }
     }

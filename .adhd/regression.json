@@ -112,5 +112,71 @@
     "description": "The truncated preview logged to console on parse failure is capped at a reasonable length (200-500 characters) with an ellipsis or indicator showing it was truncated, so console output stays readable.",
     "threshold": 6,
     "sprintNumber": 2
+  },
+  {
+    "name": "adhd_artifacts_committed_before_generator",
+    "description": "Before each Generator agent invocation, all pending .adhd/ files (contracts, progress, feedback) are staged and committed with a commit message prefixed by '[adhd]'. The Generator starts with no uncommitted .adhd/ files in the working tree.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "adhd_commit_message_format",
+    "description": "The commit created for .adhd/ artifacts uses a message starting with '[adhd]' and includes the sprint number (e.g., '[adhd] Sprint 2: artifacts').",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "clean_working_tree_for_generator",
+    "description": "After .adhd/ artifacts are committed and before the Generator session begins, running 'git status --porcelain' on .adhd/ paths returns no output, confirming a clean working tree.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "revert_uses_git_reset_hard",
+    "description": "The revertToCheckpoint function uses 'git reset --hard <sha>' instead of 'git revert --no-commit'. No calls to 'git revert' remain in the revert/rollback code path.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "adhd_files_survive_revert",
+    "description": "When revertToCheckpoint resets to a checkpoint SHA, .adhd/ files (progress.json, contracts/, feedback/) that were written after the checkpoint are preserved by stashing before reset and unstashing after. The files exist on disk with their pre-revert contents after the operation completes.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "stash_unstash_error_handling",
+    "description": "If git stash or unstash fails during revertToCheckpoint, the error is logged with a meaningful message and does not cause an unhandled exception. The revert still completes (reset --hard succeeds) even if stash restoration fails.",
+    "threshold": 6,
+    "sprintNumber": 3
+  },
+  {
+    "name": "documenting_status_type",
+    "description": "The HarnessProgress type's status union includes 'documenting' as a valid value alongside existing values like 'running', 'complete', etc. TypeScript compilation succeeds with this addition.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "documenting_status_set_before_documenter",
+    "description": "Before the Documenter agent is invoked, progress.json is written with status set to 'documenting'. This occurs after all sprints pass and before the Documenter starts its work.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "complete_status_after_documenter",
+    "description": "After the Documenter agent finishes (or is skipped), progress.json is updated to status 'complete'. The 'documenting' status is a transient state visible only while documentation is in progress.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "no_regression_on_existing_revert_callers",
+    "description": "All existing call sites that invoke revertToCheckpoint continue to work correctly with the new reset-based implementation. Resume flows that trigger checkpoint revert do not fail or leave the repo in a broken state.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "commit_is_noop_when_no_changes",
+    "description": "If there are no pending .adhd/ changes when the pre-Generator commit step runs (e.g., files were already committed), no empty commit is created. The harness handles the nothing-to-commit case gracefully.",
+    "threshold": 6,
+    "sprintNumber": 3
   }
 ]
