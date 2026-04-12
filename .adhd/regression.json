@@ -244,5 +244,59 @@
     "description": "The harness entry point starts cleanly with the new flags (--notify, --commit-adhd, --commit-adhd-logs) without runtime errors, and --help output documents the new options",
     "threshold": 7,
     "sprintNumber": 4
+  },
+  {
+    "name": "e2e_phantom_sprint_prevention",
+    "description": "Running the harness against a spec with inline sprint references in prose, blockquotes, and acceptance criteria produces exactly the correct number of sprints matching only line-start headings — no phantom sprints are executed",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "e2e_resume_full_cycle",
+    "description": "A full resume cycle works end-to-end: interrupting after sprint 2, resuming with --resume reuses existing contracts from disk, skips completed sprints, creates new timestamped log files without overwriting originals, and the checkpoint revert uses git reset --hard with .adhd/ stash/unstash",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "e2e_commit_adhd_flags",
+    "description": "Running with --commit-adhd produces [adhd] commits containing contracts/feedback/progress/spec after each sprint, and --commit-adhd-logs additionally includes .adhd/logs/. Running without either flag produces no [adhd] metadata commits",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "e2e_notifications",
+    "description": "All HITL gates (spec approval, contract review, evaluation review) emit terminal bell character. With --notify, desktop notifications are dispatched. Without --notify, no desktop notification commands are executed",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "progress_status_lifecycle",
+    "description": "The progress.json status field transitions correctly through the full lifecycle: planning → generating → evaluating → (loop on failure) → documenting → complete, with 'documenting' appearing only when the Documenter agent is active",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "contract_parse_error_diagnostics",
+    "description": "When contract parsing fails, a diagnostic file is written to .adhd/logs/sprint-N-contract-parse-error.txt with full raw text, a truncated preview is logged to console, and successful parses produce no diagnostic file",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "timestamp_log_consistency",
+    "description": "All conversation log files (generator, evaluator, contract negotiation, documenter) use YYYY.MM.DD-HH.MM.SS prefix format. Multiple runs for the same sprint produce distinct timestamped files, and chronological ls ordering matches execution order",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "clean_working_tree_before_generator",
+    "description": "Immediately before every Generator invocation, git status --porcelain shows no uncommitted .adhd/ files — they have been committed with an [adhd] prefix message",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "readme_cli_flags_documented",
+    "description": "README or equivalent documentation describes --resume, --notify, --commit-adhd, and --commit-adhd-logs flags with usage examples and explains their interaction (e.g., --commit-adhd-logs implies --commit-adhd)",
+    "threshold": 7,
+    "sprintNumber": 5
   }
 ]
