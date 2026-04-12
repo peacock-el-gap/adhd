@@ -139,6 +139,32 @@ export async function readContract(workDir: string, sprintNumber: number): Promi
   }
 }
 
+/**
+ * Attempt to load an existing contract from disk for the given sprint.
+ * Returns the contract if it exists and is valid, or null if the file
+ * is missing, empty, or malformed. Used by both --resume and --sprint modes.
+ */
+export async function loadExistingContract(workDir: string, sprintNumber: number): Promise<SprintContract | null> {
+  const path = join(harnessDir(workDir), "contracts", `sprint-${sprintNumber}.json`);
+  try {
+    const raw = await readFile(path, "utf-8");
+    if (!raw.trim()) return null;
+    const parsed = JSON.parse(raw);
+    // Validate essential contract structure
+    if (!parsed || !Array.isArray(parsed.criteria) || parsed.criteria.length === 0) {
+      return null;
+    }
+    if (!Array.isArray(parsed.features)) {
+      return null;
+    }
+    // Ensure sprintNumber matches
+    parsed.sprintNumber = sprintNumber;
+    return parsed as SprintContract;
+  } catch {
+    return null;
+  }
+}
+
 export async function writeFeedback(
   workDir: string,
   sprintNumber: number,

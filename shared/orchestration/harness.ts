@@ -5,7 +5,7 @@ import {
   gitDir,
   harnessDir,
   initWorkspace,
-  readContract,
+  loadExistingContract,
   readProgress,
   readSpec,
   writeContract,
@@ -417,17 +417,16 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
 
     const sprintSpan = parentSpan.startChild(`${fileTimestamp()}-sprint-${sprint}`, { sprintNumber: sprint });
 
-    // Try to reuse existing contract (especially in --sprint mode)
+    // Try to reuse existing contract (--sprint mode or --resume mode)
     let contract: SprintContract | undefined;
-    if (config.sprint !== undefined) {
-      try {
-        contract = await readContract(config.workDir, sprint);
+    if (config.sprint !== undefined || config.isResume) {
+      const existing = await loadExistingContract(config.workDir, sprint);
+      if (existing) {
+        contract = existing;
         log(
           "HARNESS",
-          `Loaded existing contract for sprint ${sprint}: ${contract.criteria.length} criteria for ${contract.features.length} features`,
+          `Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria`,
         );
-      } catch {
-        // No existing contract — will negotiate below
       }
     }
 
