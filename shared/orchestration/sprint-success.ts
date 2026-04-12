@@ -9,6 +9,7 @@ import { fileTimestamp, log, logError } from "../logger.ts";
 import { notify } from "../notifications.ts";
 import { accumulateRegressionCriteria } from "../regression.ts";
 import { UserAbortError } from "./error-handling.ts";
+import { commitAdhdMetadata } from "./git-ops.ts";
 import { performSpecRefinement } from "./spec-refinement.ts";
 import type { DocumenterPhaseContext, SprintSuccessContext, SprintSuccessResult } from "./types.ts";
 
@@ -42,6 +43,11 @@ export async function handleSprintSuccess(ctx: SprintSuccessContext): Promise<Sp
   await writeProgress(config.workDir, progress);
 
   log("HARNESS", `Sprint ${sprint} PASSED — checkpoint saved. To resume later: adhd --resume`);
+
+  // Commit .adhd/ metadata if --commit-adhd or --commit-adhd-logs is set
+  if (config.commitAdhd) {
+    commitAdhdMetadata(config.workDir, gDir, sprint, config.commitAdhdLogs);
+  }
 
   // Progressive Spec Refinement (only when --refine-spec is set and not last sprint)
   if (config.refineSpec && sprint < totalSprints) {

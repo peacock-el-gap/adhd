@@ -45,6 +45,54 @@ export function commitAdhdArtifacts(workDir: string, gDir: string, sprint: numbe
 }
 
 /**
+ * Commit .adhd/ metadata after a sprint passes evaluation.
+ * Only invoked when --commit-adhd or --commit-adhd-logs is set.
+ *
+ * Commits .adhd/contracts/, .adhd/feedback/, .adhd/progress.json, and .adhd/spec.md.
+ * When includeLogs is true, also commits .adhd/logs/.
+ *
+ * @param workDir - Project root directory
+ * @param gDir - Git working directory
+ * @param sprint - Sprint number for the commit message
+ * @param includeLogs - Whether to include .adhd/logs/ (from --commit-adhd-logs)
+ */
+export function commitAdhdMetadata(workDir: string, gDir: string, sprint: number, includeLogs: boolean): void {
+  try {
+    const adhdPath = join(workDir, ".adhd");
+    if (!existsSync(adhdPath)) return;
+
+    // Stage specific metadata paths
+    const pathsToStage = [
+      ".adhd/contracts/",
+      ".adhd/feedback/",
+      ".adhd/progress.json",
+      ".adhd/spec.md",
+    ];
+    if (includeLogs) {
+      pathsToStage.push(".adhd/logs/");
+    }
+
+    for (const p of pathsToStage) {
+      try {
+        execSync(`git add ${p}`, { cwd: gDir, stdio: "pipe" });
+      } catch {
+        // Path may not exist yet — skip silently
+      }
+    }
+
+    // Check if there's anything staged
+    const stagedResult = execSync("git diff --cached --name-only", { cwd: gDir, encoding: "utf-8" });
+    const staged = (stagedResult ?? "").toString().trim();
+    if (!staged) return;
+
+    execSync(`git commit -m "[adhd] Sprint ${sprint}: contract + metadata"`, { cwd: gDir, stdio: "pipe" });
+    log("HARNESS", `Committed .adhd/ metadata for sprint ${sprint}${includeLogs ? " (including logs)" : ""}`);
+  } catch (err) {
+    logError("HARNESS", `Failed to commit .adhd/ metadata: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
  * Stash .adhd/ files so they survive a git reset --hard.
  * Returns true if files were stashed, false otherwise.
  */
