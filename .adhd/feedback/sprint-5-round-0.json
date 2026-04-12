@@ -1,0 +1,383 @@
+{
+  "passed": false,
+  "scores": {
+    "e2e_phantom_sprint_prevention": 9,
+    "e2e_resume_full_cycle": 8,
+    "e2e_commit_adhd_flags": 8,
+    "e2e_notifications": 8,
+    "progress_status_lifecycle": 9,
+    "contract_parse_error_diagnostics": 8,
+    "timestamp_log_consistency": 9,
+    "clean_working_tree_before_generator": 7,
+    "readme_cli_flags_documented": 3,
+    "no_swallowed_errors": 7,
+    "consistent_naming_conventions": 8,
+    "no_code_duplication_across_features": 8,
+    "sdk_separation_maintained": 9,
+    "biome_lint_clean": 9,
+    "regex_anchored_line_start": 10,
+    "inline_sprint_references_not_counted": 10,
+    "standard_multiline_spec_counted_correctly": 10,
+    "log_filename_timestamp_format": 10,
+    "resume_does_not_overwrite_logs": 10,
+    "contract_negotiation_logs_timestamped": 9,
+    "all_agent_log_types_timestamped": 9,
+    "timestamp_uses_configured_timezone": 8,
+    "langfuse_span_names_aligned": 8,
+    "regex_fix_has_test_coverage": 9,
+    "existing_contract_reused_on_resume": 8,
+    "missing_contract_triggers_negotiation": 8,
+    "loaded_contract_logged": 8,
+    "contract_file_validation": 8,
+    "parse_failure_writes_diagnostic_file": 8,
+    "parse_failure_logs_truncated_preview": 8,
+    "successful_parse_no_diagnostic_file": 8,
+    "diagnostic_directory_created_on_demand": 8,
+    "truncation_length_reasonable": 8,
+    "adhd_artifacts_committed_before_generator": 7,
+    "adhd_commit_message_format": 7,
+    "clean_working_tree_for_generator": 7,
+    "revert_uses_git_reset_hard": 7,
+    "adhd_files_survive_revert": 7,
+    "stash_unstash_error_handling": 7,
+    "documenting_status_type": 9,
+    "documenting_status_set_before_documenter": 9,
+    "complete_status_after_documenter": 9,
+    "no_regression_on_existing_revert_callers": 7,
+    "commit_is_noop_when_no_changes": 8,
+    "terminal_bell_at_hitl_gates": 8,
+    "terminal_bell_on_fatal_error": 8,
+    "notify_flag_parsed": 9,
+    "desktop_notification_with_notify_flag": 8,
+    "no_desktop_notification_without_flag": 8,
+    "commit_adhd_flag_parsed": 9,
+    "commit_adhd_creates_metadata_commit": 8,
+    "commit_adhd_logs_includes_logs": 8,
+    "commit_adhd_logs_implies_commit_adhd": 9,
+    "default_no_adhd_commits": 9,
+    "app_starts_and_parses_new_flags": 9
+  },
+  "feedback": [
+    {
+      "criterion": "e2e_phantom_sprint_prevention",
+      "score": 9,
+      "details": "Sprint counting regex uses ^## with multiline flag. Tests in phase-1-5-integration.test.ts cover inline prose, blockquotes, acceptance criteria, and indented headings. All tests pass. Spec with 2 line-start headings + inline references correctly yields 2."
+    },
+    {
+      "criterion": "e2e_resume_full_cycle",
+      "score": 8,
+      "details": "Resume path in harness.ts loads existing progress, reads spec from disk, skips completed sprints via startSprint = completedSprints + 1. loadExistingContract reuses contracts from disk. New timestamped log files created via createConversationLog. revertToCheckpoint uses git reset --hard with stash/unstash. Tests cover contract reuse, distinct timestamps on resume. 3 git-ops tests fail in full suite but pass in isolation (test isolation issue, likely HOME=/dev/null env leaking)."
+    },
+    {
+      "criterion": "e2e_commit_adhd_flags",
+      "score": 8,
+      "details": "commitAdhdMetadata in git-ops.ts creates [adhd] commits with contracts/feedback/progress/spec. --commit-adhd-logs additionally stages .adhd/logs/. Config resolution has commitAdhd: cli.commitAdhd || cli.commitAdhdLogs (implication). Default is false. Tests verify parsing, resolution, commit message format, includeLogs, and no-op behavior."
+    },
+    {
+      "criterion": "e2e_notifications",
+      "score": 8,
+      "details": "notify() in notifications.ts always emits \\x07 to stdout. With notify: true, it dispatches desktop notification via notify-send (Linux) or osascript (macOS). All HITL gates call notify() before prompting: spec approval, contract preview, dirty tree, evaluator override, mid-run steering. Fatal error in index.ts calls notify(). Tests verify bell emission and flag parsing."
+    },
+    {
+      "criterion": "progress_status_lifecycle",
+      "score": 9,
+      "details": "HarnessProgress status union includes 'documenting'. In harness.ts runSprintLoop, status transitions: planning → spec-review → negotiating → building → evaluating → (loop) → documenting → complete. 'documenting' set at line 550 before runDocumenterPhase. 'complete' set at line 564. Tests verify all transitions and that 'documenting' appears between evaluating and complete."
+    },
+    {
+      "criterion": "contract_parse_error_diagnostics",
+      "score": 8,
+      "details": "parseContract in contract.ts writes diagnostic file via writeParseErrorDiagnostic on failure. Directory created with mkdir recursive. Truncated preview (500 char cap) logged to console. Successful parses produce no diagnostic. Tests verify diagnostic file creation, content preservation for long input, and no diagnostic on success."
+    },
+    {
+      "criterion": "timestamp_log_consistency",
+      "score": 9,
+      "details": "All conversation logs use fileTimestamp() for YYYY.MM.DD-HH.MM.SS prefix. Tests verify generator, evaluator, contract-negotiation, and documenter logs all have timestamp prefix. Multiple runs produce distinct files with chronological ordering verified."
+    },
+    {
+      "criterion": "clean_working_tree_before_generator",
+      "score": 7,
+      "details": "commitAdhdArtifacts called at sprint-attempts.ts line 42 immediately before generator invocation. Stages and commits all .adhd/ files with [adhd] prefix. Tests verify clean working tree after commit. However, 2 git-ops tests fail in full suite (pass in isolation) suggesting fragile test environment."
+    },
+    {
+      "criterion": "readme_cli_flags_documented",
+      "score": 3,
+      "details": "CRITICAL FAILURE: README.md does NOT contain --notify, --commit-adhd, or --commit-adhd-logs. grep confirms zero matches for these strings. The Configuration table is missing all three flags. While --resume is documented, the three new Sprint 4/5 flags are completely absent from the README. CLI_FLAG_HELP has them, and --help output shows them, but the README criterion explicitly requires README documentation. Tests for this criterion fail: 'expect(readme).toContain(\"--notify\")' fails."
+    },
+    {
+      "criterion": "no_swallowed_errors",
+      "score": 7,
+      "details": "Nearly all catch blocks have comments, log calls, re-throws, or returns. A few catch blocks with just comments (e.g., '// Documenter failure is non-fatal' at harness.ts:219, '// skip unreadable installed dir' in skills.ts) are borderline but defensible. The harness.ts:219 catch is redundant since runDocumenterPhase already has its own try/catch with logging. No truly empty catch blocks found. git-ops.ts:132 has a catch that does 'Best effort — continue regardless' which is reasonable."
+    },
+    {
+      "criterion": "consistent_naming_conventions",
+      "score": 8,
+      "details": "Functions consistently use camelCase (commitAdhdArtifacts, fileTimestamp, loadExistingContract). Types/interfaces use PascalCase (HarnessProgress, SprintContract, AgentRunners). Constants use UPPER_SNAKE_CASE (CLI_FLAG_HELP, CLAUDE_MODEL, PARSE_ERROR_PREVIEW_LENGTH). File names use kebab-case throughout shared/ and harness-claude/. No abbreviations without precedent."
+    },
+    {
+      "criterion": "no_code_duplication_across_features",
+      "score": 8,
+      "details": "fileTimestamp is the single timestamp utility. notify() is the single notification dispatch. commitAdhdArtifacts and commitAdhdMetadata share git-ops module. loadExistingContract used by both --resume and --sprint paths. Some git command repetition (git rev-parse HEAD in multiple files) is contextually appropriate rather than copy-paste."
+    },
+    {
+      "criterion": "sdk_separation_maintained",
+      "score": 9,
+      "details": "Zero @anthropic-ai imports in shared/. All SDK-specific code is in harness-claude/. AgentRunners interface in shared/orchestration/types.ts is the only bridge. Verified via grep: no SDK imports in any shared/ TypeScript file."
+    },
+    {
+      "criterion": "biome_lint_clean",
+      "score": 9,
+      "details": "Static analysis confirms: 'Checked 38 files in 25ms. No fixes applied.' with exit code 0. TypeScript has 5 errors all in test files (conversation-logger.test.ts and tracing.test.ts) — the tracing.test.ts error is missing notify/commitAdhd/commitAdhdLogs on mock config, which is a legitimate type error but only in tests."
+    },
+    {
+      "criterion": "regex_anchored_line_start",
+      "score": 10,
+      "details": "sprint-count.ts line 10: /^##\\s*Sprint\\s+\\d+/gim — uses ^ with m flag for line-start anchoring."
+    },
+    {
+      "criterion": "inline_sprint_references_not_counted",
+      "score": 10,
+      "details": "Tests verify prose references ('builds on Sprint 3'), blockquoted ('> ## Sprint 4'), and backtick-quoted are not counted. Spec with 2 line-start headings correctly yields 2."
+    },
+    {
+      "criterion": "standard_multiline_spec_counted_correctly",
+      "score": 10,
+      "details": "Test in phase-1-5-integration.test.ts line 140 verifies 4 sprint headings yield count of 4."
+    },
+    {
+      "criterion": "log_filename_timestamp_format",
+      "score": 10,
+      "details": "Verified: createConversationLog generates filenames like 'YYYY.MM.DD-HH.MM.SS-sprint-2-attempt-0-generator.md'. fileTimestamp() produces correct format validated by regex."
+    },
+    {
+      "criterion": "resume_does_not_overwrite_logs",
+      "score": 10,
+      "details": "Each createConversationLog call generates a unique timestamp prefix. Multiple runs for same sprint produce distinct files. Tests verify both files exist after resume with different timestamps."
+    },
+    {
+      "criterion": "contract_negotiation_logs_timestamped",
+      "score": 9,
+      "details": "contract.ts creates conversation log with logTimestamp parameter. Tests verify 'sprint-3-contract-negotiation.md' has timestamp prefix."
+    },
+    {
+      "criterion": "all_agent_log_types_timestamped",
+      "score": 9,
+      "details": "Generator, Evaluator, Planner, and Documenter all use createConversationLog with fileTimestamp(). Tests verify timestamp prefix for all agent types."
+    },
+    {
+      "criterion": "timestamp_uses_configured_timezone",
+      "score": 8,
+      "details": "fileTimestamp uses getResolvedTimezone() which checks configuredTimezone (set via setDisplayTimezone). Falls back to system local timezone. Consistent with terminal output timestamps."
+    },
+    {
+      "criterion": "langfuse_span_names_aligned",
+      "score": 8,
+      "details": "Span names use fileTimestamp()-prefixed identifiers matching log filenames (e.g., '2026.04.12-14.30.00-sprint-2-attempt-0-generator'). The same timestamp is passed to both span creation and log creation."
+    },
+    {
+      "criterion": "regex_fix_has_test_coverage",
+      "score": 9,
+      "details": "sprint-count.test.ts and phase-1-5-integration.test.ts both test standard headings counted, inline prose not counted, blockquoted not counted, and indented not counted."
+    },
+    {
+      "criterion": "existing_contract_reused_on_resume",
+      "score": 8,
+      "details": "harness.ts line 423-429: when isResume, loadExistingContract is called. If found, logs message with criteria count and skips negotiation. Tests verify this path."
+    },
+    {
+      "criterion": "missing_contract_triggers_negotiation",
+      "score": 8,
+      "details": "harness.ts line 431: if !contract after loadExistingContract, proceeds to normal negotiation. Tests verify loadExistingContract returns null for missing files."
+    },
+    {
+      "criterion": "loaded_contract_logged",
+      "score": 8,
+      "details": "harness.ts line 427: 'Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria' — includes both disk-load fact and criteria count."
+    },
+    {
+      "criterion": "contract_file_validation",
+      "score": 8,
+      "details": "loadExistingContract in files.ts validates: non-empty, valid JSON, has criteria array with length > 0, has features array. Returns null for malformed files."
+    },
+    {
+      "criterion": "parse_failure_writes_diagnostic_file",
+      "score": 8,
+      "details": "contract.ts writeParseErrorDiagnostic creates .adhd/logs/sprint-N-contract-parse-error.txt. Directory created on demand. Tests verify file creation and content."
+    },
+    {
+      "criterion": "parse_failure_logs_truncated_preview",
+      "score": 8,
+      "details": "contract.ts line 137-140: PARSE_ERROR_PREVIEW_LENGTH = 500, preview truncated with '... (truncated, N chars total)' suffix."
+    },
+    {
+      "criterion": "successful_parse_no_diagnostic_file",
+      "score": 8,
+      "details": "parseContract only calls writeParseErrorDiagnostic in the fallback path after all parse attempts fail. Tests verify no diagnostic file on success."
+    },
+    {
+      "criterion": "diagnostic_directory_created_on_demand",
+      "score": 8,
+      "details": "writeParseErrorDiagnostic uses 'await mkdir(logsDir, { recursive: true })' before writing."
+    },
+    {
+      "criterion": "truncation_length_reasonable",
+      "score": 8,
+      "details": "PARSE_ERROR_PREVIEW_LENGTH = 500 characters, within the 200-500 range. Truncation indicator includes char count."
+    },
+    {
+      "criterion": "adhd_artifacts_committed_before_generator",
+      "score": 7,
+      "details": "sprint-attempts.ts line 42: commitAdhdArtifacts called before generator. Stages and commits .adhd/ with [adhd] prefix. Tests pass in isolation but 2 fail in full suite due to test env contamination."
+    },
+    {
+      "criterion": "adhd_commit_message_format",
+      "score": 7,
+      "details": "git-ops.ts line 33: '[adhd] Sprint ${sprint}: artifacts'. Tests verify prefix and sprint number. Tests pass individually but fail in full suite."
+    },
+    {
+      "criterion": "clean_working_tree_for_generator",
+      "score": 7,
+      "details": "After commitAdhdArtifacts, git status --porcelain on .adhd/ shows no output. Tests verify this. Tests pass individually."
+    },
+    {
+      "criterion": "revert_uses_git_reset_hard",
+      "score": 7,
+      "details": "git-ops.ts line 156: execSync('git reset --hard ${sha}'). No 'git revert' calls remain. Tests verify HEAD equals checkpoint SHA and post-checkpoint files removed. Test passes in isolation but fails in full suite."
+    },
+    {
+      "criterion": "adhd_files_survive_revert",
+      "score": 7,
+      "details": "stashAdhdFiles/unstashAdhdFiles preserve .adhd/ across reset --hard. Tests verify progress.json and contracts survive. Test passes in isolation."
+    },
+    {
+      "criterion": "stash_unstash_error_handling",
+      "score": 7,
+      "details": "stashAdhdFiles returns false on error with logError. unstashAdhdFiles logs error and attempts conflict resolution (checkout --theirs, stash drop). Reset still completes. Tests verify revert completes even without .adhd/ files."
+    },
+    {
+      "criterion": "documenting_status_type",
+      "score": 9,
+      "details": "types.ts line 128: 'documenting' in HarnessProgress status union. TypeScript compilation succeeds (only test file errors, not source)."
+    },
+    {
+      "criterion": "documenting_status_set_before_documenter",
+      "score": 9,
+      "details": "harness.ts line 550: progress.status = 'documenting' + writeProgress before runDocumenterPhase call."
+    },
+    {
+      "criterion": "complete_status_after_documenter",
+      "score": 9,
+      "details": "harness.ts line 564: progress.status set to 'complete' after documenter phase (or when allPassed and noDocs)."
+    },
+    {
+      "criterion": "no_regression_on_existing_revert_callers",
+      "score": 7,
+      "details": "resumeHarness calls revertToCheckpoint correctly at line 274. The reset-based implementation preserves .adhd/ via stash. Tests pass in isolation."
+    },
+    {
+      "criterion": "commit_is_noop_when_no_changes",
+      "score": 8,
+      "details": "commitAdhdArtifacts checks git diff --cached --name-only and returns early if empty. Tests verify no empty commit created."
+    },
+    {
+      "criterion": "terminal_bell_at_hitl_gates",
+      "score": 8,
+      "details": "notify() emits \\x07 and is called before all HITL gates: spec approval (gates.ts:50), contract preview (harness.ts:464), dirty tree (git-ops.ts:188), evaluator override (sprint-attempts.ts:208), mid-run steering (sprint-success.ts:84)."
+    },
+    {
+      "criterion": "terminal_bell_on_fatal_error",
+      "score": 8,
+      "details": "index.ts line 92: notify() called in the catch block for fatal errors with notifyEnabled flag."
+    },
+    {
+      "criterion": "notify_flag_parsed",
+      "score": 9,
+      "details": "config.ts: parseCli handles --notify, resolveConfig sets notify: cli.notify || false. Tests verify parsing and default."
+    },
+    {
+      "criterion": "desktop_notification_with_notify_flag",
+      "score": 8,
+      "details": "notifications.ts: when sendDesktop is true, sends platform-appropriate command (notify-send/osascript). All HITL gates pass config.notify to notify()."
+    },
+    {
+      "criterion": "no_desktop_notification_without_flag",
+      "score": 8,
+      "details": "notifications.ts: sendDesktopNotification only called when sendDesktop is true. When --notify not provided, config.notify is false, so only terminal bell emitted."
+    },
+    {
+      "criterion": "commit_adhd_flag_parsed",
+      "score": 9,
+      "details": "config.ts: parseCli handles --commit-adhd and --commit-adhd-logs. resolveConfig sets commitAdhd and commitAdhdLogs with implication logic."
+    },
+    {
+      "criterion": "commit_adhd_creates_metadata_commit",
+      "score": 8,
+      "details": "sprint-success.ts line 48-49: commitAdhdMetadata called when config.commitAdhd is true. Commits contracts, feedback, progress.json, spec.md with '[adhd] Sprint N: contract + metadata'."
+    },
+    {
+      "criterion": "commit_adhd_logs_includes_logs",
+      "score": 8,
+      "details": "git-ops.ts commitAdhdMetadata: when includeLogs is true, pushes '.adhd/logs/' to pathsToStage. Tests verify logs are committed."
+    },
+    {
+      "criterion": "commit_adhd_logs_implies_commit_adhd",
+      "score": 9,
+      "details": "config.ts line 348: commitAdhd: cli.commitAdhd || cli.commitAdhdLogs || false. Tests verify --commit-adhd-logs alone sets both to true."
+    },
+    {
+      "criterion": "default_no_adhd_commits",
+      "score": 9,
+      "details": "config.ts defaults both to false. commitAdhdMetadata only called when config.commitAdhd is true (sprint-success.ts:48). Tests verify default config has both false."
+    },
+    {
+      "criterion": "app_starts_and_parses_new_flags",
+      "score": 9,
+      "details": "CLI entry point starts cleanly with --help, showing all new flags. parseCli correctly parses --notify, --commit-adhd, --commit-adhd-logs. No runtime errors on startup."
+    }
+  ],
+  "overallSummary": "The codebase is well-structured with solid implementation of Phase 1.5 features: sprint counting, timestamp logging, resume/contract reuse, notifications, commit-adhd flags, and SDK separation are all properly implemented. However, the sprint FAILS due to one critical gap: the README.md is missing documentation for --notify, --commit-adhd, and --commit-adhd-logs flags (score 3/10, well below threshold 7). These flags are in CLI_FLAG_HELP and --help output, but the contract requires 'README or equivalent documentation describes --resume, --notify, --commit-adhd, and --commit-adhd-logs flags with usage examples and explains their interaction'. Additionally, 5 tests fail: 2 README tests (legitimate failures) and 3 git-ops tests that pass in isolation but fail in the full suite (likely test environment contamination from HOME=/dev/null). TypeScript has 5 errors in test files only (not source). Biome lint is clean.",
+  "sdkResult": {
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "duration_ms": 417057,
+    "duration_api_ms": 376474,
+    "num_turns": 62,
+    "result": "Good - SDK imports are only in `harness-claude/`.\n\nNow I have enough data to score. Let me compile my assessment:\n\n```json\n{\n  \"passed\": false,\n  \"scores\": {\n    \"e2e_phantom_sprint_prevention\": 9,\n    \"e2e_resume_full_cycle\": 8,\n    \"e2e_commit_adhd_flags\": 8,\n    \"e2e_notifications\": 8,\n    \"progress_status_lifecycle\": 9,\n    \"contract_parse_error_diagnostics\": 8,\n    \"timestamp_log_consistency\": 9,\n    \"clean_working_tree_before_generator\": 7,\n    \"readme_cli_flags_documented\": 3,\n    \"no_swallowed_errors\": 7,\n    \"consistent_naming_conventions\": 8,\n    \"no_code_duplication_across_features\": 8,\n    \"sdk_separation_maintained\": 9,\n    \"biome_lint_clean\": 9,\n    \"regex_anchored_line_start\": 10,\n    \"inline_sprint_references_not_counted\": 10,\n    \"standard_multiline_spec_counted_correctly\": 10,\n    \"log_filename_timestamp_format\": 10,\n    \"resume_does_not_overwrite_logs\": 10,\n    \"contract_negotiation_logs_timestamped\": 9,\n    \"all_agent_log_types_timestamped\": 9,\n    \"timestamp_uses_configured_timezone\": 8,\n    \"langfuse_span_names_aligned\": 8,\n    \"regex_fix_has_test_coverage\": 9,\n    \"existing_contract_reused_on_resume\": 8,\n    \"missing_contract_triggers_negotiation\": 8,\n    \"loaded_contract_logged\": 8,\n    \"contract_file_validation\": 8,\n    \"parse_failure_writes_diagnostic_file\": 8,\n    \"parse_failure_logs_truncated_preview\": 8,\n    \"successful_parse_no_diagnostic_file\": 8,\n    \"diagnostic_directory_created_on_demand\": 8,\n    \"truncation_length_reasonable\": 8,\n    \"adhd_artifacts_committed_before_generator\": 7,\n    \"adhd_commit_message_format\": 7,\n    \"clean_working_tree_for_generator\": 7,\n    \"revert_uses_git_reset_hard\": 7,\n    \"adhd_files_survive_revert\": 7,\n    \"stash_unstash_error_handling\": 7,\n    \"documenting_status_type\": 9,\n    \"documenting_status_set_before_documenter\": 9,\n    \"complete_status_after_documenter\": 9,\n    \"no_regression_on_existing_revert_callers\": 7,\n    \"commit_is_noop_when_no_changes\": 8,\n    \"terminal_bell_at_hitl_gates\": 8,\n    \"terminal_bell_on_fatal_error\": 8,\n    \"notify_flag_parsed\": 9,\n    \"desktop_notification_with_notify_flag\": 8,\n    \"no_desktop_notification_without_flag\": 8,\n    \"commit_adhd_flag_parsed\": 9,\n    \"commit_adhd_creates_metadata_commit\": 8,\n    \"commit_adhd_logs_includes_logs\": 8,\n    \"commit_adhd_logs_implies_commit_adhd\": 9,\n    \"default_no_adhd_commits\": 9,\n    \"app_starts_and_parses_new_flags\": 9\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"e2e_phantom_sprint_prevention\",\n      \"score\": 9,\n      \"details\": \"Sprint counting regex uses ^## with multiline flag. Tests in phase-1-5-integration.test.ts cover inline prose, blockquotes, acceptance criteria, and indented headings. All tests pass. Spec with 2 line-start headings + inline references correctly yields 2.\"\n    },\n    {\n      \"criterion\": \"e2e_resume_full_cycle\",\n      \"score\": 8,\n      \"details\": \"Resume path in harness.ts loads existing progress, reads spec from disk, skips completed sprints via startSprint = completedSprints + 1. loadExistingContract reuses contracts from disk. New timestamped log files created via createConversationLog. revertToCheckpoint uses git reset --hard with stash/unstash. Tests cover contract reuse, distinct timestamps on resume. 3 git-ops tests fail in full suite but pass in isolation (test isolation issue, likely HOME=/dev/null env leaking).\"\n    },\n    {\n      \"criterion\": \"e2e_commit_adhd_flags\",\n      \"score\": 8,\n      \"details\": \"commitAdhdMetadata in git-ops.ts creates [adhd] commits with contracts/feedback/progress/spec. --commit-adhd-logs additionally stages .adhd/logs/. Config resolution has commitAdhd: cli.commitAdhd || cli.commitAdhdLogs (implication). Default is false. Tests verify parsing, resolution, commit message format, includeLogs, and no-op behavior.\"\n    },\n    {\n      \"criterion\": \"e2e_notifications\",\n      \"score\": 8,\n      \"details\": \"notify() in notifications.ts always emits \\\\x07 to stdout. With notify: true, it dispatches desktop notification via notify-send (Linux) or osascript (macOS). All HITL gates call notify() before prompting: spec approval, contract preview, dirty tree, evaluator override, mid-run steering. Fatal error in index.ts calls notify(). Tests verify bell emission and flag parsing.\"\n    },\n    {\n      \"criterion\": \"progress_status_lifecycle\",\n      \"score\": 9,\n      \"details\": \"HarnessProgress status union includes 'documenting'. In harness.ts runSprintLoop, status transitions: planning → spec-review → negotiating → building → evaluating → (loop) → documenting → complete. 'documenting' set at line 550 before runDocumenterPhase. 'complete' set at line 564. Tests verify all transitions and that 'documenting' appears between evaluating and complete.\"\n    },\n    {\n      \"criterion\": \"contract_parse_error_diagnostics\",\n      \"score\": 8,\n      \"details\": \"parseContract in contract.ts writes diagnostic file via writeParseErrorDiagnostic on failure. Directory created with mkdir recursive. Truncated preview (500 char cap) logged to console. Successful parses produce no diagnostic. Tests verify diagnostic file creation, content preservation for long input, and no diagnostic on success.\"\n    },\n    {\n      \"criterion\": \"timestamp_log_consistency\",\n      \"score\": 9,\n      \"details\": \"All conversation logs use fileTimestamp() for YYYY.MM.DD-HH.MM.SS prefix. Tests verify generator, evaluator, contract-negotiation, and documenter logs all have timestamp prefix. Multiple runs produce distinct files with chronological ordering verified.\"\n    },\n    {\n      \"criterion\": \"clean_working_tree_before_generator\",\n      \"score\": 7,\n      \"details\": \"commitAdhdArtifacts called at sprint-attempts.ts line 42 immediately before generator invocation. Stages and commits all .adhd/ files with [adhd] prefix. Tests verify clean working tree after commit. However, 2 git-ops tests fail in full suite (pass in isolation) suggesting fragile test environment.\"\n    },\n    {\n      \"criterion\": \"readme_cli_flags_documented\",\n      \"score\": 3,\n      \"details\": \"CRITICAL FAILURE: README.md does NOT contain --notify, --commit-adhd, or --commit-adhd-logs. grep confirms zero matches for these strings. The Configuration table is missing all three flags. While --resume is documented, the three new Sprint 4/5 flags are completely absent from the README. CLI_FLAG_HELP has them, and --help output shows them, but the README criterion explicitly requires README documentation. Tests for this criterion fail: 'expect(readme).toContain(\\\"--notify\\\")' fails.\"\n    },\n    {\n      \"criterion\": \"no_swallowed_errors\",\n      \"score\": 7,\n      \"details\": \"Nearly all catch blocks have comments, log calls, re-throws, or returns. A few catch blocks with just comments (e.g., '// Documenter failure is non-fatal' at harness.ts:219, '// skip unreadable installed dir' in skills.ts) are borderline but defensible. The harness.ts:219 catch is redundant since runDocumenterPhase already has its own try/catch with logging. No truly empty catch blocks found. git-ops.ts:132 has a catch that does 'Best effort — continue regardless' which is reasonable.\"\n    },\n    {\n      \"criterion\": \"consistent_naming_conventions\",\n      \"score\": 8,\n      \"details\": \"Functions consistently use camelCase (commitAdhdArtifacts, fileTimestamp, loadExistingContract). Types/interfaces use PascalCase (HarnessProgress, SprintContract, AgentRunners). Constants use UPPER_SNAKE_CASE (CLI_FLAG_HELP, CLAUDE_MODEL, PARSE_ERROR_PREVIEW_LENGTH). File names use kebab-case throughout shared/ and harness-claude/. No abbreviations without precedent.\"\n    },\n    {\n      \"criterion\": \"no_code_duplication_across_features\",\n      \"score\": 8,\n      \"details\": \"fileTimestamp is the single timestamp utility. notify() is the single notification dispatch. commitAdhdArtifacts and commitAdhdMetadata share git-ops module. loadExistingContract used by both --resume and --sprint paths. Some git command repetition (git rev-parse HEAD in multiple files) is contextually appropriate rather than copy-paste.\"\n    },\n    {\n      \"criterion\": \"sdk_separation_maintained\",\n      \"score\": 9,\n      \"details\": \"Zero @anthropic-ai imports in shared/. All SDK-specific code is in harness-claude/. AgentRunners interface in shared/orchestration/types.ts is the only bridge. Verified via grep: no SDK imports in any shared/ TypeScript file.\"\n    },\n    {\n      \"criterion\": \"biome_lint_clean\",\n      \"score\": 9,\n      \"details\": \"Static analysis confirms: 'Checked 38 files in 25ms. No fixes applied.' with exit code 0. TypeScript has 5 errors all in test files (conversation-logger.test.ts and tracing.test.ts) — the tracing.test.ts error is missing notify/commitAdhd/commitAdhdLogs on mock config, which is a legitimate type error but only in tests.\"\n    },\n    {\n      \"criterion\": \"regex_anchored_line_start\",\n      \"score\": 10,\n      \"details\": \"sprint-count.ts line 10: /^##\\\\s*Sprint\\\\s+\\\\d+/gim — uses ^ with m flag for line-start anchoring.\"\n    },\n    {\n      \"criterion\": \"inline_sprint_references_not_counted\",\n      \"score\": 10,\n      \"details\": \"Tests verify prose references ('builds on Sprint 3'), blockquoted ('> ## Sprint 4'), and backtick-quoted are not counted. Spec with 2 line-start headings correctly yields 2.\"\n    },\n    {\n      \"criterion\": \"standard_multiline_spec_counted_correctly\",\n      \"score\": 10,\n      \"details\": \"Test in phase-1-5-integration.test.ts line 140 verifies 4 sprint headings yield count of 4.\"\n    },\n    {\n      \"criterion\": \"log_filename_timestamp_format\",\n      \"score\": 10,\n      \"details\": \"Verified: createConversationLog generates filenames like 'YYYY.MM.DD-HH.MM.SS-sprint-2-attempt-0-generator.md'. fileTimestamp() produces correct format validated by regex.\"\n    },\n    {\n      \"criterion\": \"resume_does_not_overwrite_logs\",\n      \"score\": 10,\n      \"details\": \"Each createConversationLog call generates a unique timestamp prefix. Multiple runs for same sprint produce distinct files. Tests verify both files exist after resume with different timestamps.\"\n    },\n    {\n      \"criterion\": \"contract_negotiation_logs_timestamped\",\n      \"score\": 9,\n      \"details\": \"contract.ts creates conversation log with logTimestamp parameter. Tests verify 'sprint-3-contract-negotiation.md' has timestamp prefix.\"\n    },\n    {\n      \"criterion\": \"all_agent_log_types_timestamped\",\n      \"score\": 9,\n      \"details\": \"Generator, Evaluator, Planner, and Documenter all use createConversationLog with fileTimestamp(). Tests verify timestamp prefix for all agent types.\"\n    },\n    {\n      \"criterion\": \"timestamp_uses_configured_timezone\",\n      \"score\": 8,\n      \"details\": \"fileTimestamp uses getResolvedTimezone() which checks configuredTimezone (set via setDisplayTimezone). Falls back to system local timezone. Consistent with terminal output timestamps.\"\n    },\n    {\n      \"criterion\": \"langfuse_span_names_aligned\",\n      \"score\": 8,\n      \"details\": \"Span names use fileTimestamp()-prefixed identifiers matching log filenames (e.g., '2026.04.12-14.30.00-sprint-2-attempt-0-generator'). The same timestamp is passed to both span creation and log creation.\"\n    },\n    {\n      \"criterion\": \"regex_fix_has_test_coverage\",\n      \"score\": 9,\n      \"details\": \"sprint-count.test.ts and phase-1-5-integration.test.ts both test standard headings counted, inline prose not counted, blockquoted not counted, and indented not counted.\"\n    },\n    {\n      \"criterion\": \"existing_contract_reused_on_resume\",\n      \"score\": 8,\n      \"details\": \"harness.ts line 423-429: when isResume, loadExistingContract is called. If found, logs message with criteria count and skips negotiation. Tests verify this path.\"\n    },\n    {\n      \"criterion\": \"missing_contract_triggers_negotiation\",\n      \"score\": 8,\n      \"details\": \"harness.ts line 431: if !contract after loadExistingContract, proceeds to normal negotiation. Tests verify loadExistingContract returns null for missing files.\"\n    },\n    {\n      \"criterion\": \"loaded_contract_logged\",\n      \"score\": 8,\n      \"details\": \"harness.ts line 427: 'Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria' — includes both disk-load fact and criteria count.\"\n    },\n    {\n      \"criterion\": \"contract_file_validation\",\n      \"score\": 8,\n      \"details\": \"loadExistingContract in files.ts validates: non-empty, valid JSON, has criteria array with length > 0, has features array. Returns null for malformed files.\"\n    },\n    {\n      \"criterion\": \"parse_failure_writes_diagnostic_file\",\n      \"score\": 8,\n      \"details\": \"contract.ts writeParseErrorDiagnostic creates .adhd/logs/sprint-N-contract-parse-error.txt. Directory created on demand. Tests verify file creation and content.\"\n    },\n    {\n      \"criterion\": \"parse_failure_logs_truncated_preview\",\n      \"score\": 8,\n      \"details\": \"contract.ts line 137-140: PARSE_ERROR_PREVIEW_LENGTH = 500, preview truncated with '... (truncated, N chars total)' suffix.\"\n    },\n    {\n      \"criterion\": \"successful_parse_no_diagnostic_file\",\n      \"score\": 8,\n      \"details\": \"parseContract only calls writeParseErrorDiagnostic in the fallback path after all parse attempts fail. Tests verify no diagnostic file on success.\"\n    },\n    {\n      \"criterion\": \"diagnostic_directory_created_on_demand\",\n      \"score\": 8,\n      \"details\": \"writeParseErrorDiagnostic uses 'await mkdir(logsDir, { recursive: true })' before writing.\"\n    },\n    {\n      \"criterion\": \"truncation_length_reasonable\",\n      \"score\": 8,\n      \"details\": \"PARSE_ERROR_PREVIEW_LENGTH = 500 characters, within the 200-500 range. Truncation indicator includes char count.\"\n    },\n    {\n      \"criterion\": \"adhd_artifacts_committed_before_generator\",\n      \"score\": 7,\n      \"details\": \"sprint-attempts.ts line 42: commitAdhdArtifacts called before generator. Stages and commits .adhd/ with [adhd] prefix. Tests pass in isolation but 2 fail in full suite due to test env contamination.\"\n    },\n    {\n      \"criterion\": \"adhd_commit_message_format\",\n      \"score\": 7,\n      \"details\": \"git-ops.ts line 33: '[adhd] Sprint ${sprint}: artifacts'. Tests verify prefix and sprint number. Tests pass individually but fail in full suite.\"\n    },\n    {\n      \"criterion\": \"clean_working_tree_for_generator\",\n      \"score\": 7,\n      \"details\": \"After commitAdhdArtifacts, git status --porcelain on .adhd/ shows no output. Tests verify this. Tests pass individually.\"\n    },\n    {\n      \"criterion\": \"revert_uses_git_reset_hard\",\n      \"score\": 7,\n      \"details\": \"git-ops.ts line 156: execSync('git reset --hard ${sha}'). No 'git revert' calls remain. Tests verify HEAD equals checkpoint SHA and post-checkpoint files removed. Test passes in isolation but fails in full suite.\"\n    },\n    {\n      \"criterion\": \"adhd_files_survive_revert\",\n      \"score\": 7,\n      \"details\": \"stashAdhdFiles/unstashAdhdFiles preserve .adhd/ across reset --hard. Tests verify progress.json and contracts survive. Test passes in isolation.\"\n    },\n    {\n      \"criterion\": \"stash_unstash_error_handling\",\n      \"score\": 7,\n      \"details\": \"stashAdhdFiles returns false on error with logError. unstashAdhdFiles logs error and attempts conflict resolution (checkout --theirs, stash drop). Reset still completes. Tests verify revert completes even without .adhd/ files.\"\n    },\n    {\n      \"criterion\": \"documenting_status_type\",\n      \"score\": 9,\n      \"details\": \"types.ts line 128: 'documenting' in HarnessProgress status union. TypeScript compilation succeeds (only test file errors, not source).\"\n    },\n    {\n      \"criterion\": \"documenting_status_set_before_documenter\",\n      \"score\": 9,\n      \"details\": \"harness.ts line 550: progress.status = 'documenting' + writeProgress before runDocumenterPhase call.\"\n    },\n    {\n      \"criterion\": \"complete_status_after_documenter\",\n      \"score\": 9,\n      \"details\": \"harness.ts line 564: progress.status set to 'complete' after documenter phase (or when allPassed and noDocs).\"\n    },\n    {\n      \"criterion\": \"no_regression_on_existing_revert_callers\",\n      \"score\": 7,\n      \"details\": \"resumeHarness calls revertToCheckpoint correctly at line 274. The reset-based implementation preserves .adhd/ via stash. Tests pass in isolation.\"\n    },\n    {\n      \"criterion\": \"commit_is_noop_when_no_changes\",\n      \"score\": 8,\n      \"details\": \"commitAdhdArtifacts checks git diff --cached --name-only and returns early if empty. Tests verify no empty commit created.\"\n    },\n    {\n      \"criterion\": \"terminal_bell_at_hitl_gates\",\n      \"score\": 8,\n      \"details\": \"notify() emits \\\\x07 and is called before all HITL gates: spec approval (gates.ts:50), contract preview (harness.ts:464), dirty tree (git-ops.ts:188), evaluator override (sprint-attempts.ts:208), mid-run steering (sprint-success.ts:84).\"\n    },\n    {\n      \"criterion\": \"terminal_bell_on_fatal_error\",\n      \"score\": 8,\n      \"details\": \"index.ts line 92: notify() called in the catch block for fatal errors with notifyEnabled flag.\"\n    },\n    {\n      \"criterion\": \"notify_flag_parsed\",\n      \"score\": 9,\n      \"details\": \"config.ts: parseCli handles --notify, resolveConfig sets notify: cli.notify || false. Tests verify parsing and default.\"\n    },\n    {\n      \"criterion\": \"desktop_notification_with_notify_flag\",\n      \"score\": 8,\n      \"details\": \"notifications.ts: when sendDesktop is true, sends platform-appropriate command (notify-send/osascript). All HITL gates pass config.notify to notify().\"\n    },\n    {\n      \"criterion\": \"no_desktop_notification_without_flag\",\n      \"score\": 8,\n      \"details\": \"notifications.ts: sendDesktopNotification only called when sendDesktop is true. When --notify not provided, config.notify is false, so only terminal bell emitted.\"\n    },\n    {\n      \"criterion\": \"commit_adhd_flag_parsed\",\n      \"score\": 9,\n      \"details\": \"config.ts: parseCli handles --commit-adhd and --commit-adhd-logs. resolveConfig sets commitAdhd and commitAdhdLogs with implication logic.\"\n    },\n    {\n      \"criterion\": \"commit_adhd_creates_metadata_commit\",\n      \"score\": 8,\n      \"details\": \"sprint-success.ts line 48-49: commitAdhdMetadata called when config.commitAdhd is true. Commits contracts, feedback, progress.json, spec.md with '[adhd] Sprint N: contract + metadata'.\"\n    },\n    {\n      \"criterion\": \"commit_adhd_logs_includes_logs\",\n      \"score\": 8,\n      \"details\": \"git-ops.ts commitAdhdMetadata: when includeLogs is true, pushes '.adhd/logs/' to pathsToStage. Tests verify logs are committed.\"\n    },\n    {\n      \"criterion\": \"commit_adhd_logs_implies_commit_adhd\",\n      \"score\": 9,\n      \"details\": \"config.ts line 348: commitAdhd: cli.commitAdhd || cli.commitAdhdLogs || false. Tests verify --commit-adhd-logs alone sets both to true.\"\n    },\n    {\n      \"criterion\": \"default_no_adhd_commits\",\n      \"score\": 9,\n      \"details\": \"config.ts defaults both to false. commitAdhdMetadata only called when config.commitAdhd is true (sprint-success.ts:48). Tests verify default config has both false.\"\n    },\n    {\n      \"criterion\": \"app_starts_and_parses_new_flags\",\n      \"score\": 9,\n      \"details\": \"CLI entry point starts cleanly with --help, showing all new flags. parseCli correctly parses --notify, --commit-adhd, --commit-adhd-logs. No runtime errors on startup.\"\n    }\n  ],\n  \"overallSummary\": \"The codebase is well-structured with solid implementation of Phase 1.5 features: sprint counting, timestamp logging, resume/contract reuse, notifications, commit-adhd flags, and SDK separation are all properly implemented. However, the sprint FAILS due to one critical gap: the README.md is missing documentation for --notify, --commit-adhd, and --commit-adhd-logs flags (score 3/10, well below threshold 7). These flags are in CLI_FLAG_HELP and --help output, but the contract requires 'README or equivalent documentation describes --resume, --notify, --commit-adhd, and --commit-adhd-logs flags with usage examples and explains their interaction'. Additionally, 5 tests fail: 2 README tests (legitimate failures) and 3 git-ops tests that pass in isolation but fail in the full suite (likely test environment contamination from HOME=/dev/null). TypeScript has 5 errors in test files only (not source). Biome lint is clean.\"\n}\n```",
+    "stop_reason": "end_turn",
+    "session_id": "67b68484-5037-468f-a605-46e3d1586e53",
+    "total_cost_usd": 3.2000222500000004,
+    "usage": {
+      "input_tokens": 1756,
+      "cache_creation_input_tokens": 108319,
+      "cache_read_input_tokens": 4406047,
+      "output_tokens": 12449,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 108319,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [],
+      "speed": "standard"
+    },
+    "modelUsage": {
+      "claude-opus-4-6": {
+        "inputTokens": 1756,
+        "outputTokens": 12449,
+        "cacheReadInputTokens": 4406047,
+        "cacheCreationInputTokens": 108319,
+        "webSearchRequests": 0,
+        "costUSD": 3.2000222500000004,
+        "contextWindow": 200000,
+        "maxOutputTokens": 64000
+      }
+    },
+    "permission_denials": [],
+    "fast_mode_state": "off",
+    "uuid": "bbecd30d-72bf-4ef8-8d60-afc11898f5e5"
+  }
+}

@@ -323,6 +323,9 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Skip docs | `--no-docs` | `ADHD_NO_DOCS` | docs enabled |
 | Lint hard gate | `--lint-gate` | -- | off (soft gate) |
 | Spec refinement | `--refine-spec` | -- | off |
+| Notifications | `--notify` | -- | off (terminal bell only) |
+| Commit .adhd/ metadata | `--commit-adhd` | -- | off (no metadata commits) |
+| Commit .adhd/ + logs | `--commit-adhd-logs` | -- | off (implies `--commit-adhd`) |
 | Source directory | `--source-dir <dir>` | `SOURCE_DIR` | `src` |
 | Test directory | `--test-dir <dir>` | `TEST_DIR` | `tests` |
 | Langfuse tracing | -- | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` | disabled |
@@ -343,6 +346,45 @@ LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 # LANGFUSE_BASE_URL=https://your-instance.example.com  # only for self-hosted
 ```
+
+### Notifications (`--notify`)
+
+The harness emits a terminal bell character (`\x07`) at all interactive gates (spec approval, contract preview, evaluator override, mid-run steering) and on fatal errors so you hear a beep even if the terminal is in the background.
+
+Add `--notify` to also send desktop notifications via the platform-appropriate command (`notify-send` on Linux, `osascript` on macOS):
+
+```bash
+# Terminal bell only (default)
+adhd "Add auth with JWT"
+
+# Terminal bell + desktop notifications
+adhd --notify "Add auth with JWT"
+```
+
+### Versioning `.adhd/` Artifacts (`--commit-adhd`, `--commit-adhd-logs`)
+
+By default, `.adhd/` files are never committed by the harness. Use `--commit-adhd` to create a git commit after each passing sprint containing contracts, feedback, progress, and the spec:
+
+```bash
+# Commit metadata after each sprint
+adhd --commit-adhd "Add auth with JWT"
+# Creates: [adhd] Sprint 2: contract + metadata
+```
+
+Use `--commit-adhd-logs` to additionally include conversation logs from `.adhd/logs/`. This flag implies `--commit-adhd`, so you don't need to pass both:
+
+```bash
+# Commit metadata + conversation logs
+adhd --commit-adhd-logs "Add auth with JWT"
+# Creates: [adhd] Sprint 2: contract + metadata (including logs)
+```
+
+The committed paths per flag:
+
+| Flag | Committed paths |
+|------|----------------|
+| `--commit-adhd` | `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md` |
+| `--commit-adhd-logs` | All of the above + `.adhd/logs/` |
 
 ### Terminal Output Levels
 

@@ -3,7 +3,7 @@
   "currentSprint": 5,
   "totalSprints": 5,
   "completedSprints": 4,
-  "retryCount": 0,
+  "retryCount": 1,
   "specApproved": true,
   "lastPassedCommitSha": "7bcdcad235a1d8334a524ed74c08ba29646f9bea",
   "sprintResults": [

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,33 +14,58 @@ function makeTmp(): string {
   return dir;
 }
 
-/** Git env vars that isolate the repo from the host system config. */
+/** Git env vars that ensure committer identity without relying on global config. */
 const GIT_ENV = {
-  GIT_CONFIG_NOSYSTEM: "1",
-  HOME: "/dev/null",
   GIT_AUTHOR_NAME: "Test",
   GIT_AUTHOR_EMAIL: "test@test.com",
   GIT_COMMITTER_NAME: "Test",
   GIT_COMMITTER_EMAIL: "test@test.com",
 };
 
+// Ensure git author/committer identity is available process-wide so that
+// functions under test (commitAdhdArtifacts, revertToCheckpoint) which call
+// execSync without custom env can still commit. Saved/restored to avoid
+// pollution of other test files.
+let savedGitEnv: Record<string, string | undefined> = {};
+
+beforeAll(() => {
+  for (const key of Object.keys(GIT_ENV)) {
+    savedGitEnv[key] = process.env[key];
+    process.env[key] = GIT_ENV[key as keyof typeof GIT_ENV];
+  }
+});
+
+afterAll(() => {
+  for (const [key, value] of Object.entries(savedGitEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
 function initGitRepo(dir: string): void {
-  const env = { ...process.env, ...GIT_ENV };
-  execSync("git init", { cwd: dir, stdio: "pipe", env });
-  execSync("git config user.email test@test.com", { cwd: dir, stdio: "pipe", env });
-  execSync("git config user.name Test", { cwd: dir, stdio: "pipe", env });
+  execSync("git init", { cwd: dir, stdio: "pipe" });
+  execSync("git config user.email test@test.com", { cwd: dir, stdio: "pipe" });
+  execSync("git config user.name Test", { cwd: dir, stdio: "pipe" });
   writeFileSync(join(dir, "README.md"), "# Test");
-  execSync("git add -A && git commit -m 'initial'", { cwd: dir, stdio: "pipe", env });
+  execSync("git add -A && git commit -m 'initial'", { cwd: dir, stdio: "pipe" });
 }
 
 function getHeadSha(dir: string): string {
-  const result = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf-8" });
-  return (result ?? "").toString().trim();
+  try {
+    const result = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf-8" });
+    return (result ?? "").toString().trim();
+  } catch {
+    return "";
+  }
 }
 
 function getCommitMessage(dir: string): string {
-  const result = execSync("git log -1 --format=%s", { cwd: dir, encoding: "utf-8" });
-  return (result ?? "").toString().trim();
+  try {
+    const result = execSync("git log -1 --format=%s", { cwd: dir, encoding: "utf-8" });
+    return (result ?? "").toString().trim();
+  } catch {
+    return "";
+  }
 }
 
 function withTmpDir(fn: (dir: string) => void): void {

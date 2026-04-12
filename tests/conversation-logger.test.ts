@@ -26,7 +26,7 @@ describe("conversation-logger", () => {
 
     const files = await readdir(join(dir, ".adhd", "logs"));
     expect(files.length).toBe(1);
-    const filename = files[0];
+    const filename = files[0] as string;
     // Filename should match: YYYY.MM.DD-HH.MM.SS-sprint-1-attempt-0-generator.md
     expect(filename).toMatch(TIMESTAMP_RE);
     expect(filename).toContain("sprint-1-attempt-0-generator.md");
@@ -46,7 +46,7 @@ describe("conversation-logger", () => {
     await logger.finalize(3000);
 
     const files = await readdir(join(dir, ".adhd", "logs"));
-    const filename = files[0];
+    const filename = files[0] as string;
     expect(filename).toMatch(TIMESTAMP_RE);
     expect(filename).toContain("sprint-2-attempt-1-generator.md");
 
@@ -63,7 +63,7 @@ describe("conversation-logger", () => {
     await logger.finalize(1000);
 
     const files = await readdir(join(dir, ".adhd", "logs"));
-    const filename = files[0];
+    const filename = files[0] as string;
     expect(filename).toMatch(TIMESTAMP_RE);
     expect(filename).toContain("planner.md");
 
@@ -81,7 +81,7 @@ describe("conversation-logger", () => {
     await logger.finalize(1000);
 
     const files = await readdir(join(dir, ".adhd", "logs"));
-    const filename = files[0];
+    const filename = files[0] as string;
     expect(filename).toContain("sprint-1-attempt-0-evaluator.md");
 
     const content = await readFile(join(dir, ".adhd", "logs", filename), "utf-8");
@@ -96,7 +96,7 @@ describe("conversation-logger", () => {
     await logger.finalize(2000);
 
     const files = await readdir(join(dir, ".adhd", "logs"));
-    const filename = files[0];
+    const filename = files[0] as string;
     expect(filename).toMatch(TIMESTAMP_RE);
     expect(filename).toContain("sprint-3-contract-negotiation.md");
   });
@@ -143,7 +143,7 @@ describe("conversation-logger", () => {
     await logger.finalize(1000);
 
     const files = await readdir(join(dir, ".adhd", "logs"));
-    const filename = files[0];
+    const filename = files[0] as string;
     expect(filename).toMatch(TIMESTAMP_RE);
     expect(filename).toContain("documenter.md");
   });
