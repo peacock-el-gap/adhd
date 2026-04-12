@@ -121,6 +121,8 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
       await writeProgress(config.workDir, progress);
 
       if (config.isDryRun) {
+        progress.totalSprints = Math.min(countSprintHeadings(approvedSpec) || config.maxSprints, config.maxSprints);
+        await writeProgress(config.workDir, progress);
         log("HARNESS", "Dry-run complete. Spec approved and saved.");
         usage.printSummary();
         await usage.save();
@@ -248,9 +250,11 @@ async function resumeHarness(
     reviewSpan.end();
     progress.specApproved = true;
     await writeProgress(config.workDir, progress);
-    // Re-count sprints in case spec was edited
-    progress.totalSprints = Math.min(countSprintHeadings(spec) || config.maxSprints, config.maxSprints);
   }
+
+  // Always recompute from the spec — progress.totalSprints is a cache, not the source of truth.
+  // Guards against dry-run runs that persisted specApproved without a sprint count, and picks up manual spec edits.
+  progress.totalSprints = Math.min(countSprintHeadings(spec) || config.maxSprints, config.maxSprints);
 
   // Resume branch check — warn if HEAD is on a different branch
   if (progress.branch) {
@@ -544,7 +548,7 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
   }
 
   // Final status
-  const allPassed = results.every((r) => r.passed);
+  const allPassed = results.length > 0 && results.every((r) => r.passed);
 
   if (allPassed && !config.noDocs) {
     progress.status = "documenting";
