@@ -16,6 +16,9 @@ export interface SDKResultFields {
     output_tokens?: number;
     cache_read_input_tokens?: number;
   };
+  stop_reason?: string | null;
+  num_turns?: number;
+  is_error?: boolean;
 }
 
 export interface UsageTracker {

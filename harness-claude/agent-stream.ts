@@ -1,3 +1,4 @@
+import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import type { ConversationLogger } from "../shared/conversation-logger.ts";
 import { type AgentRole, log, logDebug, shouldLog, summarize } from "../shared/logger.ts";
 import type { LogLevel } from "../shared/types.ts";
@@ -76,6 +77,16 @@ export async function processAgentStream(
     } else if (msg.type === "result") {
       sessionId = msg.session_id;
       sdkResult = msg;
+      const stopReason = msg.stop_reason ?? null;
+      const numTurns = msg.num_turns ?? 0;
+      const isError = msg.is_error === true;
+      const summary = `SDK result: stop_reason=${stopReason} num_turns=${numTurns}/${CLAUDE_MAX_TURNS} is_error=${isError}`;
+      const nearTurnLimit = numTurns >= CLAUDE_MAX_TURNS - 2;
+      if (stopReason === "max_tokens" || nearTurnLimit || isError) {
+        log(label, `WARNING: ${summary}`);
+      } else {
+        logDebug(label, summary);
+      }
       callbacks?.onResult?.(msg);
     }
   }
