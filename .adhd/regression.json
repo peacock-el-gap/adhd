@@ -178,5 +178,71 @@
     "description": "If there are no pending .adhd/ changes when the pre-Generator commit step runs (e.g., files were already committed), no empty commit is created. The harness handles the nothing-to-commit case gracefully.",
     "threshold": 6,
     "sprintNumber": 3
+  },
+  {
+    "name": "terminal_bell_at_hitl_gates",
+    "description": "All HITL gates (spec approval, contract approval, and any interactive prompts) write the terminal bell character (\\x07) to stdout immediately before or alongside the prompt text",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "terminal_bell_on_fatal_error",
+    "description": "When the harness encounters a fatal error that halts execution, a terminal bell character (\\x07) is emitted alongside the error output",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "notify_flag_parsed",
+    "description": "The CLI accepts a --notify flag. When provided, the resolved config includes a notify: true property. When omitted, it defaults to false",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "desktop_notification_with_notify_flag",
+    "description": "When --notify is enabled and a HITL gate or fatal error occurs, the harness invokes the platform-appropriate desktop notification command (notify-send on Linux, osascript on macOS) with a descriptive message",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "no_desktop_notification_without_flag",
+    "description": "When --notify is not provided, no desktop notification subprocess is spawned at HITL gates or errors — only the terminal bell is emitted",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "commit_adhd_flag_parsed",
+    "description": "The CLI accepts --commit-adhd and --commit-adhd-logs flags. They are correctly parsed into the resolved config object with appropriate boolean properties",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "commit_adhd_creates_metadata_commit",
+    "description": "When --commit-adhd is enabled and a sprint passes evaluation, a git commit is created containing .adhd/contracts/, .adhd/feedback/, .adhd/progress.json, and .adhd/spec.md with the message format '[adhd] Sprint N: contract + metadata'",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "commit_adhd_logs_includes_logs",
+    "description": "When --commit-adhd-logs is enabled, the metadata commit additionally includes files from .adhd/logs/",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "commit_adhd_logs_implies_commit_adhd",
+    "description": "When --commit-adhd-logs is provided without --commit-adhd, the resolved config sets commitAdhd to true (implication logic)",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "default_no_adhd_commits",
+    "description": "When neither --commit-adhd nor --commit-adhd-logs is provided, no [adhd] metadata commits are created after sprints complete",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "app_starts_and_parses_new_flags",
+    "description": "The harness entry point starts cleanly with the new flags (--notify, --commit-adhd, --commit-adhd-logs) without runtime errors, and --help output documents the new options",
+    "threshold": 7,
+    "sprintNumber": 4
   }
 ]

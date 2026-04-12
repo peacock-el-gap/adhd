@@ -77,7 +77,7 @@ export function fileTimestamp(date?: Date): string {
     }
     // Fallback: use ISO string
     return formatIsoAsFileTimestamp(now);
-  } catch (err) {
+  } catch (_err) {
     logDebug("HARNESS", `Invalid timezone "${tz}", falling back to UTC for file timestamp`);
     return formatIsoAsFileTimestamp(now);
   }
@@ -86,7 +86,7 @@ export function fileTimestamp(date?: Date): string {
 function formatIsoAsFileTimestamp(date: Date): string {
   const iso = date.toISOString();
   // ISO: "2026-04-12T14:30:00.000Z"
-  return iso.slice(0, 10).replace(/-/g, ".") + "-" + iso.slice(11, 19).replace(/:/g, ".");
+  return `${iso.slice(0, 10).replace(/-/g, ".")}-${iso.slice(11, 19).replace(/:/g, ".")}`;
 }
 
 function formatMessage(role: AgentRole, timestampColor: string, message: string): string {

@@ -21,7 +21,9 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
 
   for (let retry = 0; retry <= config.maxRetriesPerSprint; retry++) {
     attempts = retry + 1;
-    const attemptSpan = sprintSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-attempt-${retry}`, { attempt: retry });
+    const attemptSpan = sprintSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-attempt-${retry}`, {
+      attempt: retry,
+    });
 
     // Capture SHA before generator runs
     let beforeSha = "";

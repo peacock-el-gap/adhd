@@ -14,10 +14,7 @@ import { logDebug } from "./logger.ts";
  * @param options.notify - Whether to send a desktop notification (from --notify flag)
  * @param options.title - Optional title for the desktop notification (defaults to "ADHD Harness")
  */
-export function notify(
-  message: string,
-  options: { notify?: boolean; title?: string } = {},
-): void {
+export function notify(message: string, options: { notify?: boolean; title?: string } = {}): void {
   const { notify: sendDesktop = false, title = "ADHD Harness" } = options;
 
   // Always emit terminal bell

@@ -62,7 +62,13 @@ export interface EnsureCommitOptions {
 
 export interface AgentRunners {
   initTracing(config: ResolvedConfig): Tracer;
-  runPlanner(config: ResolvedConfig, feedback?: string, usage?: UsageTracker, skills?: AgentSkills, logTimestamp?: string): Promise<string>;
+  runPlanner(
+    config: ResolvedConfig,
+    feedback?: string,
+    usage?: UsageTracker,
+    skills?: AgentSkills,
+    logTimestamp?: string,
+  ): Promise<string>;
   runGenerator(opts: RunGeneratorOptions): Promise<GeneratorResult>;
   runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }>;
   runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields }>;

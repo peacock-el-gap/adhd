@@ -119,7 +119,15 @@ export interface EvalResult {
 }
 
 export interface HarnessProgress {
-  status: "planning" | "spec-review" | "negotiating" | "building" | "evaluating" | "documenting" | "complete" | "failed";
+  status:
+    | "planning"
+    | "spec-review"
+    | "negotiating"
+    | "building"
+    | "evaluating"
+    | "documenting"
+    | "complete"
+    | "failed";
   currentSprint: number;
   totalSprints: number;
   completedSprints: number;

@@ -424,17 +424,16 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
       const existing = await loadExistingContract(config.workDir, sprint);
       if (existing) {
         contract = existing;
-        log(
-          "HARNESS",
-          `Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria`,
-        );
+        log("HARNESS", `Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria`);
       }
     }
 
     if (!contract) {
       log("HARNESS", "Negotiating sprint contract...");
       const negotiationTs = fileTimestamp();
-      const negotiationSpan = sprintSpan.startChild(`${negotiationTs}-sprint-${sprint}-contract-negotiation`, { sprint });
+      const negotiationSpan = sprintSpan.startChild(`${negotiationTs}-sprint-${sprint}-contract-negotiation`, {
+        sprint,
+      });
       try {
         contract = await negotiationSpan.run(() =>
           withTransientRetry(

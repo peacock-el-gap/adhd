@@ -14,12 +14,23 @@ function makeTmp(): string {
   return dir;
 }
 
+/** Git env vars that isolate the repo from the host system config. */
+const GIT_ENV = {
+  GIT_CONFIG_NOSYSTEM: "1",
+  HOME: "/dev/null",
+  GIT_AUTHOR_NAME: "Test",
+  GIT_AUTHOR_EMAIL: "test@test.com",
+  GIT_COMMITTER_NAME: "Test",
+  GIT_COMMITTER_EMAIL: "test@test.com",
+};
+
 function initGitRepo(dir: string): void {
-  execSync("git init", { cwd: dir, stdio: "pipe" });
-  execSync("git config user.email test@test.com", { cwd: dir, stdio: "pipe" });
-  execSync("git config user.name Test", { cwd: dir, stdio: "pipe" });
+  const env = { ...process.env, ...GIT_ENV };
+  execSync("git init", { cwd: dir, stdio: "pipe", env });
+  execSync("git config user.email test@test.com", { cwd: dir, stdio: "pipe", env });
+  execSync("git config user.name Test", { cwd: dir, stdio: "pipe", env });
   writeFileSync(join(dir, "README.md"), "# Test");
-  execSync("git add -A && git commit -m 'initial'", { cwd: dir, stdio: "pipe" });
+  execSync("git add -A && git commit -m 'initial'", { cwd: dir, stdio: "pipe", env });
 }
 
 function getHeadSha(dir: string): string {

@@ -34,10 +34,17 @@ export async function negotiateContract(
     persistSession: false,
   };
 
-  const convLog = createConversationLog(workDir, "contract-negotiation", sprintNumber, undefined, {
-    model: proposalModel,
-    startTime,
-  }, logTimestamp);
+  const convLog = createConversationLog(
+    workDir,
+    "contract-negotiation",
+    sprintNumber,
+    undefined,
+    {
+      model: proposalModel,
+      startTime,
+    },
+    logTimestamp,
+  );
 
   const proposalResult = await processAgentStream(proposalPrompt, proposalOptions, "HARNESS", "quiet", convLog, {
     onResult(result) {
@@ -127,10 +134,14 @@ export function parseContract(text: string, sprintNumber: number, workDir?: stri
   }
 
   // Parse failure — log truncated preview and write diagnostic file
-  const preview = text.length > PARSE_ERROR_PREVIEW_LENGTH
-    ? `${text.slice(0, PARSE_ERROR_PREVIEW_LENGTH)}... (truncated, ${text.length} chars total)`
-    : text;
-  logError("HARNESS", `Failed to parse contract JSON for sprint ${sprintNumber}, creating default. Raw text preview:\n${preview}`);
+  const preview =
+    text.length > PARSE_ERROR_PREVIEW_LENGTH
+      ? `${text.slice(0, PARSE_ERROR_PREVIEW_LENGTH)}... (truncated, ${text.length} chars total)`
+      : text;
+  logError(
+    "HARNESS",
+    `Failed to parse contract JSON for sprint ${sprintNumber}, creating default. Raw text preview:\n${preview}`,
+  );
 
   if (workDir) {
     writeParseErrorDiagnostic(workDir, sprintNumber, text);

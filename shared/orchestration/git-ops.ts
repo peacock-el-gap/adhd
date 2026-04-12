@@ -8,12 +8,6 @@ import { notify } from "../notifications.ts";
 import type { HarnessProgress, ResolvedConfig } from "../types.ts";
 import { UserAbortError } from "./error-handling.ts";
 
-/** Safe wrapper around execSync that always returns a string, even if Bun returns undefined. */
-function gitExec(cmd: string, cwd: string): string {
-  const result = execSync(cmd, { cwd, encoding: "utf-8" });
-  return (result ?? "").toString().trim();
-}
-
 /**
  * Commit all pending .adhd/ files (contracts, progress, feedback, etc.)
  * with a descriptive [adhd] prefix commit message.
@@ -62,12 +56,7 @@ export function commitAdhdMetadata(workDir: string, gDir: string, sprint: number
     if (!existsSync(adhdPath)) return;
 
     // Stage specific metadata paths
-    const pathsToStage = [
-      ".adhd/contracts/",
-      ".adhd/feedback/",
-      ".adhd/progress.json",
-      ".adhd/spec.md",
-    ];
+    const pathsToStage = [".adhd/contracts/", ".adhd/feedback/", ".adhd/progress.json", ".adhd/spec.md"];
     if (includeLogs) {
       pathsToStage.push(".adhd/logs/");
     }
@@ -132,7 +121,10 @@ function unstashAdhdFiles(gDir: string): void {
     execSync("git stash pop", { cwd: gDir, stdio: "pipe" });
     log("HARNESS", "Restored .adhd/ files after reset");
   } catch (err) {
-    logError("HARNESS", `Failed to restore .adhd/ files from stash: ${err instanceof Error ? err.message : String(err)}`);
+    logError(
+      "HARNESS",
+      `Failed to restore .adhd/ files from stash: ${err instanceof Error ? err.message : String(err)}`,
+    );
     // Try to drop the stash entry if pop failed due to conflicts
     try {
       execSync("git checkout --theirs -- .adhd/", { cwd: gDir, stdio: "ignore" });
@@ -143,11 +135,7 @@ function unstashAdhdFiles(gDir: string): void {
   }
 }
 
-export function revertToCheckpoint(
-  workDir: string,
-  isGreenfield: boolean,
-  progress: HarnessProgress,
-): void {
+export function revertToCheckpoint(workDir: string, isGreenfield: boolean, progress: HarnessProgress): void {
   const gDir = gitDir(workDir, isGreenfield);
   const sha = progress.lastPassedCommitSha ?? "";
 
