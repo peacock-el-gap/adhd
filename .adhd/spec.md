@@ -1,234 +1,246 @@
-# ADHD Harness — Phase 1: Deepen (Smarter Within Existing Architecture)
+# ADHD Harness — Phase 1.5: Operational Hardening
 
 ## Product Overview
 
-The ADHD harness is a GAN-inspired adversarial coding tool that decomposes software projects into sprints, generates code via an LLM Generator agent, and validates it via a separate LLM Evaluator agent. This phase deepens the harness's quality, reliability, and developer experience without changing its fundamental four-agent architecture (Planner, Generator, Evaluator, Documenter).
+The ADHD harness is a GAN-inspired adversarial coding tool that uses four specialized agents (Planner, Generator, Evaluator, Documenter) to implement software features through sprint-based decomposition with adversarial validation. It is built for developers who want AI-assisted code generation with rigorous quality gates.
 
-**Who it's for**: Developers using the ADHD harness to generate production-quality software projects via AI agents.
+**Phase 1.5** focuses on operational hardening: fixing correctness bugs that cause phantom sprints, closing observability gaps that destroy forensic evidence, improving resume reliability, and adding developer experience improvements. These fixes were surfaced by dogfooding the harness against its own codebase.
 
-**Scope**: This spec targets the Claude harness (`claude-harness/`) and shared infrastructure (`shared/`). The Codex harness (`codex-harness/`) is frozen and out of scope.
-
-**Core value proposition**: Phase 1 closes the highest-impact quality gaps — cross-sprint behavioral regression, wasted evaluation turns on trivial failures, imprecise retry feedback, code quality blindness — and adds key DX improvements (sprint selection, adaptive specs) that make the harness dramatically more effective on multi-sprint projects.
+**Core value proposition**: A trustworthy, debuggable harness where failures are visible, resume is reliable, and operational metadata is never silently lost.
 
 ## Tech Stack
 
-- **Runtime**: Bun (TypeScript)
-- **LLM SDK**: @anthropic-ai/claude-agent-sdk
-- **Testing**: Bun's built-in test runner (`bun test`)
+- **Runtime**: Bun + TypeScript (ESNext, strict mode)
+- **SDK**: Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`)
+- **Tracing**: Langfuse via OpenTelemetry (`@langfuse/otel`, `@opentelemetry/sdk-node`)
 - **Linting**: Biome
-- **Observability**: Langfuse OTEL tracing (optional)
-- **Data format**: JSON for contracts, feedback, progress; Markdown for specs and docs
+- **Testing**: Bun's built-in test runner (`bun test`)
+- **Architecture**: `shared/` for SDK-independent orchestration, `harness-claude/` for Claude-specific implementations, connected via `AgentRunners` DI interface
+
+### Project Structure
+
+- Source code: `shared/` (orchestration, files, types, logger, etc.) and `harness-claude/` (Claude SDK implementations)
+- Tests: `tests/`
+- Entry point: `harness-claude/index.ts`
+- Metadata directory: `.adhd/` (contracts, feedback, logs, progress, spec)
 
 ## Design Language
 
-This is a CLI tool with no visual UI. Design language applies to terminal output and data formats:
+This is a CLI tool. "Design language" applies to terminal output, log formatting, and file naming conventions.
 
-- **Color palette**: Green for PASS/success, Red for FAIL/errors, Yellow for warnings/gates, Cyan for info headers, White for body text. ANSI escape codes only.
-- **Typography**: Monospace terminal output. Section dividers via `===` lines. Log prefix tags in brackets: `[HARNESS]`, `[GENERATOR]`, `[EVALUATOR]`.
-- **Spacing**: One blank line between log sections. Divider lines between phases. Indented sub-items with 2 spaces.
-- **Data contracts**: All inter-agent communication via JSON files in `.adhd/`. Human-readable with `null, 2` formatting. Contracts, feedback, and progress files are the canonical data exchange format.
-- **Overall identity**: Professional, terse, information-dense. No emoji in logs. Timestamps optional (controlled by TZ_DISPLAY).
+### Terminal Output
+- **Colors**: Cyan (HARNESS), Magenta (PLANNER), Green (GENERATOR), Yellow (EVALUATOR), Blue (DOCUMENTER), Gray (TRACING), Red (errors)
+- **Timestamps**: `HH:MM:SS` in configured timezone, prefix every log line
+- **Dividers**: Visual separators between phases and sprints
+- **Notifications**: Terminal bell (`\x07`) for attention-required moments; optional desktop notifications via `--notify`
 
-## Existing Project Structure
+### File Naming
+- **Log files**: Timestamped prefix `YYYY.MM.DD-HH.MM.SS-` followed by descriptive name (e.g., `2026.04.12-14.30.00-sprint-3-attempt-0-generator.md`)
+- **Contracts**: `sprint-N.json` in `.adhd/contracts/`
+- **Feedback**: `sprint-N-round-M.json` in `.adhd/feedback/`
+- **Diagnostic files**: `sprint-N-contract-parse-error.txt` in `.adhd/logs/`
 
-- **Source code**: `claude-harness/` (main harness), `shared/` (shared utilities, prompts, types), `codex-harness/` (alternative harness)
-- **Tests**: `shared/*.test.ts` and `claude-harness/*.test.ts` (Bun test files colocated with source)
-- **Config**: `package.json`, `tsconfig.json`, `biome.json`
-- **Key files**:
-  - `shared/types.ts` — Core type definitions (HarnessConfig, SprintContract, SprintCriterion, EvalResult, etc.)
-  - `shared/prompts.ts` — System prompts for all agents, contract negotiation prompts
-  - `shared/config.ts` — CLI parsing, config resolution
-  - `shared/files.ts` — All .adhd/ file I/O (contracts, feedback, progress, spec)
-  - `claude-harness/harness.ts` — Main orchestration loop (sprint loop, contract negotiation, retry logic)
-  - `claude-harness/evaluator.ts` — Evaluator agent invocation
-  - `claude-harness/generator.ts` — Generator agent invocation
-  - `claude-harness/planner.ts` — Planner agent invocation
-  - `claude-harness/documenter.ts` — Documenter agent invocation
-  - `shared/skills.ts` — Skills resolution, routing, and injection
+### Commit Message Conventions
+- `[adhd]` prefix for harness metadata commits
+- `[auto-commit]` for fallback generator commits
+- `[docs]` for documenter commits
 
 ## Feature List
 
-### Feature 1.1: BDD Regression Accumulation Across Sprints
+### Feature: Sprint Counting Regex Fix
+- **User story**: As a developer, I want the harness to correctly count sprints from my spec so that phantom sprints with no spec guidance are never executed.
+- **Description**: The regex that counts `Sprint` headings matches inline prose references (e.g., sprint numbers mentioned in acceptance scenarios or quoted text). This inflates the sprint count, causing the harness to run phantom sprints where the Generator invents content. Fix by anchoring the regex to line start with `^` and multiline flag. Also update the spec-format skill to discourage heading-level sprint references in prose.
+- **Sprint**: 1
+- **Acceptance scenarios**:
+  - **Scenario: Only line-start headings are counted**
+    - Given a spec containing `Sprint 1`, `Sprint 2`, and prose text mentioning `Sprint 3` (even with markdown heading level 2 `##`) inside a blockquote or inline context
+    - When the harness counts sprints from the spec
+    - Then the total sprint count is 2
+  - **Scenario: Standard multi-sprint spec**
+    - Given a spec with four `Sprint N` headings (markdown level 2 `##`) each starting at column 1
+    - When the harness counts sprints
+    - Then the total sprint count is 4
+  - **Scenario: Sprint references in acceptance criteria**
+    - Given a spec where acceptance criteria text contains "builds on Sprint 1 features" or backtick-quoted sprint references
+    - When the harness counts sprints
+    - Then those inline references are not counted as sprint headings
 
-**User Story**: As a developer, I want the Evaluator to check all behavioral criteria from previous sprints — not just the current sprint's — so that regressions in previously-passing behavior are caught immediately.
+### Feature: Timestamp Log Filenames
+- **User story**: As a developer debugging a failed run, I want log files to have timestamp prefixes so that resume and retry cycles do not overwrite previous logs and I can reconstruct the chronological sequence of events.
+- **Description**: Add `YYYY.MM.DD-HH.MM.SS` timestamp prefix to all conversation log filenames. Prevents overwrites on resume/retry, guarantees chronological ordering in `ls`, and enables forensic analysis. Align Langfuse trace span names to the same timestamped format for cross-referencing.
+- **Sprint**: 1
+- **Acceptance scenarios**:
+  - **Scenario: Log files include timestamps**
+    - Given the generator runs for sprint 2, attempt 0
+    - When the conversation log is finalized
+    - Then the filename matches the pattern `YYYY.MM.DD-HH.MM.SS-sprint-2-attempt-0-generator.md`
+  - **Scenario: Resume does not overwrite prior logs**
+    - Given a prior run created `2026.04.12-10.00.00-sprint-2-attempt-0-generator.md`
+    - When the harness resumes and re-runs sprint 2
+    - Then a new log file is created with a different timestamp prefix and the original file remains intact
+  - **Scenario: Contract negotiation logs are timestamped**
+    - Given contract negotiation runs for sprint 3
+    - When the conversation log is finalized
+    - Then the filename matches `YYYY.MM.DD-HH.MM.SS-sprint-3-contract-negotiation.md`
 
-**Description**: After each sprint passes, its behavioral contract criteria are added to a cumulative regression set. When evaluating subsequent sprints, the Evaluator receives both the current sprint's contract AND all accumulated behavioral criteria from previous sprints. A new `type` field on criteria (`"behavioral"` vs `"implementation"`) controls which criteria accumulate. The contract negotiation prompts instruct the Generator/Evaluator to classify each criterion. The Evaluator must pass ALL current criteria AND all accumulated behavioral regression criteria for the sprint to pass.
+### Feature: Resume Contract Skip
+- **User story**: As a developer resuming a run, I want the harness to reuse existing sprint contracts instead of re-negotiating them, saving time and LLM cost.
+- **Description**: On `--resume`, before negotiating a contract for sprint N, check if `.adhd/contracts/sprint-N.json` already exists on disk. If it does, load and reuse it (same logic as `--sprint N` mode). Only negotiate if no contract file exists.
+- **Sprint**: 2
+- **Acceptance scenarios**:
+  - **Scenario: Existing contract is reused on resume**
+    - Given a prior run wrote `.adhd/contracts/sprint-3.json` before being interrupted
+    - When the harness resumes with `--resume` and reaches sprint 3
+    - Then the existing contract is loaded from disk without invoking contract negotiation agents
+  - **Scenario: Missing contract triggers negotiation on resume**
+    - Given a prior run was interrupted before writing `.adhd/contracts/sprint-3.json`
+    - When the harness resumes with `--resume` and reaches sprint 3
+    - Then contract negotiation runs normally
+  - **Scenario: Loaded contract is logged**
+    - Given an existing contract for sprint 2 exists on disk
+    - When the harness loads it during resume
+    - Then a log message indicates the contract was loaded from disk with its criteria count
 
-**Sprint**: 1
+### Feature: Contract Parse Error Logging
+- **User story**: As a developer, I want to see diagnostic output when contract JSON parsing fails so that I can understand why a sprint ran against meaningless default criteria.
+- **Description**: When `parseContract` fails to extract valid JSON from the evaluator's contract review response, log the raw unparseable text to the console (truncated to a reasonable length) and write the full text to `.adhd/logs/sprint-N-contract-parse-error.txt`. This provides forensic evidence instead of silent fallback to generic criteria.
+- **Sprint**: 2
+- **Acceptance scenarios**:
+  - **Scenario: Parse failure writes diagnostic file**
+    - Given the evaluator returns a contract review response that contains no valid JSON
+    - When `parseContract` falls back to the default contract
+    - Then a file `.adhd/logs/sprint-N-contract-parse-error.txt` is created containing the full raw text
+  - **Scenario: Parse failure logs truncated text to console**
+    - Given the evaluator returns unparseable text of 2000 characters
+    - When `parseContract` falls back to the default contract
+    - Then a warning is logged to the console containing a truncated preview of the raw text
+  - **Scenario: Successful parse does not create diagnostic file**
+    - Given the evaluator returns valid contract JSON
+    - When `parseContract` successfully extracts the contract
+    - Then no diagnostic file is created
 
-**Acceptance Scenarios**:
+### Feature: `.adhd/` Artifact Commits and Deterministic Revert
+- **User story**: As a developer, I want the harness to commit `.adhd/` artifacts before invoking the Generator so that the working tree is clean and checkpoint rollback is deterministic.
+- **Description**: Two connected improvements. First: commit `.adhd/` artifacts (contracts, progress, feedback) with a `[adhd]` commit message before each Generator invocation, ensuring the Generator starts with a clean working tree. Second: replace `git revert --no-commit` in `revertToCheckpoint` with `git reset --hard <sha>` plus stash/unstash of `.adhd/` files. This eliminates the dirty-tree revert failure mode.
+- **Sprint**: 3
+- **Acceptance scenarios**:
+  - **Scenario: Artifacts committed before Generator**
+    - Given the harness has written a contract to `.adhd/contracts/sprint-2.json`
+    - When the Generator is about to be invoked for sprint 2
+    - Then `.adhd/` files are committed with a `[adhd]` prefix commit message before the Generator runs
+  - **Scenario: Checkpoint revert uses reset**
+    - Given the harness needs to revert to a checkpoint SHA during resume
+    - When `revertToCheckpoint` executes
+    - Then `git reset --hard` is used instead of `git revert --no-commit`
+  - **Scenario: `.adhd/` files survive revert**
+    - Given the harness has written `.adhd/progress.json` and `.adhd/contracts/sprint-3.json` after the checkpoint
+    - When `revertToCheckpoint` resets to the checkpoint SHA
+    - Then `.adhd/progress.json` and `.adhd/contracts/sprint-3.json` are preserved (stashed and restored)
+  - **Scenario: Clean working tree for Generator**
+    - Given `.adhd/` artifacts have been committed
+    - When the Generator starts its session
+    - Then `git status --porcelain` shows no uncommitted `.adhd/` files
 
-- **Given** a contract criterion has `"type": "behavioral"`, **When** its sprint passes, **Then** the criterion is added to the accumulated regression set stored in `.adhd/regression.json`.
-- **Given** accumulated regression criteria exist from sprints 1 and 2, **When** sprint 3 is evaluated, **Then** the Evaluator's prompt includes all accumulated behavioral criteria alongside sprint 3's own contract criteria.
-- **Given** a criterion has `"type": "implementation"` (or no type field), **When** its sprint passes, **Then** it is NOT added to the regression set.
-- **Given** the `--no-bdd` flag is set, **When** a sprint is evaluated, **Then** regression accumulation is skipped entirely (no regression criteria injected).
-- **Given** the contract negotiation prompt, **When** the Generator proposes criteria, **Then** each criterion includes a `"type"` field set to either `"behavioral"` or `"implementation"`.
+### Feature: Progress "documenting" Status
+- **User story**: As a developer monitoring a run, I want `progress.json` to show `"documenting"` status while the Documenter agent runs so that the progress file accurately reflects what the harness is doing.
+- **Description**: Add `"documenting"` to the `HarnessProgress.status` union type. Set status to `"documenting"` before the Documenter agent starts. Set to `"complete"` only after the Documenter finishes (or is skipped).
+- **Sprint**: 3
+- **Acceptance scenarios**:
+  - **Scenario: Status is "documenting" during documentation**
+    - Given all sprints have passed
+    - When the Documenter agent is invoked
+    - Then `progress.json` contains `"status": "documenting"` before the Documenter completes
+  - **Scenario: Status transitions to "complete" after documentation**
+    - Given the Documenter agent finishes successfully
+    - When the final progress is written
+    - Then `progress.json` contains `"status": "complete"`
+  - **Scenario: Status type includes "documenting"**
+    - Given the `HarnessProgress` type definition
+    - When the type is inspected
+    - Then `"documenting"` is a valid value in the status union
 
----
+### Feature: HITL Notifications
+- **User story**: As a developer who steps away during long harness runs, I want terminal bell and optional desktop notifications at interactive gates so that I don't miss time-sensitive decisions.
+- **Description**: Add terminal bell character (`\x07`) output at all HITL gates and error conditions. Add a `--notify` CLI flag that sends desktop notifications via `notify-send` (Linux) or `osascript` (macOS) when the terminal may be backgrounded.
+- **Sprint**: 4
+- **Acceptance scenarios**:
+  - **Scenario: Terminal bell on HITL gate**
+    - Given the harness reaches the spec approval gate
+    - When the gate prompt is displayed
+    - Then a terminal bell character (`\x07`) is written to stdout
+  - **Scenario: Desktop notification with --notify flag**
+    - Given the harness is run with `--notify`
+    - When a HITL gate activates
+    - Then a desktop notification is sent using the platform-appropriate command
+  - **Scenario: No desktop notification without --notify**
+    - Given the harness is run without `--notify`
+    - When a HITL gate activates
+    - Then no desktop notification command is executed (only terminal bell)
+  - **Scenario: Notification on error conditions**
+    - Given the harness encounters a fatal error
+    - When the error is displayed
+    - Then a terminal bell is emitted
 
-### Feature 1.2: Static Analysis Soft Gate
-
-**User Story**: As a developer, I want lint and type-check results automatically injected into the Evaluator's context so that trivial code quality issues are surfaced without wasting a full evaluation turn.
-
-**Description**: Between the Generator's output and the Evaluator's invocation, the harness detects and runs the project's lint/typecheck commands (from package.json scripts, common conventions, or a configurable override). The results are injected as supplementary context into the Evaluator's prompt. This is a "soft gate" — lint failures don't consume a retry attempt; they enrich the Evaluator's signal. An opt-in `--lint-gate` flag enables "hard gate" mode where lint failure skips the Evaluator and counts as a failed attempt directly.
-
-**Sprint**: 1
-
-**Acceptance Scenarios**:
-
-- **Given** a project with a `lint` script in package.json, **When** the Generator completes and before the Evaluator runs, **Then** the harness executes the lint command and injects its stdout/stderr into the Evaluator's prompt under a "## Static Analysis Results" section.
-- **Given** a project with a `typecheck` script in package.json, **When** the Generator completes, **Then** the harness executes the typecheck command and includes the results alongside lint output in the Evaluator context.
-- **Given** no lint or typecheck commands are detected, **When** the Generator completes, **Then** the Evaluator runs normally with no static analysis section (no error, graceful skip).
-- **Given** the `--lint-gate` flag is set and lint fails, **When** the harness would normally invoke the Evaluator, **Then** the Evaluator is skipped, the attempt is marked as failed, and lint output is injected as feedback for the Generator's retry.
-- **Given** static analysis output exceeds 4K characters, **When** injecting into the Evaluator prompt, **Then** the output is truncated with a warning message indicating truncation.
-
----
-
-### Feature 1.3: Diff-Aware Evaluation on Retries
-
-**User Story**: As a developer, I want the Evaluator to see what changed between retry attempts so that feedback is sharper and focused on the Generator's recent modifications.
-
-**Description**: On retry attempts (attempt > 0), the harness computes `git diff` between the previous attempt's commit and the current HEAD. This diff is injected into the Evaluator's prompt as supplementary context. The Evaluator still checks all criteria but can use the diff to focus feedback. Diff output is capped at a configurable token budget (default 8K characters) with truncation warning.
-
-**Sprint**: 2
-
-**Acceptance Scenarios**:
-
-- **Given** a sprint is on retry attempt 1 and the Generator has committed new changes, **When** the Evaluator is invoked, **Then** a `git diff <previous-sha>..<current-sha>` is included in the Evaluator's prompt under a "## Changes Since Last Attempt" section.
-- **Given** a sprint is on attempt 0 (first attempt), **When** the Evaluator is invoked, **Then** no diff section is included in the prompt.
-- **Given** the diff output exceeds 8K characters, **When** injecting into the Evaluator prompt, **Then** the output is truncated and a warning like "[diff truncated — showing first 8000 chars of N total]" is appended.
-- **Given** `git diff` fails (no git repo, no previous SHA), **When** the harness tries to compute the diff, **Then** evaluation proceeds normally without the diff section (graceful degradation).
-
----
-
-### Feature 1.4: Quality Criteria in Contracts
-
-**User Story**: As a developer, I want sprint contracts to include code quality criteria (naming, duplication, complexity) alongside behavioral criteria so that the Evaluator assesses craft, not just functionality.
-
-**Description**: The contract negotiation prompts are extended to instruct the Generator to include quality-focused criteria covering naming conventions, code duplication, error handling patterns, and maintainability. These are tagged with `"type": "implementation"` so they don't accumulate across sprints (only behavioral criteria accumulate per Feature 1.1). The Evaluator prompt is updated to assess these quality criteria with the same rigor as functional ones.
-
-**Sprint**: 2
-
-**Acceptance Scenarios**:
-
-- **Given** the contract negotiation Generator prompt, **When** it instructs criteria generation, **Then** it explicitly requests criteria covering naming, duplication, error handling, and maintainability in addition to functional criteria.
-- **Given** a proposed contract, **When** the Evaluator reviews it during negotiation, **Then** it checks that at least one quality-focused criterion is present and rejects contracts that are purely functional.
-- **Given** a quality criterion like "Consistent naming conventions", **When** it is classified, **Then** its `"type"` field is `"implementation"` (not `"behavioral"`).
-- **Given** a contract with quality criteria, **When** the Evaluator scores the sprint, **Then** quality criteria are scored with the same threshold and rigor as behavioral criteria.
-
----
-
-### Feature 1.5: Sprint Selection (`--sprint N`)
-
-**User Story**: As a developer, I want to re-run a specific sprint without running all previous sprints so that I can iterate quickly on a single sprint that needs attention.
-
-**Description**: A new `--sprint N` CLI flag allows targeting a specific sprint. The harness loads the existing spec from `.adhd/spec.md`, skips all sprints before N, and runs the build-evaluate loop for sprint N only. If a contract for sprint N already exists, it is reused; otherwise, contract negotiation runs for sprint N. The flag requires an existing spec (errors if none found). A warning is emitted if no checkpoint exists for sprint N-1.
-
-**Sprint**: 3
-
-**Acceptance Scenarios**:
-
-- **Given** a spec exists in `.adhd/spec.md` and `--sprint 3` is passed, **When** the harness starts, **Then** sprints 1 and 2 are skipped entirely and the build-evaluate loop runs for sprint 3 only.
-- **Given** `--sprint 3` is passed and `.adhd/contracts/sprint-3.json` exists, **When** the sprint begins, **Then** the existing contract is loaded and contract negotiation is skipped.
-- **Given** `--sprint 3` is passed and no contract exists for sprint 3, **When** the sprint begins, **Then** contract negotiation runs for sprint 3.
-- **Given** `--sprint 3` is passed but no `.adhd/spec.md` exists, **When** the harness starts, **Then** it exits with a clear error message: "No spec found. Run the planner first or provide a spec."
-- **Given** `--sprint 3` is passed but no checkpoint exists for sprint 2, **When** the harness starts, **Then** a warning is logged: "No checkpoint for sprint 2. Ensure the codebase is in the expected state." but execution proceeds.
-- **Given** `--sprint N` and `--resume` are both passed, **When** parsing CLI flags, **Then** the harness errors with "Cannot use --sprint and --resume together."
-
----
-
-### Feature 1.6: Progressive Spec Refinement (Guarded)
-
-**User Story**: As a developer, I want the spec to adapt after each sprint based on what was actually built, so that remaining sprints stay aligned with reality instead of following assumptions that proved wrong.
-
-**Description**: After each passing sprint (before the next sprint begins), the Planner re-reads the current spec and the actual codebase state, then proposes adjustments to not-yet-started sprints. Completed sprints are frozen and cannot be modified. Changes are shown to the user via a gate (similar to spec approval) before being applied. A diff of the spec changes is logged. Accumulated BDD regression criteria from completed sprints remain unchanged regardless of spec edits. This feature is opt-in via `--refine-spec` flag.
-
-**Sprint**: 4
-
-**Acceptance Scenarios**:
-
-- **Given** `--refine-spec` is set and sprint 2 of 5 just passed, **When** the harness transitions to sprint 3, **Then** the Planner is invoked with the current spec and codebase to propose spec adjustments for sprints 3-5.
-- **Given** the Planner proposes spec changes, **When** the refinement gate is shown, **Then** the user sees a diff of changes and can Accept, Reject, or Edit the revised spec.
-- **Given** the Planner proposes changes, **When** the changes modify content under "## Sprint 1" or "## Sprint 2" (already completed), **Then** those changes are rejected/stripped and only changes to sprints 3+ are applied.
-- **Given** `--refine-spec` is NOT set, **When** any sprint passes, **Then** no Planner re-invocation occurs (existing behavior preserved).
-- **Given** spec refinement occurs after sprint 2, **When** the accumulated BDD regression criteria from sprints 1-2 are checked, **Then** they remain unchanged regardless of what the spec refinement modified.
-- **Given** `--refine-spec` and `--no-interactive` are both set, **When** the Planner proposes changes, **Then** changes are auto-accepted (no gate shown) but the diff is still logged.
-- **Given** spec refinement adds a new sprint (e.g., sprint 6), **When** the sprint count is recalculated, **Then** the new total is capped by `--max-sprints` and the loop continues with the updated count.
-
----
+### Feature: `--commit-adhd` and `--commit-adhd-logs` Flags
+- **User story**: As a developer, I want an opt-in way to version-control `.adhd/` artifacts in git so that I have a structured audit trail of contracts, progress, and feedback across sprints.
+- **Description**: Add `--commit-adhd` flag that commits `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, and `.adhd/spec.md` after each sprint with message `[adhd] Sprint N: contract + metadata`. Add `--commit-adhd-logs` flag that additionally commits `.adhd/logs/` (implies `--commit-adhd`). Both are opt-in; the default behavior (no commits) is unchanged.
+- **Sprint**: 4
+- **Acceptance scenarios**:
+  - **Scenario: --commit-adhd commits metadata after sprint**
+    - Given the harness is run with `--commit-adhd`
+    - When sprint 2 passes evaluation
+    - Then a git commit is created containing `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, and `.adhd/spec.md` with message `[adhd] Sprint 2: contract + metadata`
+  - **Scenario: --commit-adhd-logs includes logs**
+    - Given the harness is run with `--commit-adhd-logs`
+    - When sprint 2 passes evaluation
+    - Then the commit also includes `.adhd/logs/` files
+  - **Scenario: --commit-adhd-logs implies --commit-adhd**
+    - Given the harness is run with `--commit-adhd-logs` but without `--commit-adhd`
+    - When the config is resolved
+    - Then `commitAdhd` is true
+  - **Scenario: Default behavior unchanged**
+    - Given the harness is run without `--commit-adhd`
+    - When sprints complete
+    - Then no `[adhd]` commits are created for metadata files
 
 ## Sprint Plan
 
 ## Sprint 1
 
-**Theme: Regression Detection & Static Analysis Foundation**
+**Theme: Fix Critical Correctness Bug and Log Preservation**
 
-Build the two features that improve evaluation quality from day one: BDD regression accumulation prevents cross-sprint behavioral breakage, and static analysis injection gives the Evaluator richer signal for free.
+The highest-ROI fixes: eliminate phantom sprints caused by the regex false-positive bug, and prevent log file overwrites that destroy forensic evidence.
 
-**Features**:
-- Feature 1.1: BDD Regression Accumulation Across Sprints
-- Feature 1.2: Static Analysis Soft Gate
-
-**Key deliverables**:
-- New `type` field on `SprintCriterion` interface (`"behavioral" | "implementation"`)
-- Updated contract negotiation prompts to classify criteria by type
-- Regression accumulation logic: read previous contracts, filter behavioral criteria, write `.adhd/regression.json`
-- Regression criteria injection into Evaluator prompt
-- Static analysis command detection (package.json scripts, conventions)
-- Static analysis execution and result injection into Evaluator prompt
-- `--lint-gate` CLI flag and hard-gate mode
-- Tests for regression accumulation, static analysis detection, and prompt injection
+Features:
+- Sprint Counting Regex Fix
+- Timestamp Log Filenames
 
 ## Sprint 2
 
-**Theme: Sharper Feedback & Quality Awareness**
+**Theme: Resume Reliability and Parse Error Observability**
 
-Improve evaluation precision on retries via diff-aware context, and extend contracts to cover code quality — not just functionality.
+Make resume workflows faster and cheaper by skipping redundant contract negotiation, and surface contract parse failures instead of silently falling back to meaningless defaults.
 
-**Features**:
-- Feature 1.3: Diff-Aware Evaluation on Retries
-- Feature 1.4: Quality Criteria in Contracts
-
-**Key deliverables**:
-- Git diff computation between retry attempts (SHA tracking per attempt)
-- Diff injection into Evaluator prompt with truncation
-- Extended contract negotiation prompts for quality criteria
-- Updated Evaluator negotiation prompt to enforce quality criteria presence
-- Tests for diff computation, truncation, and quality criteria negotiation
+Features:
+- Resume Contract Skip
+- Contract Parse Error Logging
 
 ## Sprint 3
 
-**Theme: Developer Experience — Targeted Sprint Execution**
+**Theme: Clean Working Tree and Deterministic Rollback**
 
-Add the ability to target a specific sprint for re-execution, dramatically reducing iteration time during development.
+The largest single change: commit `.adhd/` artifacts before Generator invocation and replace the fragile `git revert` mechanism with `git reset --hard` plus stash/unstash. Also add the `"documenting"` progress status.
 
-**Features**:
-- Feature 1.5: Sprint Selection (`--sprint N`)
-
-**Key deliverables**:
-- New `--sprint` CLI flag with validation
-- Sprint-specific entry path in harness orchestration (skip planning, load existing spec/contracts)
-- Contract reuse vs fresh negotiation logic
-- Mutual exclusion with `--resume`
-- Warning for missing prior checkpoints
-- Tests for CLI parsing, sprint selection logic, and edge cases
+Features:
+- `.adhd/` Artifact Commits and Deterministic Revert
+- Progress "documenting" Status
 
 ## Sprint 4
 
-**Theme: Adaptive Specifications**
+**Theme: Developer Experience**
 
-Enable the spec to evolve after each sprint while maintaining behavioral guarantees through accumulated regression criteria.
+Quality-of-life improvements: notifications for HITL gates and opt-in git commits for `.adhd/` artifacts.
 
-**Features**:
-- Feature 1.6: Progressive Spec Refinement (Guarded)
-
-**Key deliverables**:
-- `--refine-spec` CLI flag
-- Post-sprint Planner re-invocation with codebase context
-- Completed sprint freezing logic (prevent edits to past sprints)
-- Spec diff computation and display
-- User gate for refinement approval
-- Integration with regression accumulation (frozen behavioral criteria)
-- Auto-accept mode for non-interactive runs
-- Sprint count recalculation after refinement
-- Tests for spec freezing, diff computation, gate behavior, and regression criteria preservation
+Features:
+- HITL Notifications
+- `--commit-adhd` / `--commit-adhd-logs` Flags

@@ -1,17 +1,33 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileTimestamp } from "./logger.ts";
 
 export interface ConversationLogger {
   logAssistantText(text: string): void;
   logToolUse(name: string, input: unknown): void;
   logToolResult(output: string): void;
   finalize(duration: number): Promise<void>;
+  /** The timestamped identifier used in the log filename and span names. */
+  readonly timestampedName: string;
 }
 
 interface LogEntry {
   type: "text" | "tool_use" | "tool_result";
   content: string;
   toolName?: string;
+}
+
+/**
+ * Build the descriptive part of a log filename (without timestamp prefix).
+ */
+function buildLogBaseName(agentRole: string, sprint?: number, attempt?: number): string {
+  if (sprint != null && attempt != null) {
+    return `sprint-${sprint}-attempt-${attempt}-${agentRole.toLowerCase()}`;
+  }
+  if (sprint != null) {
+    return `sprint-${sprint}-${agentRole.toLowerCase().replace(/ /g, "-")}`;
+  }
+  return agentRole.toLowerCase();
 }
 
 export function createConversationLog(
@@ -22,8 +38,15 @@ export function createConversationLog(
   metadata?: { model: string; startTime: Date },
 ): ConversationLogger {
   const entries: LogEntry[] = [];
+  const ts = fileTimestamp();
+  const baseName = buildLogBaseName(agentRole, sprint, attempt);
+  const timestampedName = `${ts}-${baseName}`;
 
   return {
+    get timestampedName(): string {
+      return timestampedName;
+    },
+
     logAssistantText(text: string): void {
       if (text.trim()) {
         entries.push({ type: "text", content: text });
@@ -145,16 +168,7 @@ export function createConversationLog(
         }
       }
 
-      // Determine filename
-      let filename: string;
-      if (sprint != null && attempt != null) {
-        filename = `sprint-${sprint}-attempt-${attempt}-${agentRole.toLowerCase()}.md`;
-      } else if (sprint != null) {
-        filename = `sprint-${sprint}-${agentRole.toLowerCase().replace(/ /g, "-")}.md`;
-      } else {
-        filename = `${agentRole.toLowerCase()}.md`;
-      }
-
+      const filename = `${timestampedName}.md`;
       const logPath = join(workDir, ".adhd", "logs", filename);
       await writeFile(logPath, lines.join("\n"), "utf-8");
     },

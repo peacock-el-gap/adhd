@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { validateDocumentation } from "../doc-validation.ts";
 import { gitDir, harnessDir, writeProgress } from "../files.ts";
+import { countSprintHeadings } from "../sprint-count.ts";
 import { promptGate } from "../interaction.ts";
-import { log, logError } from "../logger.ts";
+import { fileTimestamp, log, logError } from "../logger.ts";
 import { accumulateRegressionCriteria } from "../regression.ts";
 import { UserAbortError } from "./error-handling.ts";
 import { performSpecRefinement } from "./spec-refinement.ts";
@@ -92,8 +93,8 @@ export async function handleSprintSuccess(ctx: SprintSuccessContext): Promise<Sp
       execSync(`${config.editor} ${JSON.stringify(specPath)}`, { stdio: "inherit" });
       spec = readFileSync(specPath, "utf-8");
       // Re-count sprints
-      const newMatches = spec.match(/##\s*Sprint\s+\d+/gi);
-      if (newMatches) totalSprints = Math.min(newMatches.length, config.maxSprints);
+      const count = countSprintHeadings(spec);
+      if (count > 0) totalSprints = Math.min(count, config.maxSprints);
     }
   }
 
@@ -105,7 +106,7 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
   const { isGreenfield } = config;
   const documenterModel = config.resolvedModelDocumenter;
   const gDir = gitDir(config.workDir, isGreenfield);
-  const documenterSpan = parentSpan.startChild("documenter", { model: documenterModel });
+  const documenterSpan = parentSpan.startChild(`${fileTimestamp()}-documenter`, { model: documenterModel });
   try {
     // Capture HEAD SHA before documenter runs
     let beforeDocsSha = "";

@@ -13,7 +13,7 @@ import {
   writeSpec,
 } from "../files.ts";
 import { promptGate } from "../interaction.ts";
-import { log, logDebug, logDivider, logError, setDisplayTimezone } from "../logger.ts";
+import { fileTimestamp, log, logDebug, logDivider, logError, setDisplayTimezone } from "../logger.ts";
 import { resolveAllAgentSkills } from "../skills.ts";
 import { countSprintHeadings } from "../sprint-count.ts";
 import type { Tracer } from "../tracing.ts";
@@ -94,7 +94,7 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
   };
   await writeProgress(config.workDir, progress);
 
-  const harnessSpan = tracer.startSpan(`harness-run-${new Date().toISOString().replace(/[:.]/g, "-")}`, {
+  const harnessSpan = tracer.startSpan(`${fileTimestamp()}-harness-run`, {
     model,
     workDir: config.workDir,
     isGreenfield,
@@ -105,7 +105,7 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
   return harnessSpan.run(async () => {
     try {
       logDebug("HARNESS", "Calling runPlanner...");
-      const plannerSpan = harnessSpan.startChild("planner", { model: config.resolvedModelPlanner });
+      const plannerSpan = harnessSpan.startChild(`${fileTimestamp()}-planner`, { model: config.resolvedModelPlanner });
       const spec = await plannerSpan.run(() => agents.runPlanner(config, undefined, usage, skills.planner));
       plannerSpan.end();
       logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
@@ -194,7 +194,7 @@ async function resumeHarness(
     if (!progress.docsGenerated && !config.noDocs) {
       log("HARNESS", "All sprints complete. Running Documenter phase only...");
 
-      const harnessSpan = tracer.startSpan(`harness-resume-docs-${new Date().toISOString().replace(/[:.]/g, "-")}`, {
+      const harnessSpan = tracer.startSpan(`${fileTimestamp()}-harness-resume-docs`, {
         model,
         workDir: config.workDir,
         isGreenfield,
@@ -273,7 +273,7 @@ async function resumeHarness(
   }
 
   const startSprint = progress.completedSprints + 1;
-  const harnessSpan = tracer.startSpan(`harness-resume-${new Date().toISOString().replace(/[:.]/g, "-")}`, {
+  const harnessSpan = tracer.startSpan(`${fileTimestamp()}-harness-resume`, {
     model,
     workDir: config.workDir,
     isGreenfield,
@@ -372,7 +372,7 @@ async function sprintSelectionHarness(
     // No existing progress — fine
   }
 
-  const harnessSpan = tracer.startSpan(`harness-sprint-${sprintN}-${new Date().toISOString().replace(/[:.]/g, "-")}`, {
+  const harnessSpan = tracer.startSpan(`${fileTimestamp()}-harness-sprint-${sprintN}`, {
     model,
     workDir: config.workDir,
     isGreenfield,
@@ -414,7 +414,7 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
     progress.retryCount = 0;
     await writeProgress(config.workDir, progress);
 
-    const sprintSpan = parentSpan.startChild(`sprint-${sprint}`, { sprintNumber: sprint });
+    const sprintSpan = parentSpan.startChild(`${fileTimestamp()}-sprint-${sprint}`, { sprintNumber: sprint });
 
     // Try to reuse existing contract (especially in --sprint mode)
     let contract: SprintContract | undefined;
@@ -432,7 +432,7 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
 
     if (!contract) {
       log("HARNESS", "Negotiating sprint contract...");
-      const negotiationSpan = sprintSpan.startChild("contract-negotiation", { sprint });
+      const negotiationSpan = sprintSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-contract-negotiation`, { sprint });
       try {
         contract = await negotiationSpan.run(() =>
           withTransientRetry(

@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { computeDiffSection } from "../diff.ts";
 import { writeFeedback, writeProgress } from "../files.ts";
 import { promptGate } from "../interaction.ts";
-import { log, logError, shouldLog } from "../logger.ts";
+import { fileTimestamp, log, logError, shouldLog } from "../logger.ts";
 import { buildRegressionSection, readRegressionCriteria } from "../regression.ts";
 import type { CommitSource, EvalResult } from "../types.ts";
 import { handleFatalError, withTransientRetry } from "./error-handling.ts";
@@ -19,7 +19,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
 
   for (let retry = 0; retry <= config.maxRetriesPerSprint; retry++) {
     attempts = retry + 1;
-    const attemptSpan = sprintSpan.startChild(`attempt-${retry}`, { attempt: retry });
+    const attemptSpan = sprintSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-attempt-${retry}`, { attempt: retry });
 
     // Capture SHA before generator runs
     let beforeSha = "";
@@ -34,7 +34,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
     progress.retryCount = retry;
     await writeProgress(config.workDir, progress);
 
-    const generatorSpan = attemptSpan.startChild("generator", {
+    const generatorSpan = attemptSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-attempt-${retry}-generator`, {
       model: config.resolvedModelGenerator,
       sprint,
       attempt: retry,
@@ -144,7 +144,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
       supplementaryContext += `\n\n## Static Analysis Results\n\n${staticAnalysisResult.output}`;
     }
 
-    const evaluatorSpan = attemptSpan.startChild("evaluator", {
+    const evaluatorSpan = attemptSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-attempt-${retry}-evaluator`, {
       model: config.resolvedModelEvaluator,
       sprint,
       attempt: retry,

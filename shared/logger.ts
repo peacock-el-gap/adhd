@@ -28,9 +28,13 @@ export function setLogLevel(level: LogLevel): void {
   configuredLogLevel = level;
 }
 
+function getResolvedTimezone(): string {
+  return configuredTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 function timestamp(): string {
   const now = new Date();
-  const tz = configuredTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz = getResolvedTimezone();
   try {
     // Format as HH:MM:SS in the configured timezone
     return now.toLocaleString("en-GB", {
@@ -44,6 +48,45 @@ function timestamp(): string {
     // Fallback to UTC if timezone is invalid
     return now.toISOString().slice(11, 19);
   }
+}
+
+/**
+ * Generate a timestamp prefix for log filenames in YYYY.MM.DD-HH.MM.SS format.
+ * Uses the configured display timezone (same as terminal output timestamps).
+ * Falls back gracefully to UTC if the configured timezone is invalid.
+ */
+export function fileTimestamp(date?: Date): string {
+  const now = date ?? new Date();
+  const tz = getResolvedTimezone();
+  try {
+    const parts = now.toLocaleString("en-GB", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+    // en-GB format: "DD/MM/YYYY, HH:MM:SS"
+    const match = parts.match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2}):(\d{2})/);
+    if (match) {
+      const [, dd, mm, yyyy, hh, min, ss] = match;
+      return `${yyyy}.${mm}.${dd}-${hh}.${min}.${ss}`;
+    }
+    // Fallback: use ISO string
+    return formatIsoAsFileTimestamp(now);
+  } catch (err) {
+    logDebug("HARNESS", `Invalid timezone "${tz}", falling back to UTC for file timestamp`);
+    return formatIsoAsFileTimestamp(now);
+  }
+}
+
+function formatIsoAsFileTimestamp(date: Date): string {
+  const iso = date.toISOString();
+  // ISO: "2026-04-12T14:30:00.000Z"
+  return iso.slice(0, 10).replace(/-/g, ".") + "-" + iso.slice(11, 19).replace(/:/g, ".");
 }
 
 function formatMessage(role: AgentRole, timestampColor: string, message: string): string {
