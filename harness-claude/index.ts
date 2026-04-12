@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { loadHarnessEnv, parseCli, printHelp, resolveConfig } from "../shared/config.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone, setLogLevel } from "../shared/logger.ts";
+import { notify } from "../shared/notifications.ts";
 import { runHarness } from "../shared/orchestration/harness.ts";
 import type { AgentRunners } from "../shared/orchestration/types.ts";
 import { negotiateContract } from "./contract.ts";
@@ -10,6 +11,7 @@ import { ensureGeneratorCommit, runGenerator } from "./generator.ts";
 import { runPlanner } from "./planner.ts";
 import { initTracing } from "./tracing-claude.ts";
 
+let notifyEnabled = false;
 try {
   const cli = parseCli();
 
@@ -23,6 +25,7 @@ try {
   loadHarnessEnv(projectDir);
 
   const config = resolveConfig(cli);
+  notifyEnabled = config.notify;
 
   // Configure logger early so debug output works from here on
   setLogLevel(config.logLevel);
@@ -84,7 +87,9 @@ try {
     // User chose to abort at a gate — clean exit, not an error
     process.exit(0);
   }
-  logError("HARNESS", `Fatal error: ${error instanceof Error ? error.message : String(error)}`);
+  const fatalMsg = error instanceof Error ? error.message : String(error);
+  logError("HARNESS", `Fatal error: ${fatalMsg}`);
+  notify(`Fatal error: ${fatalMsg.slice(0, 100)}`, { notify: notifyEnabled });
   // Exit code 2 for infrastructure errors (distinguishes from test failure = 1)
   process.exit(error instanceof Error && error.name === "HarnessFatalError" ? 2 : 1);
 }

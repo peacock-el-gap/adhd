@@ -34,6 +34,9 @@ export interface HarnessConfig {
   lintGate?: boolean;
   sprint?: number;
   refineSpec?: boolean;
+  notify?: boolean;
+  commitAdhd?: boolean;
+  commitAdhdLogs?: boolean;
 }
 
 /** Fully resolved config with all defaults applied. Used internally by the harness. */
@@ -76,6 +79,9 @@ export interface ResolvedConfig {
   modelDocumenter?: string;
   branch?: string;
   sprint?: number;
+  notify: boolean;
+  commitAdhd: boolean;
+  commitAdhdLogs: boolean;
 }
 
 export interface SprintContract {

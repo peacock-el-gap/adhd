@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { harnessDir, writeSpec } from "../files.ts";
 import { promptGateWithText } from "../interaction.ts";
 import { log } from "../logger.ts";
+import { notify } from "../notifications.ts";
 import type { AgentSkills } from "../skills.ts";
 import type { Span } from "../tracing.ts";
 import type { ResolvedConfig } from "../types.ts";
@@ -46,6 +47,7 @@ export async function specApprovalGate(
   let currentSpec = spec;
 
   while (true) {
+    notify("Spec approval gate — review required", { notify: config.notify });
     const result = await promptGateWithText(
       `Spec written to .adhd/spec.md`,
       options,

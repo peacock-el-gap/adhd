@@ -45,6 +45,9 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--lint-gate": "Hard gate: lint/typecheck failure skips evaluator and counts as failed attempt",
   "--sprint N": "Run a specific sprint only (requires existing spec)",
   "--refine-spec": "Enable progressive spec refinement after passing sprints",
+  "--notify": "Send desktop notifications at HITL gates and errors",
+  "--commit-adhd": "Commit .adhd/ metadata (contracts, feedback, progress) after each sprint",
+  "--commit-adhd-logs": "Commit .adhd/ metadata + logs after each sprint (implies --commit-adhd)",
 };
 
 /**
@@ -93,6 +96,9 @@ interface ParsedCli {
   lintGate?: boolean;
   sprint?: number;
   refineSpec?: boolean;
+  notify?: boolean;
+  commitAdhd?: boolean;
+  commitAdhdLogs?: boolean;
   help?: boolean;
 }
 
@@ -136,6 +142,9 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "lint-gate": { type: "boolean", default: false },
       sprint: { type: "string" },
       "refine-spec": { type: "boolean", default: false },
+      notify: { type: "boolean", default: false },
+      "commit-adhd": { type: "boolean", default: false },
+      "commit-adhd-logs": { type: "boolean", default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -172,6 +181,9 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     lintGate: values["lint-gate"] as boolean,
     sprint: values.sprint ? parseInt(values.sprint as string, 10) : undefined,
     refineSpec: values["refine-spec"] as boolean,
+    notify: values.notify as boolean,
+    commitAdhd: values["commit-adhd"] as boolean,
+    commitAdhdLogs: values["commit-adhd-logs"] as boolean,
     help: values.help as boolean,
   };
 }
@@ -332,6 +344,9 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     modelDocumenter,
     branch: cli.branch,
     sprint: cli.sprint,
+    notify: cli.notify || false,
+    commitAdhd: cli.commitAdhd || cli.commitAdhdLogs || false,
+    commitAdhdLogs: cli.commitAdhdLogs || false,
   };
 
   // Validate

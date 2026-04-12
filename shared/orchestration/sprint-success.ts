@@ -6,6 +6,7 @@ import { gitDir, harnessDir, writeProgress } from "../files.ts";
 import { countSprintHeadings } from "../sprint-count.ts";
 import { promptGate } from "../interaction.ts";
 import { fileTimestamp, log, logError } from "../logger.ts";
+import { notify } from "../notifications.ts";
 import { accumulateRegressionCriteria } from "../regression.ts";
 import { UserAbortError } from "./error-handling.ts";
 import { performSpecRefinement } from "./spec-refinement.ts";
@@ -74,6 +75,7 @@ export async function handleSprintSuccess(ctx: SprintSuccessContext): Promise<Sp
       { key: "x", label: "Abort", isDefault: false },
     ];
 
+    notify(`Sprint ${sprint} complete — steering decision needed`, { notify: config.notify });
     const gate = await promptGate(
       `Sprint ${sprint}/${totalSprints} complete. Next: Sprint ${sprint + 1}`,
       steerOptions,

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { gitDir } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { log, logError } from "../logger.ts";
+import { notify } from "../notifications.ts";
 import type { HarnessProgress, ResolvedConfig } from "../types.ts";
 import { UserAbortError } from "./error-handling.ts";
 
@@ -148,6 +149,7 @@ export async function checkDirtyTree(config: ResolvedConfig): Promise<void> {
   if (untracked > 0) summary += `${summary ? ", " : ""}${untracked} untracked file(s)`;
   if (other > 0) summary += `${summary ? ", " : ""}${other} other change(s)`;
 
+  notify("Working tree is dirty — action required", { notify: config.notify });
   const result = await promptGate(
     `Working tree is dirty:\n  - ${summary}\nGenerator will modify files and commit. Uncommitted changes may be mixed into its commits.`,
     [

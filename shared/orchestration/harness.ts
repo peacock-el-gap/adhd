@@ -14,6 +14,7 @@ import {
 } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { fileTimestamp, log, logDebug, logDivider, logError, setDisplayTimezone } from "../logger.ts";
+import { notify } from "../notifications.ts";
 import { resolveAllAgentSkills } from "../skills.ts";
 import { countSprintHeadings } from "../sprint-count.ts";
 import type { Tracer } from "../tracing.ts";
@@ -461,6 +462,7 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
     }
 
     if (config.interactive && config.gateTimeout !== 0) {
+      notify(`Sprint ${sprint} contract ready for review`, { notify: config.notify });
       const gate = await promptGate(
         `Sprint ${sprint} contract:\n  Features: ${contract.features.join(", ")}\n  Criteria: ${contract.criteria.length}`,
         [

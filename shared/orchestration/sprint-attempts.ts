@@ -3,6 +3,7 @@ import { computeDiffSection } from "../diff.ts";
 import { writeFeedback, writeProgress } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { fileTimestamp, log, logError, shouldLog } from "../logger.ts";
+import { notify } from "../notifications.ts";
 import { buildRegressionSection, readRegressionCriteria } from "../regression.ts";
 import type { CommitSource, EvalResult } from "../types.ts";
 import { handleFatalError, withTransientRetry } from "./error-handling.ts";
@@ -202,6 +203,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
 
     if (config.interactive && config.gateTimeout !== 0 && retry < config.maxRetriesPerSprint) {
       const minScore = Math.min(...Object.values(lastEval.scores));
+      notify(`Evaluator scored ${minScore}/10 — override decision needed`, { notify: config.notify });
       const gate = await promptGate(
         `Evaluator scored ${minScore}/10 (threshold: ${config.passThreshold}). Override?`,
         [
