@@ -1,0 +1,62 @@
+[
+  {
+    "name": "regex_anchored_line_start",
+    "description": "The sprint-counting regex uses `^` anchor with the multiline flag (`m`) so that only headings starting at column 1 are matched, not inline prose references to sprints.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "inline_sprint_references_not_counted",
+    "description": "A spec containing '## Sprint 1' and '## Sprint 2' as line-start headings plus prose like 'builds on Sprint 3 features' or blockquoted '> ## Sprint 4' yields a total sprint count of 2.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "standard_multiline_spec_counted_correctly",
+    "description": "A spec with four '## Sprint N' headings each at column 1 on their own line yields a total sprint count of 4.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "log_filename_timestamp_format",
+    "description": "All conversation log filenames are prefixed with a timestamp matching the pattern YYYY.MM.DD-HH.MM.SS- (e.g., '2026.04.12-14.30.00-sprint-2-attempt-0-generator.md').",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "resume_does_not_overwrite_logs",
+    "description": "When the harness resumes and re-runs the same sprint/attempt, a new log file is created with a different timestamp prefix; the original log file from the prior run remains on disk and is not overwritten or deleted.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "contract_negotiation_logs_timestamped",
+    "description": "Contract negotiation conversation logs follow the timestamped naming pattern (e.g., 'YYYY.MM.DD-HH.MM.SS-sprint-3-contract-negotiation.md').",
+    "threshold": 8,
+    "sprintNumber": 1
+  },
+  {
+    "name": "all_agent_log_types_timestamped",
+    "description": "Generator, Evaluator, Planner, and Documenter conversation logs all use the timestamp prefix format — no log file in .adhd/logs/ is written without a timestamp prefix.",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "timestamp_uses_configured_timezone",
+    "description": "The timestamp in log filenames reflects the configured timezone (not UTC by default unless configured as UTC), consistent with the HH:MM:SS timestamps used in terminal output.",
+    "threshold": 7,
+    "sprintNumber": 1
+  },
+  {
+    "name": "langfuse_span_names_aligned",
+    "description": "Langfuse trace span names for agent conversations include the same timestamped identifier used in the log filename, enabling cross-referencing between log files and trace spans.",
+    "threshold": 7,
+    "sprintNumber": 1
+  },
+  {
+    "name": "regex_fix_has_test_coverage",
+    "description": "There is at least one test file covering the sprint-counting regex that tests: (1) standard headings are counted, (2) inline prose references are not counted, and (3) blockquoted or indented heading-like lines are not counted.",
+    "threshold": 9,
+    "sprintNumber": 1
+  }
+]
