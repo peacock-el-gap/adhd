@@ -106,3 +106,87 @@ Closes the highest-impact quality gaps in the harness -- cross-sprint regression
 - All sprint 5 criteria verified as non-regressed
 
 **Verified:** All 10 criteria passed. 3 attempts (initial TypeScript errors and biome warnings fixed on retries).
+
+## Phase 1.5: Operational Hardening
+
+Fixes correctness bugs that cause phantom sprints, closes observability gaps that destroy forensic evidence, improves resume reliability, and adds developer experience improvements. Surfaced by dogfooding the harness against its own codebase.
+
+### Sprint 1 -- Sprint Counting Fix & Timestamped Logs
+
+**Features:** Sprint Counting Regex Fix, Timestamp Log Filenames
+
+- Fixed sprint-counting regex in `shared/sprint-count.ts`: anchored to line start with `^` and multiline flag `m` so that only `## Sprint N` headings at column 1 are counted -- inline prose references, blockquoted headings, and indented lines are excluded
+- Added `YYYY.MM.DD-HH.MM.SS` timestamp prefix to all conversation log filenames via `fileTimestamp()` in `shared/logger.ts`
+- Resume/retry cycles create new log files with distinct timestamps instead of overwriting prior logs
+- All agent log types (Generator, Evaluator, Planner, Documenter, contract-negotiation) use the timestamped filename format
+- Langfuse trace span names aligned to the same timestamped identifier for cross-referencing between log files and traces
+- Timestamp uses configured timezone (`TZ_DISPLAY`) consistent with terminal output
+- DRY: single `fileTimestamp()` utility used by all log-writing code paths
+- Graceful fallback to UTC-based timestamp if timezone configuration throws
+- 9 unit tests covering sprint-counting regex edge cases (standard headings, inline prose, blockquotes, indented, backtick-quoted, case-insensitive, zero headings)
+
+**Verified:** All 13 criteria passed (scores 7-10). 474 tests passing. 2 attempts.
+
+### Sprint 2 -- Resume Contract Skip & Parse Error Diagnostics
+
+**Features:** Resume Contract Skip, Contract Parse Error Logging
+
+- On `--resume`, existing contracts in `.adhd/contracts/sprint-N.json` are loaded from disk and reused without re-negotiating -- saves time and LLM cost
+- `loadExistingContract()` in `shared/files.ts` validates: file exists, non-empty, valid JSON, criteria is a non-empty array, features is an array; malformed files return null and trigger negotiation
+- Same `loadExistingContract()` function shared between `--resume` and `--sprint N` modes (no duplication)
+- Log message on loaded contract includes criteria count: "Loaded contract from disk for sprint N with M criteria"
+- When `parseContract` fails to extract valid JSON, `writeParseErrorDiagnostic()` writes full raw text to `.adhd/logs/sprint-N-contract-parse-error.txt`
+- Truncated preview (500 chars max) logged to console on parse failure with "... (truncated, N chars total)" indicator
+- `.adhd/logs/` directory created on demand with `mkdir({ recursive: true })`
+- No diagnostic file created on successful parse
+- Error during diagnostic file writing caught and logged without masking the original parse failure
+
+**Verified:** All 23 criteria passed (scores 7-10, including Sprint 1 regression). 492 tests passing. Single attempt.
+
+### Sprint 3 -- Clean Working Tree & Deterministic Rollback
+
+**Features:** `.adhd/` Artifact Commits and Deterministic Revert, Progress "documenting" Status
+
+- `commitAdhdArtifacts()` in `shared/orchestration/git-ops.ts` commits pending `.adhd/` files with `[adhd] Sprint N: artifacts` message before each Generator invocation, ensuring a clean working tree
+- No-op when there are no `.adhd/` changes (avoids empty commits)
+- `revertToCheckpoint()` now uses `git reset --hard <sha>` instead of `git revert --no-commit`, eliminating dirty-tree revert failures
+- `.adhd/` files survive revert via stash/unstash: `stashAdhdFiles()` stages and stashes `.adhd/` before reset, `unstashAdhdFiles()` restores them after
+- Stash/unstash errors are logged with context but do not cause unhandled exceptions; reset still completes
+- Added `"documenting"` to the `HarnessProgress.status` union type
+- Status set to `"documenting"` before the Documenter agent starts, transitions to `"complete"` after it finishes
+- All new orchestration logic lives in `shared/` with zero SDK imports; DI boundary maintained
+
+**Verified:** All 13 criteria passed (scores 6-10). Single attempt.
+
+### Sprint 4 -- HITL Notifications & Metadata Commit Flags
+
+**Features:** HITL Notifications, `--commit-adhd` / `--commit-adhd-logs` Flags
+
+- `notify()` in `shared/notifications.ts` emits terminal bell (`\x07`) at all HITL gates and fatal errors
+- `--notify` flag enables desktop notifications via `notify-send` (Linux) or `osascript` (macOS)
+- Platform detection with graceful no-op on unsupported platforms; subprocess failures logged as debug warnings
+- `--commit-adhd` flag commits `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md` after each passing sprint with message `[adhd] Sprint N: contract + metadata`
+- `--commit-adhd-logs` additionally commits `.adhd/logs/` and implies `--commit-adhd`
+- `commitAdhdMetadata()` in `shared/orchestration/git-ops.ts` stages specific metadata paths, skips missing paths, and no-ops when nothing is staged
+- Default behavior unchanged: no `[adhd]` metadata commits without explicit flags
+- All new flags documented in `CLI_FLAG_HELP` and `--help` output
+
+**Verified:** All 14 criteria passed (scores 7-10). Single attempt.
+
+### Sprint 5 -- End-to-End Integration Validation
+
+**Features:** Cross-feature integration testing, regression verification, README documentation
+
+- Verified phantom sprint prevention: inline sprint references in prose, blockquotes, and acceptance criteria do not inflate sprint count
+- Verified full resume cycle: contract reuse from disk, timestamped log preservation, `git reset --hard` with `.adhd/` stash/unstash
+- Verified `--commit-adhd` and `--commit-adhd-logs` produce correct `[adhd]` commits with expected paths
+- Verified notification dispatch: terminal bell at all HITL gates, desktop notifications only with `--notify`
+- Verified progress status lifecycle: `planning → generating → evaluating → documenting → complete`
+- Verified contract parse error diagnostics: diagnostic file written on failure, truncated console preview, no file on success
+- Verified timestamp consistency across all log types with chronological ordering
+- Verified clean working tree before every Generator invocation
+- Updated README with `--notify`, `--commit-adhd`, `--commit-adhd-logs` documentation and configuration table
+- Biome lint clean across all modified files
+- SDK separation maintained: zero provider SDK imports in `shared/`
+
+**Verified:** All 14 criteria passed (scores 7-10). 2 attempts.
