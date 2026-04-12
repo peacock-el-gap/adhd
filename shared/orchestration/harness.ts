@@ -15,6 +15,7 @@ import {
 import { promptGate } from "../interaction.ts";
 import { log, logDebug, logDivider, logError, setDisplayTimezone } from "../logger.ts";
 import { resolveAllAgentSkills } from "../skills.ts";
+import { countSprintHeadings } from "../sprint-count.ts";
 import type { Tracer } from "../tracing.ts";
 import type { HarnessProgress, HarnessResult, ResolvedConfig, SprintContract, SprintResult } from "../types.ts";
 import { createUsageTracker, type UsageTracker } from "../usage.ts";
@@ -133,8 +134,7 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
       }
 
       // Count sprints from the (possibly edited) spec
-      const sprintMatches = approvedSpec.match(/##\s*Sprint\s+\d+/gi);
-      const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
+      const totalSprints = Math.min(countSprintHeadings(approvedSpec) || config.maxSprints, config.maxSprints);
       progress.totalSprints = totalSprints;
 
       return await runSprintLoop({
@@ -247,8 +247,7 @@ async function resumeHarness(
     progress.specApproved = true;
     await writeProgress(config.workDir, progress);
     // Re-count sprints in case spec was edited
-    const sprintMatches = spec.match(/##\s*Sprint\s+\d+/gi);
-    progress.totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
+    progress.totalSprints = Math.min(countSprintHeadings(spec) || config.maxSprints, config.maxSprints);
   }
 
   // Resume branch check — warn if HEAD is on a different branch
@@ -330,8 +329,7 @@ async function sprintSelectionHarness(
   log("HARNESS", "Loaded spec from disk");
 
   // Count total sprints from spec
-  const sprintMatches = spec.match(/##\s*Sprint\s+\d+/gi);
-  const totalSprints = sprintMatches ? Math.min(sprintMatches.length, config.maxSprints) : config.maxSprints;
+  const totalSprints = Math.min(countSprintHeadings(spec) || config.maxSprints, config.maxSprints);
 
   // Warn if sprint exceeds total
   if (sprintN > totalSprints) {
