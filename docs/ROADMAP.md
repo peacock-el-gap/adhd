@@ -37,7 +37,7 @@ Before any code is written, the Generator proposes a sprint contract (5-15 testa
 
 This is **Definition of Done as a protocol**: machine-readable JSON, not a wiki page nobody reads.
 
-**Known limitation**: When contract JSON parsing fails (e.g., the Evaluator's review response is not valid JSON), the harness falls back silently to a generic 3-criterion default contract with no diagnostic logging. The raw unparseable text is not preserved. This can cause entire sprints to run against meaningless criteria. Addressed in Phase 1.5.
+When contract JSON parsing fails, the harness logs a truncated preview to the console and writes the full raw text to `.adhd/logs/sprint-N-contract-parse-error.txt` before falling back to a generic default contract — so parse failures are observable rather than silent.
 
 ### 1.4 BDD (Behavior-Driven Development)
 
@@ -106,9 +106,7 @@ After each passing sprint, a checkpoint is saved to `.adhd/progress.json` with t
 
 Transient errors (HTTP 429, 5xx, network) retried automatically with exponential backoff (30s, 60s, 120s).
 
-**Known limitations** (addressed in Phase 1.5):
-- **Resume does not skip contract negotiation** even when `sprint-N.json` already exists on disk. If the user aborts mid-sprint and resumes, the contract is re-negotiated from scratch. The `--sprint N` mode already has contract-reuse logic — Phase 1.5 reuses it for resume.
-- **Checkpoint rollback uses `git revert`**, which fails on dirty working trees (e.g., uncommitted `.adhd/` files written by the harness). Phase 1.5 switches to `git reset --hard` with `.adhd/` stash/unstash for deterministic rollback.
+Resume is idempotent: if a sprint contract already exists at `.adhd/contracts/sprint-N.json`, contract negotiation is skipped and the existing contract is reused — the same pattern used by `--sprint N`. Checkpoint rollback stashes `.adhd/` files, runs `git reset --hard <checkpoint-sha>`, then unstashes, producing a clean code state with deterministic behavior even when the harness has written uncommitted metadata.
 
 ### 1.10 Skills System (Three-Scope, Self-Routing)
 
@@ -130,7 +128,7 @@ A full plugin mechanism for composable guidance:
 
 Three layers, all operational:
 
-1. **Conversation logs** — Detailed markdown per agent/sprint/attempt in `.adhd/logs/`. Always written regardless of log level. Tool calls with inputs, results (long outputs collapsed in `<details>`). **Known limitation**: Log filenames are deterministic (e.g., `sprint-3-attempt-0-generator.md`) with no timestamp. On resume or retry, files are overwritten, destroying forensic evidence. Phase 1.5 adds `YYYY.MM.DD-HH.MM.SS` timestamp prefixes.
+1. **Conversation logs** — Detailed markdown per agent/sprint/attempt in `.adhd/logs/`. Always written regardless of log level. Tool calls with inputs, results (long outputs collapsed in `<details>`). Filenames are prefixed with a `YYYY.MM.DD-HH.MM.SS` timestamp (e.g., `2026.04.10-05.28.33-sprint-5-attempt-0-generator.md`) so resume/retry never overwrites prior evidence, `ls` sorts chronologically, and Langfuse trace names align.
 2. **Langfuse OTEL tracing** — Optional hierarchical span tree mirroring the harness structure. Fire-and-forget; zero impact on agent behavior.
 3. **Per-stage cost tracking** — Tokens, USD, duration per SDK call. Printed at session end, accumulated across resume sessions in `.adhd/usage.json`.
 
@@ -164,6 +162,10 @@ Key properties:
 | **Directory conventions** (`--source-dir`, `--test-dir`) | Control where agents place source and test code |
 | **Planner HITL** (`AskUserQuestion`) | Planner can ask clarifying questions mid-planning (60s timeout) |
 | **Timezone display** (`TZ_DISPLAY`) | Configurable terminal timestamp timezone |
+| **HITL notifications** | Terminal bell (`\x07`) on every HITL gate. `--notify` flag adds desktop notifications via `notify-send` (Linux) / `osascript` (macOS) for backgrounded terminals. |
+| **Opt-in artifact commits** (`--commit-adhd`, `--commit-adhd-logs`) | Harness-level git commits for `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md` (and optionally `.adhd/logs/`) after each sprint, tagged `[adhd]`. Provides structured audit trail without polluting project history by default. |
+| **Pre-Generator artifact commit** | Before invoking the Generator, the harness commits `.adhd/` artifacts with an `[adhd]` message so the Generator starts with a clean working tree and rollbacks remain deterministic. |
+| **Real-time `"documenting"` progress status** | `progress.json` sets `status: "documenting"` while the Documenter runs, distinct from `"complete"`, so external monitors reflect actual state. |
 
 ### 1.14 BDD Regression Accumulation Across Sprints
 
@@ -314,42 +316,6 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Cons**: Requires run-ID or timestamp-based run identification; needs a storage convention for historical runs (currently each run overwrites the previous)
 - **Effort**: Medium
 
-### OPP-14: Operational Hardening
-
-**Problem**: Correctness bugs, observability gaps, and workflow friction reduce trust in harness output and waste developer time. These were surfaced by running the harness against its own codebase.
-
-**Sub-items**:
-
-1. **Sprint counting regex bug**: The regex that counts `## Sprint N` headings in the spec to determine total sprint count matches inline prose references too (e.g., sprint numbers mentioned inside acceptance scenarios or quoted text). This inflated the sprint count from 4 to 6 during the Phase 1 execution, causing the harness to run two phantom sprints with no spec guidance — the Generator invented their content during contract negotiation. **Fix**: Anchor the regex to line start (`^` with multiline flag). **Defense in depth**: Update the spec-format skill to discourage heading-level markdown (`## Sprint N`) in prose; recommend inline text or backticks instead.
-
-2. **Resume idempotency**: On `--resume`, contract negotiation re-runs even when `sprint-N.json` already exists on disk from a prior aborted attempt. This wastes ~$1 in LLM cost per resume. The `--sprint N` mode already has contract-reuse logic that checks for existing contracts — reuse that same pattern for resume.
-
-3. **Contract parse error observability**: When `parseContract` fails to extract valid JSON from the Evaluator's contract review response, it falls back silently to a generic 3-criterion default contract. No diagnostic output is produced — the raw text is not logged, the conversation log may be overwritten on retry, and there is no HITL gate to let the user intervene. All retry attempts then run against meaningless criteria. **Fix**: Log the raw unparseable text to console (truncated) and write the full text to `.adhd/logs/sprint-N-contract-parse-error.txt`.
-
-4. **Checkpoint rollback**: `revertToCheckpoint` uses `git revert --no-commit` which creates reverse commits and fails on dirty working trees. During Phase 1 execution, it failed because the harness had written `.adhd/contracts/sprint-5.json` but not committed it. **Fix**: Stash `.adhd/` files → `git reset --hard <checkpoint-sha>` → unstash. This gives clean code state with deterministic rollback while preserving harness metadata.
-
-5. **Log file naming**: Add `YYYY.MM.DD-HH.MM.SS` timestamp prefix to conversation log filenames (e.g., `2026.04.10-05.28.33-sprint-5-attempt-0-generator.md`). Prevents overwrites on resume/retry, guarantees chronological ordering in `ls`, and enables forensic analysis of multiple runs. Align Langfuse trace names to the same format for consistency.
-
-6. **Progress status during documentation**: Add `"documenting"` status to `progress.json` while the Documenter agent runs. Currently, `status` is set to `"complete"` before the Documenter starts, making `progress.json` a misleading real-time indicator.
-
-7. **`.adhd/` artifact commits**: Commit `.adhd/` artifacts (contracts, progress, feedback) with a dedicated `[adhd]` commit message before invoking the Generator, so it starts with a clean working tree. Differentiate "uncommitted changes" log messages between project code (genuine problem) vs. `.adhd/` metadata (expected harness behavior). This also eliminates the dirty-tree revert failure (sub-item 4) by ensuring `.adhd/` files are committed before any rollback attempt.
-
-- **Effort**: Medium (aggregate; individual sub-items range from Trivial to Medium)
-
-### OPP-15: Developer Experience Improvements
-
-**Problem**: During long harness runs, HITL gates activate while the developer is away from the terminal. Timeouts auto-accept defaults, which may not be the desired action. Additionally, `.adhd/` artifacts are not version-controlled by default, making it hard to reconstruct what happened during a run.
-
-**Sub-items**:
-
-1. **HITL notifications**: Terminal bell (`\x07`) on all HITL gates and error conditions — universal, zero dependencies. Plus a `--notify` flag for desktop notifications via `notify-send` (Linux) / `osascript` (macOS), visible when the terminal is backgrounded.
-
-2. **`--commit-adhd` flag**: Opt-in harness-level git commits for `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md` after each sprint. Commit message: `[adhd] Sprint N: contract + metadata`. Provides structured audit trail without polluting the project's git history by default.
-
-3. **`--commit-adhd-logs` flag**: Additionally commits `.adhd/logs/`. Implies `--commit-adhd`. Opt-in because logs can be large. For users who want full forensic history in git.
-
-- **Effort**: Small (aggregate)
-
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -375,25 +341,6 @@ These items use the existing skills system and contract negotiation prompts. The
 | CS-2 | **Codebase context guidance** | OPP-04 | S | Documentation/template for creating project-local `.adhd/skills/local/codebase-context.md` skills. Not a harness skill itself — a guide for users. |
 
 **Rationale**: These are the highest-leverage items relative to effort — they fill the content gap in an architecturally mature skills system. No PRs to review, no tests to write, no risk of regression.
-
----
-
-### Phase 1.5: Operational Hardening
-
-**Goal**: Fix correctness bugs (phantom sprints from regex false positives, broken git revert on resume), close observability gaps (log file overwrites, silent contract parse failures), and add DX improvements (notifications, artifact commits). These items ensure a reliable foundation before Phase 2 extends the harness with new capabilities.
-
-| # | Feature | Source | Effort | Notes |
-|---|---------|--------|--------|-------|
-| 1.5.1 | **Sprint counting regex fix + prompt guidance** | OPP-14 | Trivial | `^` anchor on regex + spec-format skill update |
-| 1.5.2 | **Timestamp log filenames** | OPP-14 | S | `YYYY.MM.DD-HH.MM.SS` prefix; align Langfuse traces |
-| 1.5.3 | **Resume contract skip** | OPP-14 | S | Reuse `--sprint N` contract-reuse logic for `--resume` |
-| 1.5.4 | **`.adhd/` artifact commits + revert fix** | OPP-14 | M | Commit `.adhd/` before Generator; switch to `git reset --hard` |
-| 1.5.5 | **Contract parse error logging** | OPP-14 | S | Log raw text + diagnostic file on parse failure |
-| 1.5.6 | **Progress `"documenting"` status** | OPP-14 | Trivial | |
-| 1.5.7 | **HITL notifications** | OPP-15 | S | Terminal bell + `--notify` flag |
-| 1.5.8 | **`--commit-adhd` / `--commit-adhd-logs` flags** | OPP-15 | S | Opt-in git commits for `.adhd/` artifacts |
-
-**Rationale for ordering**: Item 1.5.1 is the highest-ROI fix (one-line regex change eliminates phantom sprints). Items 1.5.2-1.5.3 solve the log overwrite and resume re-negotiation problems. Item 1.5.4 is the largest single item — it combines `.adhd/` pre-commit with the revert mechanism fix (the pre-commit eliminates the dirty-tree condition that causes revert failures). Items 1.5.5-1.5.8 are smaller independent improvements.
 
 ---
 
@@ -430,15 +377,6 @@ These items use the existing skills system and contract negotiation prompts. The
 | **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills (security, a11y, API) + project-local template |
 | | CS-2 | Codebase context guidance | OPP-04 | User guide, not a harness skill |
 | --- | --- | --- | --- | --- |
-| **Phase 1.5**<br/>*Operational Hardening (HIGH)* | 1.5.1 | Sprint counting regex fix | OPP-14 | Trivial; highest-ROI fix |
-| | 1.5.2 | Timestamp log filenames | OPP-14 | Prevents log overwrites on resume/retry |
-| | 1.5.3 | Resume contract skip | OPP-14 | Reuse `--sprint N` logic for `--resume` |
-| | 1.5.4 | `.adhd/` artifact commits + revert fix | OPP-14 | Commit before Generator; `reset --hard` |
-| | 1.5.5 | Contract parse error logging | OPP-14 | Observability on parse failures |
-| | 1.5.6 | Progress `"documenting"` status | OPP-14 | Accurate real-time progress |
-| | 1.5.7 | HITL notifications | OPP-15 | Terminal bell + `--notify` |
-| | 1.5.8 | `--commit-adhd` / `--commit-adhd-logs` | OPP-15 | Opt-in `.adhd/` git commits |
-| --- | --- | --- | --- | --- |
 | **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag |
 | | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
 | | 2.3 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
@@ -455,4 +393,4 @@ The harness's highest-leverage extension point is the **skills system**. It's a 
 
 The second insight is that **BDD scenarios are the natural regression mechanism**. They already exist as structured JSON in sprint contracts. They represent behavioral invariants, not implementation details. Accumulating them across sprints (§1.14) turns the contract system from a per-sprint checklist into a growing behavioral specification of the entire system — and pairs naturally with progressive spec refinement (§1.19) because the accumulated BDD criteria provide the stable contract floor that persists even as the spec evolves above them.
 
-The third insight: **dogfooding exposes operational issues that unit tests and design reviews miss** — phantom sprints from regex false positives, log file overwrites destroying forensic evidence, silent fallbacks masking contract parse failures. Phase 1.5 (Operational Hardening) exists because running the harness against its own codebase revealed these gaps.
+The third insight: **dogfooding exposes operational issues that unit tests and design reviews miss** — phantom sprints from regex false positives, log file overwrites destroying forensic evidence, silent fallbacks masking contract parse failures. The operational-hardening capabilities now described in §1.3, §1.9, §1.11, and §1.13 exist because running the harness against its own codebase revealed these gaps.
