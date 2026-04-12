@@ -544,10 +544,11 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
 
   // Final status
   const allPassed = results.every((r) => r.passed);
-  progress.status = allPassed ? "complete" : "failed";
-  await writeProgress(config.workDir, progress);
 
   if (allPassed && !config.noDocs) {
+    progress.status = "documenting";
+    await writeProgress(config.workDir, progress);
+
     await runDocumenterPhase({
       config,
       parentSpan,
@@ -558,6 +559,9 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
       agents,
     });
   }
+
+  progress.status = allPassed ? "complete" : "failed";
+  await writeProgress(config.workDir, progress);
 
   const totalDuration = Date.now() - startTime;
   logDivider();

@@ -58,5 +58,59 @@
     "description": "There is at least one test file covering the sprint-counting regex that tests: (1) standard headings are counted, (2) inline prose references are not counted, and (3) blockquoted or indented heading-like lines are not counted.",
     "threshold": 9,
     "sprintNumber": 1
+  },
+  {
+    "name": "existing_contract_reused_on_resume",
+    "description": "When the harness runs with --resume and `.adhd/contracts/sprint-N.json` already exists on disk, it loads and uses that contract without invoking contract negotiation agents (no Planner/Evaluator calls for that sprint's contract).",
+    "threshold": 7,
+    "sprintNumber": 2
+  },
+  {
+    "name": "missing_contract_triggers_negotiation",
+    "description": "When the harness runs with --resume and `.adhd/contracts/sprint-N.json` does NOT exist on disk, contract negotiation proceeds normally as if it were a fresh run.",
+    "threshold": 7,
+    "sprintNumber": 2
+  },
+  {
+    "name": "loaded_contract_logged",
+    "description": "When an existing contract is loaded from disk during resume, a log message is emitted that includes both the fact it was loaded from disk and the number of criteria in the contract (e.g., 'Loaded contract from disk for sprint 2 with 8 criteria').",
+    "threshold": 7,
+    "sprintNumber": 2
+  },
+  {
+    "name": "contract_file_validation",
+    "description": "When loading a contract from disk, the code validates that the file contains well-formed JSON matching the expected contract structure before using it. Malformed or empty contract files trigger negotiation rather than crashing.",
+    "threshold": 6,
+    "sprintNumber": 2
+  },
+  {
+    "name": "parse_failure_writes_diagnostic_file",
+    "description": "When parseContract fails to extract valid JSON from the evaluator's contract review response, a file `.adhd/logs/sprint-N-contract-parse-error.txt` is created containing the full raw unparseable text.",
+    "threshold": 7,
+    "sprintNumber": 2
+  },
+  {
+    "name": "parse_failure_logs_truncated_preview",
+    "description": "When parseContract falls back to the default contract due to a parse failure, a warning is logged to the console containing a truncated preview of the raw text (not the full 2000+ character blob).",
+    "threshold": 7,
+    "sprintNumber": 2
+  },
+  {
+    "name": "successful_parse_no_diagnostic_file",
+    "description": "When parseContract successfully extracts valid contract JSON, no `.adhd/logs/sprint-N-contract-parse-error.txt` file is created.",
+    "threshold": 7,
+    "sprintNumber": 2
+  },
+  {
+    "name": "diagnostic_directory_created_on_demand",
+    "description": "If `.adhd/logs/` does not exist when a parse error diagnostic needs to be written, the directory is created automatically (no crash on missing directory).",
+    "threshold": 6,
+    "sprintNumber": 2
+  },
+  {
+    "name": "truncation_length_reasonable",
+    "description": "The truncated preview logged to console on parse failure is capped at a reasonable length (200-500 characters) with an ellipsis or indicator showing it was truncated, so console output stays readable.",
+    "threshold": 6,
+    "sprintNumber": 2
   }
 ]

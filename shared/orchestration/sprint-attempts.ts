@@ -6,6 +6,7 @@ import { fileTimestamp, log, logError, shouldLog } from "../logger.ts";
 import { buildRegressionSection, readRegressionCriteria } from "../regression.ts";
 import type { CommitSource, EvalResult } from "../types.ts";
 import { handleFatalError, withTransientRetry } from "./error-handling.ts";
+import { commitAdhdArtifacts } from "./git-ops.ts";
 import { runStaticAnalysis } from "./static-analysis-runner.ts";
 import type { SprintAttemptContext, SprintAttemptResult } from "./types.ts";
 
@@ -33,6 +34,9 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
     progress.status = "building";
     progress.retryCount = retry;
     await writeProgress(config.workDir, progress);
+
+    // Commit .adhd/ artifacts before Generator invocation for clean working tree
+    commitAdhdArtifacts(config.workDir, gDir, sprint);
 
     const generatorTs = fileTimestamp();
     const generatorSpan = attemptSpan.startChild(`${generatorTs}-sprint-${sprint}-attempt-${retry}-generator`, {

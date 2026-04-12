@@ -1,11 +1,11 @@
 {
   "status": "building",
-  "currentSprint": 2,
+  "currentSprint": 3,
   "totalSprints": 5,
-  "completedSprints": 1,
+  "completedSprints": 2,
   "retryCount": 0,
   "specApproved": true,
-  "lastPassedCommitSha": "06acaca43c29d229a09e8cf06c97d1b53dcfec43",
+  "lastPassedCommitSha": "b55ae4b50e00d9030b8098d47c1b73bc474b0e2e",
   "sprintResults": [
     {
       "sprintNumber": 1,
@@ -140,6 +140,202 @@
           "permission_denials": [],
           "fast_mode_state": "off",
           "uuid": "0de6790e-7ecb-4aad-8ccd-cf27bc81b3ad"
+        }
+      }
+    },
+    {
+      "sprintNumber": 2,
+      "passed": true,
+      "attempts": 1,
+      "evalResult": {
+        "passed": true,
+        "scores": {
+          "existing_contract_reused_on_resume": 8,
+          "missing_contract_triggers_negotiation": 8,
+          "loaded_contract_logged": 8,
+          "contract_file_validation": 9,
+          "parse_failure_writes_diagnostic_file": 9,
+          "parse_failure_logs_truncated_preview": 8,
+          "successful_parse_no_diagnostic_file": 9,
+          "diagnostic_directory_created_on_demand": 9,
+          "resume_contract_skip_consistent_with_sprint_flag": 9,
+          "code_quality_no_duplication": 9,
+          "error_handling_patterns": 8,
+          "naming_and_readability": 8,
+          "truncation_length_reasonable": 9,
+          "regex_anchored_line_start": 10,
+          "inline_sprint_references_not_counted": 10,
+          "standard_multiline_spec_counted_correctly": 10,
+          "log_filename_timestamp_format": 10,
+          "resume_does_not_overwrite_logs": 10,
+          "contract_negotiation_logs_timestamped": 9,
+          "all_agent_log_types_timestamped": 9,
+          "timestamp_uses_configured_timezone": 8,
+          "langfuse_span_names_aligned": 8,
+          "regex_fix_has_test_coverage": 10
+        },
+        "feedback": [
+          {
+            "criterion": "existing_contract_reused_on_resume",
+            "score": 8,
+            "details": "In shared/orchestration/harness.ts line 422, when `config.isResume` is true, `loadExistingContract` is called. If it returns a valid contract, it's used directly without invoking `negotiateContract`. The code path is clear and correct. Tests in resume-contract-skip.test.ts cover valid contract loading. Minor gap: no integration-level test that actually simulates a full --resume flow verifying negotiation agents are NOT called."
+          },
+          {
+            "criterion": "missing_contract_triggers_negotiation",
+            "score": 8,
+            "details": "When `loadExistingContract` returns null (file missing), the code falls through to the `if (!contract)` block at line 433, which calls `agents.negotiateContract`. Tests verify `loadExistingContract` returns null for missing files. The logic is sound."
+          },
+          {
+            "criterion": "loaded_contract_logged",
+            "score": 8,
+            "details": "In harness.ts lines 426-429, when a contract is loaded from disk: `Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria`. This matches the required format exactly, including both the 'loaded from disk' fact and the criteria count."
+          },
+          {
+            "criterion": "contract_file_validation",
+            "score": 9,
+            "details": "loadExistingContract in shared/files.ts lines 147-166 validates: (1) file exists (try/catch on readFile), (2) non-empty content, (3) valid JSON, (4) criteria is a non-empty array, (5) features is an array. Malformed files return null, triggering negotiation. Tests cover empty files, malformed JSON, missing criteria, empty criteria, and missing features."
+          },
+          {
+            "criterion": "parse_failure_writes_diagnostic_file",
+            "score": 9,
+            "details": "In contract.ts lines 135-137, when parse fails and workDir is provided, `writeParseErrorDiagnostic` writes the full raw text to `.adhd/logs/sprint-N-contract-parse-error.txt`. Tests confirm the file is created with exact raw content, even for 5000-char strings."
+          },
+          {
+            "criterion": "parse_failure_logs_truncated_preview",
+            "score": 8,
+            "details": "In contract.ts lines 130-133, the preview is capped at PARSE_ERROR_PREVIEW_LENGTH (500 chars) with '... (truncated, N chars total)' suffix. logError is called with this truncated preview. Test output confirms truncation occurs for 5000-char and 2000-char inputs. The test at line 84 verifies this behavior indirectly."
+          },
+          {
+            "criterion": "successful_parse_no_diagnostic_file",
+            "score": 9,
+            "details": "The diagnostic file writing only happens in the parse failure branch (after all candidates fail). On successful parse, the function returns early at line 122. Test 'does not write diagnostic file on successful parse' explicitly verifies no diagnostic file exists after a successful parse."
+          },
+          {
+            "criterion": "diagnostic_directory_created_on_demand",
+            "score": 9,
+            "details": "In writeParseErrorDiagnostic (line 169), `mkdir(logsDir, { recursive: true })` is called before writing. Test 'creates .adhd/logs/ directory on demand' verifies the directory doesn't exist beforehand and is created automatically."
+          },
+          {
+            "criterion": "resume_contract_skip_consistent_with_sprint_flag",
+            "score": 9,
+            "details": "harness.ts line 422: `if (config.sprint !== undefined || config.isResume)` — both modes call the exact same `loadExistingContract` function from shared/files.ts. Single code path, no duplication. Test 'uses same function for both --resume and --sprint modes' verifies this."
+          },
+          {
+            "criterion": "code_quality_no_duplication",
+            "score": 9,
+            "details": "loadExistingContract is a single shared function in shared/files.ts, imported once in harness.ts. Both --resume and --sprint modes use the same conditional block (line 422). No copy-paste duplication detected."
+          },
+          {
+            "criterion": "error_handling_patterns",
+            "score": 8,
+            "details": "loadExistingContract uses try/catch returning null on any error. writeParseErrorDiagnostic wraps all I/O in try/catch with logError, never masking the original parse failure. The test 'error during diagnostic write does not crash' with /dev/null/impossible/path confirms graceful handling. Minor lint issues exist (unused 'err' variable in logger.ts, formatting) but these are pre-existing from sprint 1."
+          },
+          {
+            "criterion": "naming_and_readability",
+            "score": 8,
+            "details": "Functions are well-named: `loadExistingContract`, `writeParseErrorDiagnostic`, `parseContract`, `negotiateContract`. Log messages clearly distinguish 'Loaded contract from disk' vs 'Negotiating sprint contract' vs 'Contract agreed'. PARSE_ERROR_PREVIEW_LENGTH is a named constant. Good readability throughout."
+          },
+          {
+            "criterion": "truncation_length_reasonable",
+            "score": 9,
+            "details": "PARSE_ERROR_PREVIEW_LENGTH is set to 500 characters (line 104), which falls exactly in the 200-500 range specified. The truncation indicator '... (truncated, N chars total)' clearly shows it was truncated and gives the original length. Console output from tests confirms readable truncated output."
+          },
+          {
+            "criterion": "regex_anchored_line_start",
+            "score": 10,
+            "details": "sprint-count.ts uses `/^##\\s*Sprint\\s+\\d+/gim` — `^` with `m` flag (multiline) ensures only line-start matches. Unchanged from sprint 1."
+          },
+          {
+            "criterion": "inline_sprint_references_not_counted",
+            "score": 10,
+            "details": "Tests confirm: spec with '## Sprint 1' and '## Sprint 2' headings plus prose mentioning 'Sprint 3' and blockquoted '> ## Sprint 4' yields count of 2. All tests pass."
+          },
+          {
+            "criterion": "standard_multiline_spec_counted_correctly",
+            "score": 10,
+            "details": "Test 'counts standard line-start headings' with four '## Sprint N' headings correctly returns 4. Test passes."
+          },
+          {
+            "criterion": "log_filename_timestamp_format",
+            "score": 10,
+            "details": "fileTimestamp() in logger.ts produces YYYY.MM.DD-HH.MM.SS format. conversation-logger.ts uses this as prefix: `${ts}-${baseName}.md`. Pattern matches spec requirement."
+          },
+          {
+            "criterion": "resume_does_not_overwrite_logs",
+            "score": 10,
+            "details": "Each log file gets a fresh timestamp via fileTimestamp() at creation time. Resume creates new files with different timestamps. No deletion or overwrite logic exists."
+          },
+          {
+            "criterion": "contract_negotiation_logs_timestamped",
+            "score": 9,
+            "details": "Contract negotiation uses createConversationLog with timestamp, producing files like 'YYYY.MM.DD-HH.MM.SS-sprint-N-contract-negotiation.md'. Code in contract.ts line 37."
+          },
+          {
+            "criterion": "all_agent_log_types_timestamped",
+            "score": 9,
+            "details": "All agent roles (Generator, Evaluator, Planner, Documenter, contract-negotiation) use createConversationLog which always generates timestamped filenames. No log file is written without a timestamp prefix."
+          },
+          {
+            "criterion": "timestamp_uses_configured_timezone",
+            "score": 8,
+            "details": "fileTimestamp() uses getResolvedTimezone() which returns configuredTimezone or falls back to system timezone. setDisplayTimezone() is called at startup from config.tzDisplay. Terminal and file timestamps use the same timezone."
+          },
+          {
+            "criterion": "langfuse_span_names_aligned",
+            "score": 8,
+            "details": "Conversation logger exposes `timestampedName` property (conversation-logger.ts line 11). Span names in harness.ts use fileTimestamp() for naming (e.g., line 418 `${fileTimestamp()}-sprint-${sprint}`). The convention is consistent for cross-referencing."
+          },
+          {
+            "criterion": "regex_fix_has_test_coverage",
+            "score": 10,
+            "details": "sprint-count.test.ts has comprehensive coverage: (1) standard headings counted (4 headings = 4), (2) inline prose 'Sprint 3' not counted, (3) blockquoted '> ## Sprint 3' not counted, (4) indented headings not counted. All tests pass."
+          }
+        ],
+        "overallSummary": "Sprint 2 implementation is solid. Both features (Resume Contract Skip and Contract Parse Error Logging) are well-implemented with a clean shared code path via loadExistingContract, proper validation, diagnostic file writing with directory creation on demand, and truncated console previews. All 492 tests pass. Code quality is good with descriptive naming, no duplication, and proper error handling. Lint has minor pre-existing issues (unused variable, formatting) but nothing functional. All sprint 1 regression criteria remain fully satisfied.",
+        "sdkResult": {
+          "type": "result",
+          "subtype": "success",
+          "is_error": false,
+          "duration_ms": 95186,
+          "duration_api_ms": 91763,
+          "num_turns": 17,
+          "result": "Now I have all the information needed. Let me verify one more thing - the harness.ts line 422 confirms the shared code path for both `--resume` and `--sprint`:\n\nLine 422: `if (config.sprint !== undefined || config.isResume)` → calls `loadExistingContract` — single shared function, single code path.\n\nLet me also check the `PARSE_ERROR_PREVIEW_LENGTH` value (it's 500 at line 104 of contract.ts) and the truncation format.\n\nNow let me produce the evaluation:\n\n```json\n{\n  \"passed\": true,\n  \"scores\": {\n    \"existing_contract_reused_on_resume\": 8,\n    \"missing_contract_triggers_negotiation\": 8,\n    \"loaded_contract_logged\": 8,\n    \"contract_file_validation\": 9,\n    \"parse_failure_writes_diagnostic_file\": 9,\n    \"parse_failure_logs_truncated_preview\": 8,\n    \"successful_parse_no_diagnostic_file\": 9,\n    \"diagnostic_directory_created_on_demand\": 9,\n    \"resume_contract_skip_consistent_with_sprint_flag\": 9,\n    \"code_quality_no_duplication\": 9,\n    \"error_handling_patterns\": 8,\n    \"naming_and_readability\": 8,\n    \"truncation_length_reasonable\": 9,\n    \"regex_anchored_line_start\": 10,\n    \"inline_sprint_references_not_counted\": 10,\n    \"standard_multiline_spec_counted_correctly\": 10,\n    \"log_filename_timestamp_format\": 10,\n    \"resume_does_not_overwrite_logs\": 10,\n    \"contract_negotiation_logs_timestamped\": 9,\n    \"all_agent_log_types_timestamped\": 9,\n    \"timestamp_uses_configured_timezone\": 8,\n    \"langfuse_span_names_aligned\": 8,\n    \"regex_fix_has_test_coverage\": 10\n  },\n  \"feedback\": [\n    {\n      \"criterion\": \"existing_contract_reused_on_resume\",\n      \"score\": 8,\n      \"details\": \"In shared/orchestration/harness.ts line 422, when `config.isResume` is true, `loadExistingContract` is called. If it returns a valid contract, it's used directly without invoking `negotiateContract`. The code path is clear and correct. Tests in resume-contract-skip.test.ts cover valid contract loading. Minor gap: no integration-level test that actually simulates a full --resume flow verifying negotiation agents are NOT called.\"\n    },\n    {\n      \"criterion\": \"missing_contract_triggers_negotiation\",\n      \"score\": 8,\n      \"details\": \"When `loadExistingContract` returns null (file missing), the code falls through to the `if (!contract)` block at line 433, which calls `agents.negotiateContract`. Tests verify `loadExistingContract` returns null for missing files. The logic is sound.\"\n    },\n    {\n      \"criterion\": \"loaded_contract_logged\",\n      \"score\": 8,\n      \"details\": \"In harness.ts lines 426-429, when a contract is loaded from disk: `Loaded contract from disk for sprint ${sprint} with ${contract.criteria.length} criteria`. This matches the required format exactly, including both the 'loaded from disk' fact and the criteria count.\"\n    },\n    {\n      \"criterion\": \"contract_file_validation\",\n      \"score\": 9,\n      \"details\": \"loadExistingContract in shared/files.ts lines 147-166 validates: (1) file exists (try/catch on readFile), (2) non-empty content, (3) valid JSON, (4) criteria is a non-empty array, (5) features is an array. Malformed files return null, triggering negotiation. Tests cover empty files, malformed JSON, missing criteria, empty criteria, and missing features.\"\n    },\n    {\n      \"criterion\": \"parse_failure_writes_diagnostic_file\",\n      \"score\": 9,\n      \"details\": \"In contract.ts lines 135-137, when parse fails and workDir is provided, `writeParseErrorDiagnostic` writes the full raw text to `.adhd/logs/sprint-N-contract-parse-error.txt`. Tests confirm the file is created with exact raw content, even for 5000-char strings.\"\n    },\n    {\n      \"criterion\": \"parse_failure_logs_truncated_preview\",\n      \"score\": 8,\n      \"details\": \"In contract.ts lines 130-133, the preview is capped at PARSE_ERROR_PREVIEW_LENGTH (500 chars) with '... (truncated, N chars total)' suffix. logError is called with this truncated preview. Test output confirms truncation occurs for 5000-char and 2000-char inputs. The test at line 84 verifies this behavior indirectly.\"\n    },\n    {\n      \"criterion\": \"successful_parse_no_diagnostic_file\",\n      \"score\": 9,\n      \"details\": \"The diagnostic file writing only happens in the parse failure branch (after all candidates fail). On successful parse, the function returns early at line 122. Test 'does not write diagnostic file on successful parse' explicitly verifies no diagnostic file exists after a successful parse.\"\n    },\n    {\n      \"criterion\": \"diagnostic_directory_created_on_demand\",\n      \"score\": 9,\n      \"details\": \"In writeParseErrorDiagnostic (line 169), `mkdir(logsDir, { recursive: true })` is called before writing. Test 'creates .adhd/logs/ directory on demand' verifies the directory doesn't exist beforehand and is created automatically.\"\n    },\n    {\n      \"criterion\": \"resume_contract_skip_consistent_with_sprint_flag\",\n      \"score\": 9,\n      \"details\": \"harness.ts line 422: `if (config.sprint !== undefined || config.isResume)` — both modes call the exact same `loadExistingContract` function from shared/files.ts. Single code path, no duplication. Test 'uses same function for both --resume and --sprint modes' verifies this.\"\n    },\n    {\n      \"criterion\": \"code_quality_no_duplication\",\n      \"score\": 9,\n      \"details\": \"loadExistingContract is a single shared function in shared/files.ts, imported once in harness.ts. Both --resume and --sprint modes use the same conditional block (line 422). No copy-paste duplication detected.\"\n    },\n    {\n      \"criterion\": \"error_handling_patterns\",\n      \"score\": 8,\n      \"details\": \"loadExistingContract uses try/catch returning null on any error. writeParseErrorDiagnostic wraps all I/O in try/catch with logError, never masking the original parse failure. The test 'error during diagnostic write does not crash' with /dev/null/impossible/path confirms graceful handling. Minor lint issues exist (unused 'err' variable in logger.ts, formatting) but these are pre-existing from sprint 1.\"\n    },\n    {\n      \"criterion\": \"naming_and_readability\",\n      \"score\": 8,\n      \"details\": \"Functions are well-named: `loadExistingContract`, `writeParseErrorDiagnostic`, `parseContract`, `negotiateContract`. Log messages clearly distinguish 'Loaded contract from disk' vs 'Negotiating sprint contract' vs 'Contract agreed'. PARSE_ERROR_PREVIEW_LENGTH is a named constant. Good readability throughout.\"\n    },\n    {\n      \"criterion\": \"truncation_length_reasonable\",\n      \"score\": 9,\n      \"details\": \"PARSE_ERROR_PREVIEW_LENGTH is set to 500 characters (line 104), which falls exactly in the 200-500 range specified. The truncation indicator '... (truncated, N chars total)' clearly shows it was truncated and gives the original length. Console output from tests confirms readable truncated output.\"\n    },\n    {\n      \"criterion\": \"regex_anchored_line_start\",\n      \"score\": 10,\n      \"details\": \"sprint-count.ts uses `/^##\\\\s*Sprint\\\\s+\\\\d+/gim` — `^` with `m` flag (multiline) ensures only line-start matches. Unchanged from sprint 1.\"\n    },\n    {\n      \"criterion\": \"inline_sprint_references_not_counted\",\n      \"score\": 10,\n      \"details\": \"Tests confirm: spec with '## Sprint 1' and '## Sprint 2' headings plus prose mentioning 'Sprint 3' and blockquoted '> ## Sprint 4' yields count of 2. All tests pass.\"\n    },\n    {\n      \"criterion\": \"standard_multiline_spec_counted_correctly\",\n      \"score\": 10,\n      \"details\": \"Test 'counts standard line-start headings' with four '## Sprint N' headings correctly returns 4. Test passes.\"\n    },\n    {\n      \"criterion\": \"log_filename_timestamp_format\",\n      \"score\": 10,\n      \"details\": \"fileTimestamp() in logger.ts produces YYYY.MM.DD-HH.MM.SS format. conversation-logger.ts uses this as prefix: `${ts}-${baseName}.md`. Pattern matches spec requirement.\"\n    },\n    {\n      \"criterion\": \"resume_does_not_overwrite_logs\",\n      \"score\": 10,\n      \"details\": \"Each log file gets a fresh timestamp via fileTimestamp() at creation time. Resume creates new files with different timestamps. No deletion or overwrite logic exists.\"\n    },\n    {\n      \"criterion\": \"contract_negotiation_logs_timestamped\",\n      \"score\": 9,\n      \"details\": \"Contract negotiation uses createConversationLog with timestamp, producing files like 'YYYY.MM.DD-HH.MM.SS-sprint-N-contract-negotiation.md'. Code in contract.ts line 37.\"\n    },\n    {\n      \"criterion\": \"all_agent_log_types_timestamped\",\n      \"score\": 9,\n      \"details\": \"All agent roles (Generator, Evaluator, Planner, Documenter, contract-negotiation) use createConversationLog which always generates timestamped filenames. No log file is written without a timestamp prefix.\"\n    },\n    {\n      \"criterion\": \"timestamp_uses_configured_timezone\",\n      \"score\": 8,\n      \"details\": \"fileTimestamp() uses getResolvedTimezone() which returns configuredTimezone or falls back to system timezone. setDisplayTimezone() is called at startup from config.tzDisplay. Terminal and file timestamps use the same timezone.\"\n    },\n    {\n      \"criterion\": \"langfuse_span_names_aligned\",\n      \"score\": 8,\n      \"details\": \"Conversation logger exposes `timestampedName` property (conversation-logger.ts line 11). Span names in harness.ts use fileTimestamp() for naming (e.g., line 418 `${fileTimestamp()}-sprint-${sprint}`). The convention is consistent for cross-referencing.\"\n    },\n    {\n      \"criterion\": \"regex_fix_has_test_coverage\",\n      \"score\": 10,\n      \"details\": \"sprint-count.test.ts has comprehensive coverage: (1) standard headings counted (4 headings = 4), (2) inline prose 'Sprint 3' not counted, (3) blockquoted '> ## Sprint 3' not counted, (4) indented headings not counted. All tests pass.\"\n    }\n  ],\n  \"overallSummary\": \"Sprint 2 implementation is solid. Both features (Resume Contract Skip and Contract Parse Error Logging) are well-implemented with a clean shared code path via loadExistingContract, proper validation, diagnostic file writing with directory creation on demand, and truncated console previews. All 492 tests pass. Code quality is good with descriptive naming, no duplication, and proper error handling. Lint has minor pre-existing issues (unused variable, formatting) but nothing functional. All sprint 1 regression criteria remain fully satisfied.\"\n}\n```",
+          "stop_reason": "end_turn",
+          "session_id": "463ca960-6e83-40d0-8098-e27ed4b8eff3",
+          "total_cost_usd": 0.5115930000000001,
+          "usage": {
+            "input_tokens": 9,
+            "cache_creation_input_tokens": 48100,
+            "cache_read_input_tokens": 210896,
+            "output_tokens": 4219,
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 48100,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "",
+            "iterations": [],
+            "speed": "standard"
+          },
+          "modelUsage": {
+            "claude-opus-4-6": {
+              "inputTokens": 9,
+              "outputTokens": 4219,
+              "cacheReadInputTokens": 210896,
+              "cacheCreationInputTokens": 48100,
+              "webSearchRequests": 0,
+              "costUSD": 0.5115930000000001,
+              "contextWindow": 200000,
+              "maxOutputTokens": 64000
+            }
+          },
+          "permission_denials": [],
+          "fast_mode_state": "off",
+          "uuid": "bbcd47a0-2bb0-4e11-812c-8b7826412d63"
         }
       }
     }
