@@ -83,10 +83,37 @@ export async function negotiateContract(
 }
 
 /**
- * Extract the first balanced {...} block from text that contains the required key.
- * Uses bracket-depth counting to handle nested JSON correctly.
+ * Extract a balanced {...} block from text that contains the required key.
+ *
+ * Default: forward scan, returns the first balanced block containing the key.
+ *
+ * With `{ fromEnd: true }`: scans backward from the last `}`, returning the
+ * innermost-to-outermost balanced block. This is the right strategy for
+ * verdict-shaped responses where the real JSON is always the trailing balanced
+ * block and earlier text may contain JSX/Python braces from Read tool output.
  */
-export function extractBalancedJson(text: string, requiredKey: string): string | null {
+export function extractBalancedJson(text: string, requiredKey: string, opts?: { fromEnd?: boolean }): string | null {
+  if (opts?.fromEnd) {
+    let end = -1;
+    let depth = 0;
+    for (let i = text.length - 1; i >= 0; i--) {
+      if (text[i] === "}") {
+        if (depth === 0) end = i;
+        depth++;
+      } else if (text[i] === "{") {
+        depth--;
+        if (depth === 0 && end >= 0) {
+          const candidate = text.slice(i, end + 1);
+          if (candidate.includes(`"${requiredKey}"`)) {
+            return candidate;
+          }
+          end = -1;
+        }
+      }
+    }
+    return null;
+  }
+
   let start = -1;
   let depth = 0;
   for (let i = 0; i < text.length; i++) {
@@ -107,6 +134,25 @@ export function extractBalancedJson(text: string, requiredKey: string): string |
   return null;
 }
 
+/**
+ * If `text` contains an opening ``` ```json ``` or ``` ``` ``` fence with no
+ * matching closing fence (truncation case), return everything from the opener
+ * to end-of-text. Returns null if fences are balanced or no opener exists.
+ */
+export function extractUnclosedFence(text: string): string | null {
+  const fenceRegex = /```(?:json)?\s*\n/g;
+  const openers: number[] = [];
+  for (const m of text.matchAll(fenceRegex)) {
+    if (m.index !== undefined) openers.push(m.index + m[0].length);
+  }
+  if (openers.length === 0) return null;
+  // Count all fences (opening or closing) to see if the last opener has a closer
+  const allFences = [...text.matchAll(/```/g)];
+  if (allFences.length % 2 === 0) return null; // balanced
+  const lastOpener = openers[openers.length - 1]!;
+  return text.slice(lastOpener).trim();
+}
+
 /** Maximum characters to show in the console preview on parse failure. */
 const PARSE_ERROR_PREVIEW_LENGTH = 500;
 
@@ -117,8 +163,12 @@ export function parseContract(text: string, sprintNumber: number, workDir?: stri
   for (const match of codeBlocks.reverse()) {
     if (match[1]) candidates.push(match[1].trim());
   }
+  const balancedFromEnd = extractBalancedJson(text, "criteria", { fromEnd: true });
+  if (balancedFromEnd) candidates.push(balancedFromEnd);
   const balanced = extractBalancedJson(text, "criteria");
-  if (balanced) candidates.push(balanced);
+  if (balanced && balanced !== balancedFromEnd) candidates.push(balanced);
+  const unclosed = extractUnclosedFence(text);
+  if (unclosed) candidates.push(unclosed);
   candidates.push(text.trim());
 
   for (const candidate of candidates) {

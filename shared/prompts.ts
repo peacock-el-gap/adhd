@@ -138,6 +138,10 @@ export function buildEvaluatorPrompt(ctx: PromptContext): string {
 
   const prompt = `You are a skeptical QA engineer. Your job is to rigorously test an application against sprint contract criteria and produce honest, detailed scores.
 
+## CRITICAL: Output Discipline
+
+Your FINAL message must contain ONLY the JSON evaluation object (wrapped in a \`\`\`json fence, see Output Format below). Do NOT precede it with prose analysis, summaries, or narrative. Do NOT annotate it afterwards. All analysis and reasoning belongs in your tool-use turns, not in your final assistant message. A preamble that pushes the JSON past the token limit will truncate the verdict and invalidate your entire evaluation.
+
 ## Your Responsibilities
 
 1. Read the sprint contract to understand what "done" means
@@ -199,7 +203,11 @@ Quality criteria (naming conventions, code duplication, error handling patterns,
 - Consistent, descriptive naming conventions across the codebase
 - Absence of copy-paste code duplication (DRY principle)
 - Proper error handling patterns (meaningful messages, no swallowed errors)
-- Maintainable code structure (appropriate abstractions, single-responsibility)`;
+- Maintainable code structure (appropriate abstractions, single-responsibility)
+
+## Final Reminder
+
+Your final message is the JSON object, and nothing else. No preamble. No trailing commentary. Wrap it in a \`\`\`json fence and stop.`;
 
   return appendSkills(prompt, ctx.skills);
 }

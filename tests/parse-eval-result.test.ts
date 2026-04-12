@@ -77,4 +77,21 @@ describe("parseEvalResult", () => {
     expect(result.feedback).toHaveLength(2);
     expect(result.feedback[0]!.score).toBe(9);
   });
+
+  test("picks trailing verdict past earlier JSX-like braces in prose", () => {
+    // Simulates a response where the evaluator pasted a code excerpt (with
+    // function braces) in its prose before emitting the verdict JSON.
+    const response = `Read app/auth.py:\n  def check(user) { if (user) { return true; } }\n\nFinal verdict:\n${JSON.stringify(validEval)}`;
+    const result = parseEvalResult(response, contract, 7);
+    expect(result.passed).toBe(true);
+    expect(result.feedback).toHaveLength(2);
+  });
+
+  test("recovers JSON from unclosed ```json fence (truncation case)", () => {
+    // Simulates max_tokens truncation: opening fence but no closing fence.
+    const truncated = `Analysis: the app works.\n\n\`\`\`json\n${JSON.stringify(validEval)}`;
+    const result = parseEvalResult(truncated, contract, 7);
+    expect(result.passed).toBe(true);
+    expect(result.feedback[0]!.score).toBe(9);
+  });
 });

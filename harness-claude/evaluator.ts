@@ -7,8 +7,9 @@ import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { EvalResult, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 import { processAgentStream } from "./agent-stream.ts";
-import { extractBalancedJson } from "./contract.ts";
+import { extractBalancedJson, extractUnclosedFence } from "./contract.ts";
 import type { Options } from "./tracing-claude.ts";
+import { query } from "./tracing-claude.ts";
 
 export type { RunEvaluatorOptions };
 
@@ -63,11 +64,50 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   const duration = Date.now() - startTime.getTime();
   await convLog.finalize(duration);
 
-  const evalResult: EvalResult & { sdkResult?: SDKResultFields } = parseEvalResult(
-    streamResult.response,
-    contract,
-    passThreshold,
-  );
+  let parsed = tryParseEvalResult(streamResult.response, contract, passThreshold);
+
+  // Retry gate: if parsing failed AND the SDK stopped at max_tokens, the JSON
+  // was almost certainly truncated mid-output. One short follow-up asking for
+  // just the JSON object usually recovers a real verdict. Guarded by stop_reason
+  // so genuinely-malformed output never loops.
+  if (!parsed && streamResult.sdkResult?.stop_reason === "max_tokens" && streamResult.sessionId) {
+    log("EVALUATOR", "Parse failed with stop_reason=max_tokens — retrying with JSON-only follow-up");
+    try {
+      const retryOptions: Options = {
+        cwd: workDir,
+        systemPrompt:
+          "You are re-emitting structured output from a prior evaluation. Output ONLY the JSON object. No preamble, no markdown fences, no prose.",
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        tools: ["Read"],
+        model,
+        maxTurns: 2,
+        persistSession: false,
+        // Per sdk.d.ts:1159-1167 — `resume` loads the prior session's history.
+        resume: streamResult.sessionId,
+      };
+      let retryResponse = "";
+      for await (const msg of query({
+        prompt: "Re-emit ONLY the JSON object with your evaluation. No preamble, no fences, no prose.",
+        options: retryOptions,
+      })) {
+        if (msg.type === "assistant") {
+          for (const block of msg.message.content) {
+            if (block.type === "text") retryResponse += block.text;
+          }
+        }
+      }
+      parsed = tryParseEvalResult(retryResponse, contract, passThreshold);
+      if (parsed) {
+        log("EVALUATOR", "Retry recovered valid JSON verdict");
+      }
+    } catch (err) {
+      log("EVALUATOR", `WARNING: Evaluator retry failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  const evalResult: EvalResult & { sdkResult?: SDKResultFields } =
+    parsed ?? buildZeroedFallback(streamResult.response, contract);
   evalResult.sdkResult = streamResult.sdkResult;
 
   if (shouldLog("normal", level)) {
@@ -89,20 +129,37 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   return evalResult;
 }
 
-export function parseEvalResult(response: string, contract: SprintContract, passThreshold: number): EvalResult {
+/**
+ * Attempt to parse an evaluator response into an EvalResult. Returns null on
+ * failure (caller decides whether to retry or return a zeroed fallback).
+ */
+export function tryParseEvalResult(
+  response: string,
+  _contract: SprintContract,
+  passThreshold: number,
+): EvalResult | null {
   const candidates: string[] = [];
 
-  // Strategy 1: Look for the LAST JSON code block
+  // Strategy 1: LAST JSON code block
   const codeBlocks = [...response.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
   for (const match of codeBlocks.reverse()) {
     if (match[1]) candidates.push(match[1].trim());
   }
 
-  // Strategy 2: Find balanced {...} block containing "feedback"
-  const balanced = extractBalancedJson(response, "feedback");
-  if (balanced) candidates.push(balanced);
+  // Strategy 2: balanced {...} block scanning from end (picks the trailing
+  // verdict JSON, not earlier JSX/Python braces emitted via Read tool output)
+  const balancedFromEnd = extractBalancedJson(response, "feedback", { fromEnd: true });
+  if (balancedFromEnd) candidates.push(balancedFromEnd);
 
-  // Strategy 3: Raw response as-is
+  // Strategy 3: balanced {...} forward scan (backstop for unusual shapes)
+  const balanced = extractBalancedJson(response, "feedback");
+  if (balanced && balanced !== balancedFromEnd) candidates.push(balanced);
+
+  // Strategy 4: unclosed ```json fence → truncated output recovery
+  const unclosed = extractUnclosedFence(response);
+  if (unclosed) candidates.push(unclosed);
+
+  // Strategy 5: raw response as-is
   candidates.push(response.trim());
 
   for (const candidate of candidates) {
@@ -123,7 +180,10 @@ export function parseEvalResult(response: string, contract: SprintContract, pass
     }
   }
 
-  logError("EVALUATOR", "Failed to parse evaluation JSON from any extraction strategy");
+  return null;
+}
+
+export function buildZeroedFallback(response: string, contract: SprintContract): EvalResult {
   return {
     passed: false,
     scores: {},
@@ -134,4 +194,12 @@ export function parseEvalResult(response: string, contract: SprintContract, pass
     })),
     overallSummary: `Evaluation parsing failed. Raw response: ${response.slice(0, 500)}`,
   };
+}
+
+/** Back-compat wrapper used by tests. Prefer tryParseEvalResult + buildZeroedFallback. */
+export function parseEvalResult(response: string, contract: SprintContract, passThreshold: number): EvalResult {
+  const parsed = tryParseEvalResult(response, contract, passThreshold);
+  if (parsed) return parsed;
+  logError("EVALUATOR", "Failed to parse evaluation JSON from any extraction strategy");
+  return buildZeroedFallback(response, contract);
 }
