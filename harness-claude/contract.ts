@@ -13,6 +13,7 @@ export async function negotiateContract(
   proposalModel: string,
   reviewModel: string,
   usage?: UsageTracker,
+  logTimestamp?: string,
 ): Promise<SprintContract> {
   const startTime = new Date();
 
@@ -33,7 +34,7 @@ export async function negotiateContract(
   const convLog = createConversationLog(workDir, "contract-negotiation", sprintNumber, undefined, {
     model: proposalModel,
     startTime,
-  });
+  }, logTimestamp);
 
   const proposalResult = await processAgentStream(proposalPrompt, proposalOptions, "HARNESS", "quiet", convLog, {
     onResult(result) {

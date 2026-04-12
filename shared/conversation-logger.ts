@@ -36,9 +36,10 @@ export function createConversationLog(
   sprint?: number,
   attempt?: number,
   metadata?: { model: string; startTime: Date },
+  preGeneratedTimestamp?: string,
 ): ConversationLogger {
   const entries: LogEntry[] = [];
-  const ts = fileTimestamp();
+  const ts = preGeneratedTimestamp ?? fileTimestamp();
   const baseName = buildLogBaseName(agentRole, sprint, attempt);
   const timestampedName = `${ts}-${baseName}`;
 

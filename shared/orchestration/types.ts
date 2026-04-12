@@ -20,6 +20,8 @@ export interface RunGeneratorOptions {
   previousFeedback?: EvalResult;
   attempt?: number;
   skills?: AgentSkills;
+  /** Pre-generated timestamp for log filename alignment with span names. */
+  logTimestamp?: string;
 }
 
 export interface GeneratorResult {
@@ -34,12 +36,16 @@ export interface RunEvaluatorOptions {
   attempt?: number;
   skills?: AgentSkills;
   supplementaryContext?: string;
+  /** Pre-generated timestamp for log filename alignment with span names. */
+  logTimestamp?: string;
 }
 
 export interface RunDocumenterOptions {
   config: ResolvedConfig;
   skills?: AgentSkills;
   sprintResults?: SprintResult[];
+  /** Pre-generated timestamp for log filename alignment with span names. */
+  logTimestamp?: string;
 }
 
 export interface EnsureCommitOptions {
@@ -56,7 +62,7 @@ export interface EnsureCommitOptions {
 
 export interface AgentRunners {
   initTracing(config: ResolvedConfig): Tracer;
-  runPlanner(config: ResolvedConfig, feedback?: string, usage?: UsageTracker, skills?: AgentSkills): Promise<string>;
+  runPlanner(config: ResolvedConfig, feedback?: string, usage?: UsageTracker, skills?: AgentSkills, logTimestamp?: string): Promise<string>;
   runGenerator(opts: RunGeneratorOptions): Promise<GeneratorResult>;
   runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }>;
   runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields }>;
@@ -67,6 +73,7 @@ export interface AgentRunners {
     proposalModel: string,
     reviewModel: string,
     usage?: UsageTracker,
+    logTimestamp?: string,
   ): Promise<SprintContract>;
   ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<CommitSource>;
 }

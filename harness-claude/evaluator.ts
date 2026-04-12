@@ -52,7 +52,7 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   };
 
   const startTime = new Date();
-  const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt, { model, startTime });
+  const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt, { model, startTime }, opts.logTimestamp);
 
   const streamResult = await processAgentStream(prompt, options, "EVALUATOR", level, convLog, {
     onResult() {

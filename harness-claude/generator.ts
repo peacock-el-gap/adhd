@@ -53,7 +53,7 @@ export async function runGenerator(opts: RunGeneratorOptions): Promise<Generator
   };
 
   const startTime = new Date();
-  const convLog = createConversationLog(workDir, "Generator", sprint, attempt, { model, startTime });
+  const convLog = createConversationLog(workDir, "Generator", sprint, attempt, { model, startTime }, opts.logTimestamp);
 
   const result = await processAgentStream(prompt, options, "GENERATOR", level, convLog, {
     onToolUse(_name, input) {

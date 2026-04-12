@@ -50,7 +50,7 @@ Read the codebase in ${isGreenfield ? "the `app/` directory" : "the project root
   };
 
   const startTime = new Date();
-  const convLog = createConversationLog(workDir, "Documenter", undefined, undefined, { model, startTime });
+  const convLog = createConversationLog(workDir, "Documenter", undefined, undefined, { model, startTime }, opts.logTimestamp);
 
   const streamResult = await processAgentStream(prompt, options, "DOCUMENTER", level, convLog, {
     onResult() {

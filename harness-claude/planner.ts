@@ -17,6 +17,7 @@ export async function runPlanner(
   reviseFeedback?: string,
   usage?: UsageTracker,
   skills?: AgentSkills,
+  logTimestamp?: string,
 ): Promise<string> {
   const { userPrompt, workDir, isGreenfield, interactive, logLevel } = config;
 
@@ -108,7 +109,7 @@ export async function runPlanner(
   }
 
   const startTime = new Date();
-  const convLog = createConversationLog(workDir, "Planner", undefined, undefined, { model, startTime });
+  const convLog = createConversationLog(workDir, "Planner", undefined, undefined, { model, startTime }, logTimestamp);
 
   let completed = false;
 

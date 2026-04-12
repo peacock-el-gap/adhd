@@ -34,7 +34,8 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
     progress.retryCount = retry;
     await writeProgress(config.workDir, progress);
 
-    const generatorSpan = attemptSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-attempt-${retry}-generator`, {
+    const generatorTs = fileTimestamp();
+    const generatorSpan = attemptSpan.startChild(`${generatorTs}-sprint-${sprint}-attempt-${retry}-generator`, {
       model: config.resolvedModelGenerator,
       sprint,
       attempt: retry,
@@ -51,6 +52,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
               previousFeedback: lastEval,
               attempt: retry,
               skills: skills?.generator,
+              logTimestamp: generatorTs,
             }),
           "generator",
         ),
@@ -144,7 +146,8 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
       supplementaryContext += `\n\n## Static Analysis Results\n\n${staticAnalysisResult.output}`;
     }
 
-    const evaluatorSpan = attemptSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-attempt-${retry}-evaluator`, {
+    const evaluatorTs = fileTimestamp();
+    const evaluatorSpan = attemptSpan.startChild(`${evaluatorTs}-sprint-${sprint}-attempt-${retry}-evaluator`, {
       model: config.resolvedModelEvaluator,
       sprint,
       attempt: retry,
@@ -159,6 +162,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
               attempt: retry,
               skills: skills?.evaluator,
               supplementaryContext: supplementaryContext || undefined,
+              logTimestamp: evaluatorTs,
             }),
           "evaluator",
         ),

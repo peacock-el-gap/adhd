@@ -105,8 +105,9 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
   return harnessSpan.run(async () => {
     try {
       logDebug("HARNESS", "Calling runPlanner...");
-      const plannerSpan = harnessSpan.startChild(`${fileTimestamp()}-planner`, { model: config.resolvedModelPlanner });
-      const spec = await plannerSpan.run(() => agents.runPlanner(config, undefined, usage, skills.planner));
+      const plannerTs = fileTimestamp();
+      const plannerSpan = harnessSpan.startChild(`${plannerTs}-planner`, { model: config.resolvedModelPlanner });
+      const spec = await plannerSpan.run(() => agents.runPlanner(config, undefined, usage, skills.planner, plannerTs));
       plannerSpan.end();
       logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
       await writeSpec(config.workDir, spec);
@@ -432,7 +433,8 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
 
     if (!contract) {
       log("HARNESS", "Negotiating sprint contract...");
-      const negotiationSpan = sprintSpan.startChild(`${fileTimestamp()}-sprint-${sprint}-contract-negotiation`, { sprint });
+      const negotiationTs = fileTimestamp();
+      const negotiationSpan = sprintSpan.startChild(`${negotiationTs}-sprint-${sprint}-contract-negotiation`, { sprint });
       try {
         contract = await negotiationSpan.run(() =>
           withTransientRetry(
@@ -444,6 +446,7 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
                 config.resolvedModelGenerator,
                 config.resolvedModelEvaluator,
                 usage,
+                negotiationTs,
               ),
             "contract negotiation",
           ),

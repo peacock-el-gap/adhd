@@ -106,7 +106,8 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
   const { isGreenfield } = config;
   const documenterModel = config.resolvedModelDocumenter;
   const gDir = gitDir(config.workDir, isGreenfield);
-  const documenterSpan = parentSpan.startChild(`${fileTimestamp()}-documenter`, { model: documenterModel });
+  const documenterTs = fileTimestamp();
+  const documenterSpan = parentSpan.startChild(`${documenterTs}-documenter`, { model: documenterModel });
   try {
     // Capture HEAD SHA before documenter runs
     let beforeDocsSha = "";
@@ -117,7 +118,7 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
     }
 
     const docResult = await documenterSpan.run(() =>
-      agents.runDocumenter({ config, skills: documenterSkills, sprintResults: results }),
+      agents.runDocumenter({ config, skills: documenterSkills, sprintResults: results, logTimestamp: documenterTs }),
     );
 
     // Record usage
