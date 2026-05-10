@@ -1,5 +1,43 @@
 # Changelog
 
+All notable changes to this project are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [v0.5.0] - 2026-05-10
+
+First release tagged under SemVer. Earlier `v0.01`–`v0.04` tags were re-tagged as `v0.1.0`–`v0.4.0` against the same commits.
+
+### Added
+- Per-model token usage tracking with per-stage model column and per-model rollup view in the terminal summary; `model` field persisted in `.adhd/usage.json` (Phase 1.6 — see detailed notes below)
+- SDK result diagnostics logged for every agent invocation (`stop_reason`, `num_turns`, `is_error`)
+- Evaluator JSON parsing hardened with retry on `max_tokens` truncation
+- Enhancements / ideas backlog (`docs/enhancements-new-features-ideas.md`)
+
+### Changed
+- Agent-commit recovery unified via shared `ensureAgentCommit` primitive in `shared/orchestration/git-ops.ts`
+
+### Fixed
+- `--dry-run` followed by `--resume` no longer skips sprints and jumps straight into the documenter
+
+## [v0.4.0] - 2026-04-12
+
+Phase 1.5 — Operational Hardening. See "Phase 1.5" sections below for full detail.
+
+## [v0.3.0] - 2026-04-11
+
+SDK separation refactor — `shared/` proven free of LLM SDK imports; `harness-{provider}` directory convention established.
+
+## [v0.2.0] - 2026-04-10
+
+Phase 1 — Deepen complete. See "Phase 1" sections below for full detail.
+
+## [v0.1.0] - 2026-04-09
+
+Initial public milestone — four-agent harness (planner, generator, evaluator, documenter) with sprint loop, contract negotiation, checkpoint/resume, and interactive gates.
+
+---
+
 ## Phase 1: Deepen (Smarter Within Existing Architecture)
 
 Closes the highest-impact quality gaps in the harness -- cross-sprint regression detection, wasted evaluation turns, imprecise retry feedback, code quality blindness -- and adds DX improvements for faster iteration on multi-sprint projects.

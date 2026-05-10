@@ -80,6 +80,16 @@ bun run lint:fix     # Auto-fix lint/format issues
 bun run test         # Unit + integration + smoke tests
 ```
 
+## Release Process
+
+- Branches: `feat/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*`. **Squash-merge** to `main`.
+- Squash commit message uses [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `feat!:` for breaking).
+- Before deleting a merged topic branch, tag the tip as `dev/<branch-name>` and push it — preserves the harness's per-sprint `[auto-commit]` history.
+- Tags are SemVer with `v` prefix (`v0.5.0`). Never `v0.01`-style.
+- Currently on `0.x` — breaking changes are allowed between minor versions; `1.0.0` is when we commit to backwards compatibility.
+- **Never force-push `main`. Never rewrite pushed history.**
+- Full runbook (per-release checklist, CHANGELOG format, copy-paste commands): [docs/RELEASING.md](docs/RELEASING.md)
+
 ## Agent SDK Reference
 
 The `.claude/skills/claude-api/` skill provides Claude API and Agent SDK documentation.
