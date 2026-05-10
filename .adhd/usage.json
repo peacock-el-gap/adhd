@@ -429,7 +429,69 @@
         }
       ],
       "totalCostUsd": 27.093836250000003
+    },
+    {
+      "startedAt": "2026-05-09T07:42:01.582Z",
+      "stages": [
+        {
+          "stage": "planner",
+          "inputTokens": 11,
+          "outputTokens": 7489,
+          "cacheReadTokens": 192720,
+          "costUsd": 1.2865575000000002,
+          "durationMs": 133969
+        },
+        {
+          "stage": "sprint-1-contract-proposal",
+          "inputTokens": 3,
+          "outputTokens": 2291,
+          "cacheReadTokens": 11732,
+          "costUsd": 0.0563211,
+          "durationMs": 44006
+        },
+        {
+          "stage": "sprint-1-contract-review",
+          "inputTokens": 6,
+          "outputTokens": 9,
+          "cacheReadTokens": 15716,
+          "costUsd": 0.09545775,
+          "durationMs": 1790
+        },
+        {
+          "stage": "sprint-1-attempt-0-generator",
+          "inputTokens": 1615,
+          "outputTokens": 19328,
+          "cacheReadTokens": 3915132,
+          "costUsd": 1.7748021,
+          "durationMs": 434979
+        },
+        {
+          "stage": "sprint-1-attempt-0-evaluator",
+          "inputTokens": 47,
+          "outputTokens": 10818,
+          "cacheReadTokens": 2307853,
+          "costUsd": 5.255265750000001,
+          "durationMs": 232072
+        },
+        {
+          "stage": "sprint-1-attempt-1-generator",
+          "inputTokens": 12,
+          "outputTokens": 2214,
+          "cacheReadTokens": 309953,
+          "costUsd": 0.1942794,
+          "durationMs": 60911
+        },
+        {
+          "stage": "sprint-1-attempt-1-evaluator",
+          "inputTokens": 21,
+          "outputTokens": 5026,
+          "cacheReadTokens": 601716,
+          "costUsd": 1.7058389999999994,
+          "durationMs": 100034
+        }
+      ],
+      "totalCostUsd": 10.3685226
     }
   ],
-  "runTotalCostUsd": 50.58912625000001
+  "runTotalCostUsd": 60.957648850000005
 }

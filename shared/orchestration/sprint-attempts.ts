@@ -66,7 +66,11 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
       );
       generatorSessionId = result.sessionId;
       if (result.sdkResult) {
-        usage.recordStage(`sprint-${sprint}-attempt-${retry}-generator`, result.sdkResult);
+        usage.recordStage(
+          `sprint-${sprint}-attempt-${retry}-generator`,
+          config.resolvedModelGenerator,
+          result.sdkResult,
+        );
       }
     } catch (err) {
       generatorSpan.end({ error: String(err) });
@@ -175,7 +179,11 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
         ),
       );
       if (evalWithUsage.sdkResult) {
-        usage.recordStage(`sprint-${sprint}-attempt-${retry}-evaluator`, evalWithUsage.sdkResult);
+        usage.recordStage(
+          `sprint-${sprint}-attempt-${retry}-evaluator`,
+          config.resolvedModelEvaluator,
+          evalWithUsage.sdkResult,
+        );
       }
       lastEval = evalWithUsage;
     } catch (err) {

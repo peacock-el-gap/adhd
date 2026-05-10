@@ -48,7 +48,7 @@ export async function negotiateContract(
 
   const proposalResult = await processAgentStream(proposalPrompt, proposalOptions, "HARNESS", "quiet", convLog, {
     onResult(result) {
-      usage?.recordStage(`sprint-${sprintNumber}-contract-proposal`, result);
+      usage?.recordStage(`sprint-${sprintNumber}-contract-proposal`, proposalModel, result);
     },
   });
   const proposalText = proposalResult.response;
@@ -69,7 +69,7 @@ export async function negotiateContract(
 
   const reviewResult = await processAgentStream(reviewPrompt, reviewOptions, "HARNESS", "quiet", convLog, {
     onResult(result) {
-      usage?.recordStage(`sprint-${sprintNumber}-contract-review`, result);
+      usage?.recordStage(`sprint-${sprintNumber}-contract-review`, reviewModel, result);
     },
   });
   const reviewText = reviewResult.response;

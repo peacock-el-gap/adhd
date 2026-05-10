@@ -131,7 +131,7 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
 
     // Record usage
     if (docResult.sdkResult) {
-      usage.recordStage("documenter", docResult.sdkResult);
+      usage.recordStage("documenter", config.resolvedModelDocumenter, docResult.sdkResult);
     }
 
     // Git commit enforcement for documenter — unified with generator via ensureAgentCommit

@@ -120,7 +120,7 @@ export async function runPlanner(
     onResult(result) {
       completed = true;
       if (usage) {
-        usage.recordStage(reviseFeedback ? "planner-revision" : "planner", result);
+        usage.recordStage(reviseFeedback ? "planner-revision" : "planner", model, result);
       }
       log("PLANNER", `Planning complete (session: ${result.session_id?.slice(0, 8)}...)`);
     },

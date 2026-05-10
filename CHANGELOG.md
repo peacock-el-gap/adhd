@@ -190,3 +190,24 @@ Fixes correctness bugs that cause phantom sprints, closes observability gaps tha
 - SDK separation maintained: zero provider SDK imports in `shared/`
 
 **Verified:** All 14 criteria passed (scores 7-10). 2 attempts.
+
+## Phase 1.6: Observability Sharpening
+
+Extends the existing cost tracking subsystem with per-model attribution: every recorded stage carries the resolved model name, the terminal summary gains a per-stage model column and a per-model rollup view, and the persisted `.adhd/usage.json` stores the model alongside tokens and cost. Backward-compatible with legacy usage logs.
+
+### Sprint 1 -- Per-Model Usage Tracking
+
+**Features:** `model` field on `StageUsage`, call-site wiring, per-stage model column, per-model rollup, JSON persistence with legacy compatibility
+
+- Added required `model: string` field to `StageUsage` in `shared/types.ts`; `UsageTracker.recordStage` abstract interface gains a required `model` parameter (no optional/defaulted fallback in production paths)
+- Wired `config.resolvedModel*` values from all seven Claude call sites: planner and planner-revision → `resolvedModelPlanner`; generator → `resolvedModelGenerator`; evaluator → `resolvedModelEvaluator`; documenter → `resolvedModelDocumenter`; contract-proposal → generator's model; contract-review → evaluator's model
+- `formatStageTable` pure helper returns `string[]` with a left-aligned model column placed immediately after the stage name and before all numeric columns; numeric columns remain right-aligned
+- `aggregateByModel` pure aggregator sums input tokens, output tokens, and cost per distinct model and returns `ModelRollupRow[]` sorted by total USD descending
+- `formatModelRollup` pure helper renders the rollup section as `string[]`; section is always printed (even for single-model runs) so output shape is predictable
+- `serializeStage` writes keys in spec-defined order: `stage`, `model`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `costUsd`, `durationMs`
+- `deserializeStage` defaults missing `model` field to `"unknown"` (exactly one place); next `save()` rewrites all legacy entries in new shape
+- Malformed `usage.json` produces a meaningful "usage.json could not be parsed" message rather than a raw thrown parse error
+- Unit tests cover: model field storage, per-stage formatting helper, rollup aggregator, rollup sort order, legacy-load without throw, save/load round-trip across three models, JSON key order
+- `shared/` retains zero LLM-SDK imports; `bun run typecheck` and `bun run lint` exit clean
+
+**Verified:** All 15 criteria passed (scores 7-10). 2 attempts.

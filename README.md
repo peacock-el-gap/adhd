@@ -167,7 +167,7 @@ In interactive mode, you review a diff of proposed changes and can accept or rej
 
 **Interactive gates:** In interactive mode (the default), the harness pauses at key decision points for your input. Gates have countdown timers with sensible defaults -- press any key to choose, or wait for the timeout. Gates include: dirty-tree warning before starting, spec approval after planning, contract preview before each sprint, evaluator override on failures, and mid-run steering between sprints. Use `--no-interactive` or `--gate-timeout 0` to skip all gates.
 
-**Cost tracking:** After each run, the harness prints a per-stage cost summary and saves cumulative usage data to `.adhd/usage.json`. This tracks input/output tokens and USD cost for each planner, generator, and evaluator invocation across sessions.
+**Cost tracking:** After each run, the harness prints a per-stage cost summary and saves cumulative usage data to `.adhd/usage.json`. This tracks input/output tokens and USD cost for each planner, generator, and evaluator invocation across sessions. Each stage entry carries the resolved model that produced it, enabling per-model attribution. The terminal summary includes both a per-stage breakdown (with model column) and a per-model rollup sorted by total USD — useful for comparing cost-effectiveness when running mixed-model sprints.
 
 **Terminal output:** Timestamped status messages, tool calls, and sprint pass/fail results. Use `--verbose` for full agent output, `--quiet` for just results, or `--debug` for SDK-level tracing.
 
@@ -492,7 +492,8 @@ Key data flow:
 - **Branch Creation** (`--branch`) -- Auto-create a git branch before the sprint loop
 
 ### Observability
-- Per-stage cost and token tracking (`.adhd/usage.json`)
+- Per-stage cost and token tracking with per-model attribution (`.adhd/usage.json`)
+- Per-model cost rollup in the terminal summary — sorted by total USD, always shown
 - Langfuse OTEL tracing integration
 - Conversation logs for every agent interaction
 - Configurable terminal log levels

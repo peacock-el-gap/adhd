@@ -298,5 +298,83 @@
     "description": "README or equivalent documentation describes --resume, --notify, --commit-adhd, and --commit-adhd-logs flags with usage examples and explains their interaction (e.g., --commit-adhd-logs implies --commit-adhd)",
     "threshold": 7,
     "sprintNumber": 5
+  },
+  {
+    "name": "stage_usage_model_field_stored_exactly",
+    "description": "When `recordStage` is called with a model string (e.g. `\"claude-sonnet-4-20250514\"`), the resulting `StageUsage` entry in tracker state has `model` equal to that exact string — no truncation, no transformation.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "record_stage_model_parameter_required",
+    "description": "`bun run typecheck` exits zero only when every `recordStage` call site passes a `model` argument. Removing the argument from any call site must produce a TypeScript type error. The parameter must not be optional or defaulted in the abstract interface signature.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "shared_has_zero_llm_sdk_imports",
+    "description": "A grep of all files under `shared/` for LLM-SDK import strings (e.g. `@anthropic-ai/`, `@ai-sdk/`, `openai`) returns zero matches after this sprint's changes are applied.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "call_site_model_routing_correct",
+    "description": "In a run with `--model-planner=A --model-generator=B --model-evaluator=C --model-documenter=D`, the persisted `.adhd/usage.json` shows: planner and planner-revision stages have `model: \"A\"`, generator stage has `model: \"B\"`, evaluator stage has `model: \"C\"`, documenter stage has `model: \"D\"`, contract-proposal stage has `model: \"B\"`, contract-review stage has `model: \"C\"`.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "per_stage_summary_includes_model_column",
+    "description": "The per-stage formatting pure helper, when invoked with a sample `StageUsage[]` containing at least two distinct models, returns strings where each row contains the stage's `model` value as a left-aligned text column immediately after the stage name and before the numeric columns. Asserted directly on returned `string[]` without log capture.",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "per_model_rollup_aggregation_correct",
+    "description": "The pure rollup aggregator, when given `StageUsage[]` where model `\"X\"` appears in three stages with (inputTokens: 100, outputTokens: 50, costUsd: 0.01), (200, 80, 0.02), (300, 120, 0.03), returns a `ModelRollupRow` for `\"X\"` with inputTokens=600, outputTokens=250, costUsd=0.06. Asserted directly on the returned struct.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "per_model_rollup_sorted_by_usd_descending",
+    "description": "When the rollup aggregator is given stages across three models with total USD of 0.05, 0.20, and 0.10, the returned `ModelRollupRow[]` is ordered: 0.20, 0.10, 0.05. The terminal summary renders them in this order.",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "rollup_always_printed_even_single_model",
+    "description": "When a run uses only one model (no per-agent overrides), the terminal summary still prints the per-model rollup section with exactly one row containing that model's aggregated totals. The section header is always present.",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "legacy_usage_json_loads_without_throw",
+    "description": "Given a `.adhd/usage.json` whose stage entries omit the `model` field entirely, loading it via the tracker does not throw. Every loaded `StageUsage` has `model === \"unknown\"`. A subsequent `save()` rewrites the file with `model: \"unknown\"` on all legacy entries and the new model string on any newly-recorded entries.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "save_load_round_trip_preserves_model",
+    "description": "A tracker that records stages with models `\"alpha\"`, `\"beta\"`, and `\"gamma\"`, calls `save()`, then is replaced by a fresh tracker instance that loads the same file: every stage's `model` in the loaded state equals the originally-recorded string. No model value is lost, coerced, or defaulted to `\"unknown\"`.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "usage_json_key_order_consistent",
+    "description": "Each stage object in a freshly-written `.adhd/usage.json` has keys in the order: `stage`, `model`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `costUsd`, `durationMs`. Verified by reading the raw JSON string and checking key insertion order on at least one stage entry.",
+    "threshold": 7,
+    "sprintNumber": 1
+  },
+  {
+    "name": "typecheck_and_lint_pass_clean",
+    "description": "`bun run typecheck` and `bun run lint` (Biome) both exit with code 0 after all sprint changes. Zero new `any` casts are introduced in `shared/` or `harness-claude/` files touched by this sprint.",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "documentation_files_updated_correctly",
+    "description": "README.md contains updated Cost tracking paragraph and Observability bullet mentioning per-model attribution. docs/INTERNALS.md Cost Tracking section describes both summary views and the persisted `model` field. docs/ROADMAP.md Part 1 §1.11 bullet 3 is extended; Parts 2 and 3 contain no new per-model tracking entry. CHANGELOG.md contains a new `## Phase 1.6: Observability Sharpening` section with `### Sprint 1 -- Per-Model Usage Tracking` immediately after the Phase 1.5 block, using identical heading levels and Features→bullets→Verified line ordering.",
+    "threshold": 8,
+    "sprintNumber": 1
   }
 ]

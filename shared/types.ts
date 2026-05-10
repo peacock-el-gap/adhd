@@ -158,6 +158,7 @@ export interface HarnessResult {
 
 export interface StageUsage {
   stage: string; // "planner", "sprint-1-contract-negotiation", "sprint-1-attempt-0-generator", etc.
+  model: string; // resolved model name that produced this stage's output
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;

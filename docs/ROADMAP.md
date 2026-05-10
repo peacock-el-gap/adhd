@@ -130,7 +130,7 @@ Three layers, all operational:
 
 1. **Conversation logs** — Detailed markdown per agent/sprint/attempt in `.adhd/logs/`. Always written regardless of log level. Tool calls with inputs, results (long outputs collapsed in `<details>`). Filenames are prefixed with a `YYYY.MM.DD-HH.MM.SS` timestamp (e.g., `2026.04.10-05.28.33-sprint-5-attempt-0-generator.md`) so resume/retry never overwrites prior evidence, `ls` sorts chronologically, and Langfuse trace names align.
 2. **Langfuse OTEL tracing** — Optional hierarchical span tree mirroring the harness structure. Fire-and-forget; zero impact on agent behavior.
-3. **Per-stage cost tracking** — Tokens, USD, duration per SDK call. Printed at session end, accumulated across resume sessions in `.adhd/usage.json`.
+3. **Per-stage cost tracking with per-model attribution** — Tokens, USD, duration per SDK call, plus the resolved model that produced each stage. Two terminal summary views: a per-stage breakdown with model column and a per-model rollup sorted by total USD descending. Stage entries carry a `model` field in `.adhd/usage.json`; legacy entries without the field load as `"unknown"` for backward compatibility. Accumulated across resume sessions.
 
 ### 1.12 Post-Run Documentation Generation
 

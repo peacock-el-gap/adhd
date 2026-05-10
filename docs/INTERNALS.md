@@ -117,7 +117,13 @@ Gate implementation: `shared/interaction.ts` provides `promptGate()` and `prompt
 
 ### Cost Tracking
 
-Each SDK call's token usage and cost is recorded by a `UsageTracker` (`shared/usage.ts`). After the run completes, a per-stage breakdown is printed to the terminal and appended to `.adhd/usage.json`. The file accumulates data across sessions (e.g., an initial run + resume), making it easy to see total cost.
+Each SDK call's token usage and cost is recorded by a `UsageTracker` (`shared/usage.ts`). After the run completes, two summary views are printed to the terminal and the session is appended to `.adhd/usage.json`:
+
+**Per-stage breakdown** — one row per SDK invocation (planner, generator, evaluator, documenter, contract-proposal, contract-review). Each row shows the stage name, the resolved model that produced it, cost in USD, input/output token counts, and wall-clock duration. Numeric columns are right-aligned; the model column is left-aligned text placed immediately after the stage name.
+
+**Per-model rollup** — one row per distinct model used in the session, aggregating total input tokens, total output tokens, and total USD across all stages that used that model. Rows are sorted by total USD descending so the most expensive model is always at the top. The section is always printed — even when only one model was used — so the output shape is predictable.
+
+The persisted `.adhd/usage.json` stores a `model` field on every stage entry alongside tokens and cost. The stable key order is: `stage`, `model`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `costUsd`, `durationMs`. Legacy files written before per-model tracking was added load successfully — entries without a `model` field are materialised in memory as `model: "unknown"`, and the field is written on the next `save()` call. The file accumulates data across sessions (e.g., an initial run + resume), making it easy to see total cost and model attribution over time.
 
 ### Dry-Run Mode
 
