@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [v0.5.1] - 2026-05-30
+
+Internal refactor and test-infrastructure release — no behavior, CLI, or file-format changes.
+
+### Changed
+- Consolidated the Claude Agent SDK call boilerplate (planner, generator, evaluator, documenter, contract negotiation) into `harness-claude/run-agent.ts`
+- Routed every agent run through a single `AgentIdentity` per call (`shared/agent-identity.ts`)
+
+### Fixed
+- Test suite no longer suffers cross-file `mock.module` pollution: the three global-mock test files now run in an isolated `bun test` process (`*.isolated.test.ts` convention), fixing 8 spurious failures that only surfaced in the full run
+
 ## [v0.5.0] - 2026-05-10
 
 First release tagged under SemVer. Earlier `v0.01`–`v0.04` tags were re-tagged as `v0.1.0`–`v0.4.0` against the same commits.
