@@ -1,3 +1,7 @@
+// ⚠️ .isolated.test.ts — runs in its own `bun test` process (see package.json
+// "test" script). mock.module("../harness-claude/tracing-claude.ts") is
+// process-global; sharing a process leaks the stubbed initTracing/query into
+// tracing.test.ts and breaks it. Isolation keeps the mock contained.
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import type { ConversationLogger } from "../shared/conversation-logger.ts";

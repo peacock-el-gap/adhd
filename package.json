@@ -10,7 +10,7 @@
   "scripts": {
     "start": "bun run harness-claude/index.ts",
     "typecheck": "bunx tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test --path-ignore-patterns='**/*.isolated.test.ts' && bun test ./tests/*.isolated.test.ts",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write ."
   },

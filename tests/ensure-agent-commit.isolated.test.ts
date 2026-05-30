@@ -1,3 +1,7 @@
+// ⚠️ .isolated.test.ts — runs in its own `bun test` process (see package.json
+// "test" script). mock.module("node:child_process") is process-global and
+// poisons the shared module cache (git-ops.ts binds the stubbed execSync), so
+// sharing a process with other files breaks them. Isolation keeps it contained.
 import { afterEach, describe, expect, mock, test } from "bun:test";
 
 const execSyncMock = mock();

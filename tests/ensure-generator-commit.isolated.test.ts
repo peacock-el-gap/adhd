@@ -1,3 +1,8 @@
+// ⚠️ .isolated.test.ts — runs in its own `bun test` process (see package.json
+// "test" script). mock.module() on node:child_process, the Claude SDK, and
+// tracing-claude.ts is process-global and poisons the shared module cache
+// (e.g. git-ops.ts binds the stubbed execSync), so sharing a process with other
+// files breaks them. Isolation keeps these mocks contained.
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import type { SprintContract } from "../shared/types.ts";
 
