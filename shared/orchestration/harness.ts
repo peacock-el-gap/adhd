@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { makeIdentity, timedName } from "../agent-identity.ts";
 import {
   gitDir,
   harnessDir,
@@ -106,10 +107,16 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
   return harnessSpan.run(async () => {
     try {
       logDebug("HARNESS", "Calling runPlanner...");
-      const plannerTs = fileTimestamp();
-      const plannerSpan = harnessSpan.startChild(`${plannerTs}-planner`, { model: config.resolvedModelPlanner });
-      const spec = await plannerSpan.run(() => agents.runPlanner(config, undefined, usage, skills.planner, plannerTs));
+      const plannerIdentity = makeIdentity({ role: "planner" });
+      const plannerSpan = harnessSpan.startChild(timedName(plannerIdentity), { model: config.resolvedModelPlanner });
+      const plannerResult = await plannerSpan.run(() =>
+        agents.runPlanner({ config, identity: plannerIdentity, skills: skills.planner }),
+      );
+      if (plannerResult.sdkResult) {
+        usage.recordStage("planner", config.resolvedModelPlanner, plannerResult.sdkResult);
+      }
       plannerSpan.end();
+      const spec = plannerResult.spec;
       logDebug("HARNESS", `Planner returned, spec length: ${spec.length}`);
       await writeSpec(config.workDir, spec);
       log("HARNESS", "Product spec written");
@@ -434,23 +441,22 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
 
     if (!contract) {
       log("HARNESS", "Negotiating sprint contract...");
-      const negotiationTs = fileTimestamp();
-      const negotiationSpan = sprintSpan.startChild(`${negotiationTs}-sprint-${sprint}-contract-negotiation`, {
+      const negotiationIdentity = makeIdentity({ role: "contract-negotiation", sprint });
+      const negotiationSpan = sprintSpan.startChild(timedName(negotiationIdentity), {
         sprint,
       });
       try {
         contract = await negotiationSpan.run(() =>
           withTransientRetry(
             () =>
-              agents.negotiateContract(
-                config.workDir,
+              agents.negotiateContract({
+                workDir: config.workDir,
                 spec,
-                sprint,
-                config.resolvedModelGenerator,
-                config.resolvedModelEvaluator,
+                sprintNumber: sprint,
+                proposalModel: config.resolvedModelGenerator,
+                reviewModel: config.resolvedModelEvaluator,
                 usage,
-                negotiationTs,
-              ),
+              }),
             "contract negotiation",
           ),
         );

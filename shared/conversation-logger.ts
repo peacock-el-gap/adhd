@@ -1,14 +1,16 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileTimestamp } from "./logger.ts";
+import { type AgentIdentity, bareName, displayTitle, timedName } from "./agent-identity.ts";
 
 export interface ConversationLogger {
   logAssistantText(text: string): void;
   logToolUse(name: string, input: unknown): void;
   logToolResult(output: string): void;
   finalize(duration: number): Promise<void>;
-  /** The timestamped identifier used in the log filename and span names. */
+  /** The timestamped identifier used in the log filename and matching span names. */
   readonly timestampedName: string;
+  /** The bare identifier (no timestamp) — useful when a caller wants to record cost rows that pair with this log. */
+  readonly bareIdentifier: string;
 }
 
 interface LogEntry {
@@ -18,34 +20,27 @@ interface LogEntry {
 }
 
 /**
- * Build the descriptive part of a log filename (without timestamp prefix).
+ * Open a new conversation log keyed by an agent identity.
+ *
+ * The filename is `<timestamp>-<bareName>.md`, derived from the identity.
+ * The markdown body's title comes from the identity's display form.
  */
-function buildLogBaseName(agentRole: string, sprint?: number, attempt?: number): string {
-  if (sprint != null && attempt != null) {
-    return `sprint-${sprint}-attempt-${attempt}-${agentRole.toLowerCase()}`;
-  }
-  if (sprint != null) {
-    return `sprint-${sprint}-${agentRole.toLowerCase().replace(/ /g, "-")}`;
-  }
-  return agentRole.toLowerCase();
-}
-
 export function createConversationLog(
   workDir: string,
-  agentRole: string,
-  sprint?: number,
-  attempt?: number,
+  identity: AgentIdentity,
   metadata?: { model: string; startTime: Date },
-  preGeneratedTimestamp?: string,
 ): ConversationLogger {
   const entries: LogEntry[] = [];
-  const ts = preGeneratedTimestamp ?? fileTimestamp();
-  const baseName = buildLogBaseName(agentRole, sprint, attempt);
-  const timestampedName = `${ts}-${baseName}`;
+  const timestampedNameValue = timedName(identity);
+  const bareIdentifierValue = bareName(identity);
+  const titleValue = displayTitle(identity);
 
   return {
     get timestampedName(): string {
-      return timestampedName;
+      return timestampedNameValue;
+    },
+    get bareIdentifier(): string {
+      return bareIdentifierValue;
     },
 
     logAssistantText(text: string): void {
@@ -89,13 +84,7 @@ export function createConversationLog(
       const lines: string[] = [];
 
       // Header
-      const title =
-        sprint != null
-          ? attempt != null
-            ? `${agentRole} — Sprint ${sprint}, Attempt ${attempt}`
-            : `${agentRole} — Sprint ${sprint}`
-          : agentRole;
-      lines.push(`# ${title}`);
+      lines.push(`# ${titleValue}`);
       lines.push("");
 
       if (metadata) {
@@ -169,7 +158,7 @@ export function createConversationLog(
         }
       }
 
-      const filename = `${timestampedName}.md`;
+      const filename = `${timestampedNameValue}.md`;
       const logPath = join(workDir, ".adhd", "logs", filename);
       await writeFile(logPath, lines.join("\n"), "utf-8");
     },

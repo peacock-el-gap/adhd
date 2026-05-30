@@ -8,6 +8,7 @@ const queryMock = mock();
 
 mock.module("node:child_process", () => ({
   execSync: execSyncMock,
+  exec: () => {},
 }));
 
 mock.module("@anthropic-ai/claude-agent-sdk", () => ({

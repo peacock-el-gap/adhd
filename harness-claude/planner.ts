@@ -2,23 +2,15 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
-import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
-import { log, logDebug, logError } from "../shared/logger.ts";
+import { log, logError } from "../shared/logger.ts";
+import type { PlannerResult, RunPlannerOptions } from "../shared/orchestration/types.ts";
 import { buildPlannerPrompt } from "../shared/prompts.ts";
-import type { AgentSkills } from "../shared/skills.ts";
-import type { ResolvedConfig } from "../shared/types.ts";
-import type { UsageTracker } from "../shared/usage.ts";
-import { processAgentStream } from "./agent-stream.ts";
+import { runAgent } from "./run-agent.ts";
 import type { Options } from "./tracing-claude.ts";
 
-export async function runPlanner(
-  config: ResolvedConfig,
-  reviseFeedback?: string,
-  usage?: UsageTracker,
-  skills?: AgentSkills,
-  logTimestamp?: string,
-): Promise<string> {
+export async function runPlanner(opts: RunPlannerOptions): Promise<PlannerResult> {
+  const { config, identity, reviseFeedback, skills } = opts;
   const { userPrompt, workDir, isGreenfield, interactive, logLevel } = config;
 
   log("PLANNER", `Starting planning for: "${userPrompt.slice(0, 100)}${userPrompt.length > 100 ? "..." : ""}"`);
@@ -45,52 +37,6 @@ export async function runPlanner(
     tools.push("AskUserQuestion");
   }
 
-  const options: Options = {
-    cwd: workDir,
-    systemPrompt,
-    permissionMode: "bypassPermissions",
-    allowDangerouslySkipPermissions: true,
-    tools,
-    model,
-    maxTurns: CLAUDE_MAX_TURNS,
-    persistSession: false,
-    ...(skills?.additionalDirs.length ? { additionalDirectories: skills.additionalDirs } : {}),
-  };
-
-  // HITL: handle AskUserQuestion via canUseTool
-  if (interactive) {
-    options.canUseTool = async (toolName: string, toolInput: Record<string, unknown>) => {
-      if (toolName === "AskUserQuestion") {
-        const question = typeof toolInput.question === "string" ? toolInput.question : String(toolInput.question ?? "");
-        const BOLD_MAGENTA = "\x1b[1;35m";
-        const RST = "\x1b[0m";
-        process.stdout.write(`\n${BOLD_MAGENTA}[PLANNER asks]${RST} ${question}\n> `);
-
-        // Read from stdin with 60s timeout
-        const answer = await new Promise<string>((resolve) => {
-          const timeout = setTimeout(() => {
-            process.stdout.write("\n(timeout — proceeding with best judgment)\n");
-            resolve("Proceed with your best judgment.");
-          }, 60_000);
-
-          const onData = (data: Buffer) => {
-            clearTimeout(timeout);
-            process.stdin.removeListener("data", onData);
-            process.stdin.pause();
-            resolve(data.toString().trim());
-          };
-
-          process.stdin.resume();
-          process.stdin.once("data", onData);
-        });
-
-        // Return allow with the user's answer injected as the tool result
-        return { behavior: "allow" as const, updatedInput: { ...toolInput, answer } };
-      }
-      return { behavior: "allow" as const }; // auto-approve all other tools
-    };
-  }
-
   // Context injection — prepend reference documents to prompt
   let promptBody = userPrompt;
   if (config.contextFiles?.length) {
@@ -108,48 +54,81 @@ export async function runPlanner(
     fullPrompt += `\n\n## Revision Feedback\n\nThe user reviewed your spec and requests changes:\n\n${reviseFeedback}\n\nRewrite the spec incorporating this feedback.`;
   }
 
-  const startTime = new Date();
-  const convLog = createConversationLog(workDir, "Planner", undefined, undefined, { model, startTime }, logTimestamp);
-
-  let completed = false;
-
-  logDebug("PLANNER", `Calling query() with model: ${options.model} tools: ${options.tools}`);
-  logDebug("PLANNER", `Prompt: ${fullPrompt.length} chars, systemPrompt: ${systemPrompt.length} chars`);
-
-  const streamResult = await processAgentStream(fullPrompt, options, "PLANNER", logLevel, convLog, {
-    onResult(result) {
-      completed = true;
-      if (usage) {
-        usage.recordStage(reviseFeedback ? "planner-revision" : "planner", model, result);
-      }
-      log("PLANNER", `Planning complete (session: ${result.session_id?.slice(0, 8)}...)`);
+  const result = await runAgent({
+    identity,
+    role: "PLANNER",
+    workDir,
+    prompt: fullPrompt,
+    systemPrompt,
+    model,
+    tools,
+    maxTurns: CLAUDE_MAX_TURNS,
+    persistSession: false,
+    logLevel,
+    additionalDirectories: skills?.additionalDirs,
+    canUseTool: interactive ? makePlannerInteractiveBridge() : undefined,
+    callbacks: {
+      onResult: (r) => log("PLANNER", `Planning complete (session: ${r.session_id?.slice(0, 8)}...)`),
     },
   });
 
-  let fullResponse = streamResult.response;
-
-  const duration = Date.now() - startTime.getTime();
-  await convLog.finalize(duration);
-
-  if (!completed) {
+  if (!result.sdkResult) {
     logError("PLANNER", "Planner query did not complete");
     throw new Error("Planner failed to produce output");
   }
 
   // The planner writes spec.md via the Write tool — the file is the canonical output.
-  // fullResponse contains narration text ("Let me examine..."), not the spec itself.
-  // Always prefer the file on disk; fall back to fullResponse only if no file exists.
+  // result.response contains narration text ("Let me examine..."), not the spec itself.
+  // Always prefer the file on disk; fall back to result.response only if no file exists.
+  let spec: string;
   try {
-    fullResponse = await readFile(join(hDir, "spec.md"), "utf-8");
+    spec = await readFile(join(hDir, "spec.md"), "utf-8");
     log("PLANNER", "Read spec from file written by planner agent");
   } catch {
-    if (!fullResponse) {
+    if (!result.response) {
       logError("PLANNER", "No text response and no spec.md on disk");
       throw new Error("Planner completed but produced no spec");
     }
     log("PLANNER", "Using text response as spec (no file on disk)");
+    spec = result.response;
   }
 
   log("PLANNER", "Product specification generated");
-  return fullResponse;
+  return { spec, sdkResult: result.sdkResult, sessionId: result.sessionId };
+}
+
+/**
+ * Build the canUseTool callback that bridges Claude's AskUserQuestion tool
+ * to terminal stdin. Only used in interactive mode. Times out after 60s
+ * with a "best judgment" answer so a left-running session never hangs.
+ */
+function makePlannerInteractiveBridge(): NonNullable<Options["canUseTool"]> {
+  return async (toolName, toolInput) => {
+    if (toolName === "AskUserQuestion") {
+      const question = typeof toolInput.question === "string" ? toolInput.question : String(toolInput.question ?? "");
+      const BOLD_MAGENTA = "\x1b[1;35m";
+      const RST = "\x1b[0m";
+      process.stdout.write(`\n${BOLD_MAGENTA}[PLANNER asks]${RST} ${question}\n> `);
+
+      const answer = await new Promise<string>((resolveAnswer) => {
+        const timeout = setTimeout(() => {
+          process.stdout.write("\n(timeout — proceeding with best judgment)\n");
+          resolveAnswer("Proceed with your best judgment.");
+        }, 60_000);
+
+        const onData = (data: Buffer) => {
+          clearTimeout(timeout);
+          process.stdin.removeListener("data", onData);
+          process.stdin.pause();
+          resolveAnswer(data.toString().trim());
+        };
+
+        process.stdin.resume();
+        process.stdin.once("data", onData);
+      });
+
+      return { behavior: "allow" as const, updatedInput: { ...toolInput, answer } };
+    }
+    return { behavior: "allow" as const };
+  };
 }

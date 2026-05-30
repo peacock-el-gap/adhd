@@ -1,3 +1,4 @@
+import type { AgentIdentity } from "../agent-identity.ts";
 import type { AgentSkills, AllAgentSkills } from "../skills.ts";
 import type { Span, Tracer } from "../tracing.ts";
 import type {
@@ -13,15 +14,30 @@ import type { SDKResultFields, UsageTracker } from "../usage.ts";
 
 // --- Agent option types (SDK-independent, used by orchestration) ---
 
+export interface RunPlannerOptions {
+  config: ResolvedConfig;
+  identity: AgentIdentity;
+  /** When set, the planner re-runs with this revision feedback. The caller
+   *  is expected to set `identity.variant = "revision"` so the cost row,
+   *  log filename, and span name reflect that. */
+  reviseFeedback?: string;
+  skills?: AgentSkills;
+}
+
+export interface PlannerResult {
+  spec: string;
+  sdkResult?: SDKResultFields;
+  sessionId?: string;
+}
+
 export interface RunGeneratorOptions {
   config: ResolvedConfig;
+  identity: AgentIdentity;
   spec: string;
   contract: SprintContract;
   previousFeedback?: EvalResult;
   attempt?: number;
   skills?: AgentSkills;
-  /** Pre-generated timestamp for log filename alignment with span names. */
-  logTimestamp?: string;
 }
 
 export interface GeneratorResult {
@@ -32,20 +48,18 @@ export interface GeneratorResult {
 
 export interface RunEvaluatorOptions {
   config: ResolvedConfig;
+  identity: AgentIdentity;
   contract: SprintContract;
   attempt?: number;
   skills?: AgentSkills;
   supplementaryContext?: string;
-  /** Pre-generated timestamp for log filename alignment with span names. */
-  logTimestamp?: string;
 }
 
 export interface RunDocumenterOptions {
   config: ResolvedConfig;
+  identity: AgentIdentity;
   skills?: AgentSkills;
   sprintResults?: SprintResult[];
-  /** Pre-generated timestamp for log filename alignment with span names. */
-  logTimestamp?: string;
 }
 
 export interface EnsureCommitOptions {
@@ -71,27 +85,27 @@ export interface EnsureDocumenterCommitOptions {
 
 export interface AgentRunners {
   initTracing(config: ResolvedConfig): Tracer;
-  runPlanner(
-    config: ResolvedConfig,
-    feedback?: string,
-    usage?: UsageTracker,
-    skills?: AgentSkills,
-    logTimestamp?: string,
-  ): Promise<string>;
+  runPlanner(opts: RunPlannerOptions): Promise<PlannerResult>;
   runGenerator(opts: RunGeneratorOptions): Promise<GeneratorResult>;
   runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }>;
   runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields; sessionId?: string }>;
-  negotiateContract(
-    workDir: string,
-    spec: string,
-    sprint: number,
-    proposalModel: string,
-    reviewModel: string,
-    usage?: UsageTracker,
-    logTimestamp?: string,
-  ): Promise<SprintContract>;
+  /**
+   * Two-step contract negotiation. Records cost rows internally for both the
+   * proposal and review SDK calls, since `negotiateContract` is the orchestrator
+   * for those two agent runs (the harness orchestrator only sees one phase).
+   */
+  negotiateContract(opts: NegotiateContractOptions): Promise<SprintContract>;
   ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<CommitSource>;
   ensureDocumenterCommit(opts: EnsureDocumenterCommitOptions): Promise<CommitSource>;
+}
+
+export interface NegotiateContractOptions {
+  workDir: string;
+  spec: string;
+  sprintNumber: number;
+  proposalModel: string;
+  reviewModel: string;
+  usage?: UsageTracker;
 }
 
 /** Convenience type for the planner function signature, used by gates and spec-refinement. */

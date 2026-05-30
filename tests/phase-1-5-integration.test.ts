@@ -20,6 +20,7 @@ import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { makeIdentity } from "../shared/agent-identity.ts";
 import { CLI_FLAG_HELP, parseCli, resolveConfig } from "../shared/config.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { loadExistingContract, writeContract, writeProgress } from "../shared/files.ts";
@@ -189,7 +190,7 @@ describe("timestamp_log_consistency", () => {
 		const dir = makeTmpDir();
 		setupAdhdDir(dir);
 
-		const logger = createConversationLog(dir, "Generator", 2, 0);
+		const logger = createConversationLog(dir, makeIdentity({ role: "generator", sprint: 2, attempt: 0 }));
 		logger.logAssistantText("Test output");
 		await logger.finalize(1000);
 
@@ -204,7 +205,7 @@ describe("timestamp_log_consistency", () => {
 		const dir = makeTmpDir();
 		setupAdhdDir(dir);
 
-		const logger = createConversationLog(dir, "contract-negotiation", 3);
+		const logger = createConversationLog(dir, makeIdentity({ role: "contract-negotiation", sprint: 3 }));
 		await logger.finalize(500);
 
 		const files = readdirSync(join(dir, ".adhd", "logs"));
@@ -217,7 +218,7 @@ describe("timestamp_log_consistency", () => {
 		const dir = makeTmpDir();
 		setupAdhdDir(dir);
 
-		const logger = createConversationLog(dir, "Evaluator", 1, 0);
+		const logger = createConversationLog(dir, makeIdentity({ role: "evaluator", sprint: 1, attempt: 0 }));
 		await logger.finalize(500);
 
 		const files = readdirSync(join(dir, ".adhd", "logs"));
@@ -230,7 +231,7 @@ describe("timestamp_log_consistency", () => {
 		const dir = makeTmpDir();
 		setupAdhdDir(dir);
 
-		const logger = createConversationLog(dir, "Documenter");
+		const logger = createConversationLog(dir, makeIdentity({ role: "documenter" }));
 		await logger.finalize(500);
 
 		const files = readdirSync(join(dir, ".adhd", "logs"));
@@ -243,11 +244,17 @@ describe("timestamp_log_consistency", () => {
 		const dir = makeTmpDir();
 		setupAdhdDir(dir);
 
-		const logger1 = createConversationLog(dir, "Generator", 2, 0, undefined, "2026.04.12-10.00.00");
+		const logger1 = createConversationLog(
+			dir,
+			makeIdentity({ role: "generator", sprint: 2, attempt: 0, timestamp: "2026.04.12-10.00.00" }),
+		);
 		logger1.logAssistantText("First run");
 		await logger1.finalize(1000);
 
-		const logger2 = createConversationLog(dir, "Generator", 2, 0, undefined, "2026.04.12-10.05.00");
+		const logger2 = createConversationLog(
+			dir,
+			makeIdentity({ role: "generator", sprint: 2, attempt: 0, timestamp: "2026.04.12-10.05.00" }),
+		);
 		logger2.logAssistantText("Second run");
 		await logger2.finalize(1000);
 
@@ -309,11 +316,17 @@ describe("e2e_resume_full_cycle", () => {
 		setupAdhdDir(dir);
 
 		// Original run
-		const logger1 = createConversationLog(dir, "Generator", 2, 0, undefined, "2026.04.12-10.00.00");
+		const logger1 = createConversationLog(
+			dir,
+			makeIdentity({ role: "generator", sprint: 2, attempt: 0, timestamp: "2026.04.12-10.00.00" }),
+		);
 		await logger1.finalize(1000);
 
 		// Resume run
-		const logger2 = createConversationLog(dir, "Generator", 2, 0, undefined, "2026.04.12-14.30.00");
+		const logger2 = createConversationLog(
+			dir,
+			makeIdentity({ role: "generator", sprint: 2, attempt: 0, timestamp: "2026.04.12-14.30.00" }),
+		);
 		await logger2.finalize(1000);
 
 		const files = readdirSync(join(dir, ".adhd", "logs")).sort();

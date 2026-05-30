@@ -316,6 +316,31 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Cons**: Requires run-ID or timestamp-based run identification; needs a storage convention for historical runs (currently each run overwrites the previous)
 - **Effort**: Medium
 
+### OPP-13: Sprint Scope Control (Surfaces + Coverage + Ceiling)
+
+**Problem**: Dogfooding ADHD against CRIST initiative-tracker (19 sprints across 7 runs) surfaced a systemic failure mode: planned sprints are too big, contract negotiation inflates them further, and the generator silently drops whole features. 63% of sprints needed retries (33 attempts across 19 sprints); 2 of 7 runs were abandoned mid-sprint; one sprint cost $20.48 across 4 failed attempts and never finished. A typical evaluator verdict on a failure: "Backend implementation is solid. However, two critical frontend features are completely missing." The contract negotiator approved a feature list growing 1 → 5 → 11 across renegotiations of a single sprint, with no pushback.
+
+**Opportunity**: Three coordinated changes that reinforce each other.
+
+1. **Surface declaration in contracts.** Each sprint contract names the parts of the code it will touch (backend / frontend / db / tests / docs / config) as a field in the contract JSON. Makes scope explicit and checkable.
+
+2. **Surface coverage check after the generator.** Between the generator's commit and the evaluator's run, compare the declared surfaces against the files actually changed in the diff. If the contract declared backend + frontend but only backend files changed, the attempt fails before the evaluator runs. No evaluator spend on a sprint where the generator dropped half the work. Exact result, no AI cost. Fits into the same step as the existing pre-evaluation static-analysis gate (§1.15). Default file-path patterns target the common Bun/Node/TS + Python/Go stacks; a per-project override can be added later if real projects need it.
+
+3. **Contract size ceiling in the negotiator.** The reviewer rejects contracts above measurable limits (defaults: features > 3, criteria > 10, surfaces > 2; configurable per project via `--max-features`, `--max-criteria`, `--max-surfaces`). One extra revision round narrows the contract before approval — no infinite loop. Stops the 1 → 5 → 11 inflation pattern at negotiation time, before any code runs.
+
+Why all three together: declaring surfaces makes coverage checkable; the coverage check forces honest declarations; the ceiling stops scope inflation at negotiation time so the generator is never asked to do too much in the first place.
+
+**Validation**: Re-run the CRIST initiative-tracker scenario with the changes on. Pass criteria: retry rate below the current 33% baseline; no abandoned runs; cost per sprint trending down. The harness already records everything needed in `.adhd/usage.json` and `.adhd/logs/` to make that comparison directly.
+
+**Interactions with other items**:
+- Extends §1.3 (contract negotiation) and §1.6 (build-evaluate retry loop) — same shape, more checks.
+- Same kind of check as §1.15 (pre-evaluation static-analysis gate). Both run in the same step, both can fail the attempt before the evaluator.
+- OPP-10 (adaptive retry — model escalation) becomes less urgent. Most CRIST retries were caused by oversized scope, not model capability ceilings.
+- OPP-06 (5th reviewer agent) unaffected — that's about code quality, this is about scope.
+- "Structured reviewer output envelope" in [enhancements-new-features-ideas.md](enhancements-new-features-ideas.md) would make narrowing decisions more visible, but isn't required for this to work.
+
+**Effort**: M overall. Surface declaration: S. Coverage check: M. Size ceiling: M.
+
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -350,12 +375,13 @@ These items use the existing skills system and contract negotiation prompts. The
 
 | # | Feature | Source | Effort | Justification |
 |---|---------|--------|--------|---------------|
-| 2.1 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Use cheaper model by default, escalate to stronger model on failed retry. Higher success rate on hard sprints without increasing baseline cost. Decomposition (attempt 3) deferred. |
-| 2.2 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
-| 2.3 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
-| 2.4 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
+| 2.1 | **Sprint scope control (surfaces + coverage + ceiling)** | OPP-13 | M | Reduces retry burn at the root: surface declaration + post-generator coverage check + contract size ceiling. Highest-leverage reliability fix surfaced by dogfooding. |
+| 2.2 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Lower priority once 2.1 lands — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
+| 2.3 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
+| 2.4 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
+| 2.5 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
 
-**Rationale**: Item 2.1 addresses a fundamental retry limitation. Items 2.2-2.3 are ecosystem and tooling. Item 2.4 is contingent — it's the escalation path if quality criteria in contracts don't deliver enough signal.
+**Rationale**: Item 2.1 is the highest-leverage reliability fix from dogfooding evidence. Item 2.2 addresses a retry limitation in cases where scope control isn't enough. Items 2.3-2.4 are ecosystem and tooling. Item 2.5 is contingent — it's the escalation path if quality criteria in contracts don't deliver enough signal.
 
 ---
 
@@ -377,10 +403,11 @@ These items use the existing skills system and contract negotiation prompts. The
 | **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills (security, a11y, API) + project-local template |
 | | CS-2 | Codebase context guidance | OPP-04 | User guide, not a harness skill |
 | --- | --- | --- | --- | --- |
-| **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag |
-| | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
-| | 2.3 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
-| | 2.4 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
+| **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Sprint scope control (surfaces + coverage + ceiling) | OPP-13 | Highest-leverage reliability fix from dogfooding |
+| | 2.2 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag; lower priority once 2.1 lands |
+| | 2.3 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
+| | 2.4 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
+| | 2.5 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
 | --- | --- | --- | --- | --- |
 | **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
 | | 3.2 | Web dashboard | OPP-12 | Requires stabilized CLI + data formats |

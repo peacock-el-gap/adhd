@@ -1,20 +1,16 @@
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
-import { createConversationLog } from "../shared/conversation-logger.ts";
 import { gitDir, harnessDir } from "../shared/files.ts";
 import { log, shouldLog } from "../shared/logger.ts";
 import { ensureAgentCommit } from "../shared/orchestration/git-ops.ts";
 import type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions } from "../shared/orchestration/types.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { CommitSource } from "../shared/types.ts";
-import { processAgentStream } from "./agent-stream.ts";
-import type { Options } from "./tracing-claude.ts";
-import { query } from "./tracing-claude.ts";
+import { resumeAgent, runAgent } from "./run-agent.ts";
 
 export type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions };
 
 export async function runGenerator(opts: RunGeneratorOptions): Promise<GeneratorResult> {
-  const { config, spec, contract, previousFeedback, skills } = opts;
-  const attempt = opts.attempt ?? 0;
+  const { config, identity, spec, contract, previousFeedback, skills } = opts;
   const { workDir, isGreenfield, noTdd, sourceDir, testDir } = config;
   const model = config.resolvedModelGenerator;
   const level = config.logLevel;
@@ -40,35 +36,30 @@ export async function runGenerator(opts: RunGeneratorOptions): Promise<Generator
     }
   }
 
-  const options: Options = {
-    cwd: workDir,
+  const result = await runAgent({
+    identity,
+    role: "GENERATOR",
+    workDir,
+    prompt,
     systemPrompt,
-    permissionMode: "bypassPermissions",
-    allowDangerouslySkipPermissions: true,
-    tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
     model,
+    tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
     maxTurns: CLAUDE_MAX_TURNS,
     persistSession: true,
-    ...(skills?.additionalDirs.length ? { additionalDirectories: skills.additionalDirs } : {}),
-  };
-
-  const startTime = new Date();
-  const convLog = createConversationLog(workDir, "Generator", sprint, attempt, { model, startTime }, opts.logTimestamp);
-
-  const result = await processAgentStream(prompt, options, "GENERATOR", level, convLog, {
-    onToolUse(_name, input) {
-      if (shouldLog("verbose", level) && input) {
-        const summary = String(typeof input === "object" ? JSON.stringify(input) : input).slice(0, 120);
-        log("GENERATOR", `    ${summary}`);
-      }
-    },
-    onResult(r) {
-      log("GENERATOR", `Sprint ${sprint} build complete (session: ${r.session_id?.slice(0, 8)}...)`);
+    logLevel: level,
+    additionalDirectories: skills?.additionalDirs,
+    callbacks: {
+      onToolUse(_name, input) {
+        if (shouldLog("verbose", level) && input) {
+          const summary = String(typeof input === "object" ? JSON.stringify(input) : input).slice(0, 120);
+          log("GENERATOR", `    ${summary}`);
+        }
+      },
+      onResult(r) {
+        log("GENERATOR", `Sprint ${sprint} build complete (session: ${r.session_id?.slice(0, 8)}...)`);
+      },
     },
   });
-
-  const duration = Date.now() - startTime.getTime();
-  await convLog.finalize(duration);
 
   if (!result.response) {
     log("GENERATOR", `Sprint ${sprint} completed (agent used tools only, no text output)`);
@@ -96,29 +87,17 @@ export async function ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<
 
   const runResume = sessionId
     ? async () => {
-        // Per sdk.d.ts:1159-1167: `resume` loads conversation history from the
-        // given session, while `sessionId` would (incorrectly) try to create a
-        // new session with a colliding UUID. Use `resume` here.
-        const resumeOptions: Options = {
-          cwd: workDir,
+        await resumeAgent({
+          workDir,
+          sessionId,
+          prompt: resumePrompt,
           systemPrompt:
             "You are finishing up a coding session. Your ONLY job is to commit uncommitted changes with a meaningful git commit message. Do NOT write or modify any code.",
-          permissionMode: "bypassPermissions",
-          allowDangerouslySkipPermissions: true,
-          tools: ["Bash"],
           model,
+          tools: ["Bash"],
           maxTurns: 3,
-          resume: sessionId,
-        };
-        for await (const msg of query({ prompt: resumePrompt, options: resumeOptions })) {
-          if (msg.type === "assistant") {
-            for (const block of msg.message.content) {
-              if (block.type === "tool_use") {
-                log("HARNESS", `  Commit resume tool: ${block.name}`);
-              }
-            }
-          }
-        }
+          onToolUse: (name) => log("HARNESS", `  Commit resume tool: ${name}`),
+        });
       }
     : undefined;
 

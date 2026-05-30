@@ -1,5 +1,6 @@
 import { readFile as readFileRaw } from "node:fs/promises";
 import { join } from "node:path";
+import { makeIdentity, timedName } from "../agent-identity.ts";
 import { harnessDir, writeSpec } from "../files.ts";
 import { promptGateWithText } from "../interaction.ts";
 import { log } from "../logger.ts";
@@ -80,10 +81,16 @@ export async function specApprovalGate(
     if (result.key === "r" && result.freeText) {
       // Re-run planner with feedback
       log("HARNESS", "Re-running planner with your feedback...");
-      const revisionSpan = parentSpan.startChild("planner-revision");
-      const revisedSpec = await revisionSpan.run(() => plannerFn(config, result.freeText, usage, plannerSkills));
+      const revisionIdentity = makeIdentity({ role: "planner", variant: "revision" });
+      const revisionSpan = parentSpan.startChild(timedName(revisionIdentity));
+      const revisionResult = await revisionSpan.run(() =>
+        plannerFn({ config, identity: revisionIdentity, reviseFeedback: result.freeText, skills: plannerSkills }),
+      );
+      if (revisionResult.sdkResult) {
+        usage.recordStage("planner-revision", config.resolvedModelPlanner, revisionResult.sdkResult);
+      }
       revisionSpan.end();
-      currentSpec = revisedSpec;
+      currentSpec = revisionResult.spec;
       await writeSpec(config.workDir, currentSpec);
       log("HARNESS", "Spec revised. Re-reviewing.");
     }

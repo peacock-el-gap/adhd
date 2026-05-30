@@ -21,6 +21,7 @@ function makeConvLog(): ConversationLogger {
     logToolResult: () => {},
     finalize: async () => {},
     timestampedName: "test",
+    bareIdentifier: "test",
   };
 }
 

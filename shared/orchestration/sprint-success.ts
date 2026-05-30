@@ -1,10 +1,11 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { bareName, makeIdentity, timedName } from "../agent-identity.ts";
 import { validateDocumentation } from "../doc-validation.ts";
 import { gitDir, harnessDir, writeProgress } from "../files.ts";
 import { promptGate } from "../interaction.ts";
-import { fileTimestamp, log, logError } from "../logger.ts";
+import { log, logError } from "../logger.ts";
 import { notify } from "../notifications.ts";
 import { accumulateRegressionCriteria } from "../regression.ts";
 import { countSprintHeadings } from "../sprint-count.ts";
@@ -114,8 +115,8 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
   const { isGreenfield } = config;
   const documenterModel = config.resolvedModelDocumenter;
   const gDir = gitDir(config.workDir, isGreenfield);
-  const documenterTs = fileTimestamp();
-  const documenterSpan = parentSpan.startChild(`${documenterTs}-documenter`, { model: documenterModel });
+  const documenterIdentity = makeIdentity({ role: "documenter" });
+  const documenterSpan = parentSpan.startChild(timedName(documenterIdentity), { model: documenterModel });
   try {
     // Capture HEAD SHA before documenter runs
     let beforeDocsSha = "";
@@ -126,12 +127,12 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
     }
 
     const docResult = await documenterSpan.run(() =>
-      agents.runDocumenter({ config, skills: documenterSkills, sprintResults: results, logTimestamp: documenterTs }),
+      agents.runDocumenter({ config, identity: documenterIdentity, skills: documenterSkills, sprintResults: results }),
     );
 
     // Record usage
     if (docResult.sdkResult) {
-      usage.recordStage("documenter", config.resolvedModelDocumenter, docResult.sdkResult);
+      usage.recordStage(bareName(documenterIdentity), config.resolvedModelDocumenter, docResult.sdkResult);
     }
 
     // Git commit enforcement for documenter — unified with generator via ensureAgentCommit

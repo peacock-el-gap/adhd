@@ -1,5 +1,8 @@
 # ADHD — Project Instructions
 
+## Language, tone of voice
+Talk to the user in normal language. No jargon, no shortcuts.
+
 ## Getting Started
 
 ```bash

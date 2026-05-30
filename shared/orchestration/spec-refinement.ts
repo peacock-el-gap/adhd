@@ -1,5 +1,6 @@
 import { readFile as readFileRaw, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { makeIdentity, timedName } from "../agent-identity.ts";
 import { harnessDir, writeSpec } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { log, logDivider } from "../logger.ts";
@@ -67,12 +68,21 @@ export async function performSpecRefinement(
 
   let proposedSpec: string;
   try {
-    const refinementSpan = parentSpan.startChild("spec-refinement", { completedSprint });
+    const refinementIdentity = makeIdentity({ role: "planner", variant: "refinement" });
+    const refinementSpan = parentSpan.startChild(timedName(refinementIdentity), { completedSprint });
     const refinementPrompt = buildRefinementPrompt(currentSpec, completedSprintNumbers, remainingSprintNumbers);
 
-    proposedSpec = await refinementSpan.run(() =>
-      plannerFn({ ...config, userPrompt: refinementPrompt }, undefined, usage, plannerSkills),
+    const refinementResult = await refinementSpan.run(() =>
+      plannerFn({
+        config: { ...config, userPrompt: refinementPrompt },
+        identity: refinementIdentity,
+        skills: plannerSkills,
+      }),
     );
+    if (refinementResult.sdkResult) {
+      usage.recordStage("planner-refinement", config.resolvedModelPlanner, refinementResult.sdkResult);
+    }
+    proposedSpec = refinementResult.spec;
     refinementSpan.end();
 
     if (!proposedSpec || proposedSpec.trim().length === 0) {

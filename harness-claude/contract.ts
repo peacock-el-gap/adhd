@@ -1,81 +1,74 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { makeIdentity } from "../shared/agent-identity.ts";
 import { createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logError } from "../shared/logger.ts";
+import type { NegotiateContractOptions } from "../shared/orchestration/types.ts";
 import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
 import type { SprintContract } from "../shared/types.ts";
-import type { UsageTracker } from "../shared/usage.ts";
-import { processAgentStream } from "./agent-stream.ts";
-import type { Options } from "./tracing-claude.ts";
+import { runAgent } from "./run-agent.ts";
 
-export async function negotiateContract(
-  workDir: string,
-  spec: string,
-  sprintNumber: number,
-  proposalModel: string,
-  reviewModel: string,
-  usage?: UsageTracker,
-  logTimestamp?: string,
-): Promise<SprintContract> {
+export async function negotiateContract(opts: NegotiateContractOptions): Promise<SprintContract> {
+  const { workDir, spec, sprintNumber, proposalModel, reviewModel, usage } = opts;
   const startTime = new Date();
 
-  // Generator proposes contract
-  const proposalPrompt = `## Product Spec\n\n${spec}\n\n## Sprint Number: ${sprintNumber}\n\nPropose a sprint contract for this sprint.`;
+  // Three identities at play:
+  //   - one for the shared conversation log (negotiation as a whole)
+  //   - one for the proposal SDK call (its own cost row and trace name)
+  //   - one for the review SDK call (its own cost row and trace name)
+  // All three share a single conversation log file via inheritConvLog.
+  const negotiationIdentity = makeIdentity({ role: "contract-negotiation", sprint: sprintNumber });
+  const proposalIdentity = makeIdentity({
+    role: "contract-proposal",
+    sprint: sprintNumber,
+    timestamp: negotiationIdentity.timestamp,
+  });
+  const reviewIdentity = makeIdentity({
+    role: "contract-review",
+    sprint: sprintNumber,
+    timestamp: negotiationIdentity.timestamp,
+  });
 
-  const proposalOptions: Options = {
-    cwd: workDir,
+  const convLog = createConversationLog(workDir, negotiationIdentity, { model: proposalModel, startTime });
+
+  const proposalResult = await runAgent({
+    identity: proposalIdentity,
+    role: "HARNESS",
+    workDir,
+    prompt: `## Product Spec\n\n${spec}\n\n## Sprint Number: ${sprintNumber}\n\nPropose a sprint contract for this sprint.`,
     systemPrompt: CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
-    permissionMode: "bypassPermissions",
-    allowDangerouslySkipPermissions: true,
-    tools: [],
     model: proposalModel,
+    tools: [],
     maxTurns: 1,
     persistSession: false,
-  };
-
-  const convLog = createConversationLog(
-    workDir,
-    "contract-negotiation",
-    sprintNumber,
-    undefined,
-    {
-      model: proposalModel,
-      startTime,
-    },
-    logTimestamp,
-  );
-
-  const proposalResult = await processAgentStream(proposalPrompt, proposalOptions, "HARNESS", "quiet", convLog, {
-    onResult(result) {
-      usage?.recordStage(`sprint-${sprintNumber}-contract-proposal`, proposalModel, result);
-    },
+    logLevel: "quiet",
+    inheritConvLog: convLog,
   });
+  if (proposalResult.sdkResult) {
+    usage?.recordStage(`sprint-${sprintNumber}-contract-proposal`, proposalModel, proposalResult.sdkResult);
+  }
   const proposalText = proposalResult.response;
 
-  // Evaluator reviews contract
-  const reviewPrompt = `## Proposed Sprint Contract\n\n${proposalText}\n\nReview this contract.`;
-
-  const reviewOptions: Options = {
-    cwd: workDir,
+  const reviewResult = await runAgent({
+    identity: reviewIdentity,
+    role: "HARNESS",
+    workDir,
+    prompt: `## Proposed Sprint Contract\n\n${proposalText}\n\nReview this contract.`,
     systemPrompt: CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
-    permissionMode: "bypassPermissions",
-    allowDangerouslySkipPermissions: true,
-    tools: [],
     model: reviewModel,
+    tools: [],
     maxTurns: 1,
     persistSession: false,
-  };
-
-  const reviewResult = await processAgentStream(reviewPrompt, reviewOptions, "HARNESS", "quiet", convLog, {
-    onResult(result) {
-      usage?.recordStage(`sprint-${sprintNumber}-contract-review`, reviewModel, result);
-    },
+    logLevel: "quiet",
+    inheritConvLog: convLog,
   });
+  if (reviewResult.sdkResult) {
+    usage?.recordStage(`sprint-${sprintNumber}-contract-review`, reviewModel, reviewResult.sdkResult);
+  }
   const reviewText = reviewResult.response;
 
-  const duration = Date.now() - startTime.getTime();
-  await convLog.finalize(duration);
+  await convLog.finalize(Date.now() - startTime.getTime());
 
   // Parse the final contract (either the proposal if approved, or the revised version)
   const contractSource = reviewText.trim() === "APPROVED" ? proposalText : reviewText;

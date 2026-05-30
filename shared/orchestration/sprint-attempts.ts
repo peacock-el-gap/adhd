@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { bareName, makeIdentity, timedName } from "../agent-identity.ts";
 import { computeDiffSection } from "../diff.ts";
 import { writeFeedback, writeProgress } from "../files.ts";
 import { promptGate } from "../interaction.ts";
@@ -41,8 +42,8 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
     // Commit .adhd/ artifacts before Generator invocation for clean working tree
     commitAdhdArtifacts(config.workDir, gDir, sprint);
 
-    const generatorTs = fileTimestamp();
-    const generatorSpan = attemptSpan.startChild(`${generatorTs}-sprint-${sprint}-attempt-${retry}-generator`, {
+    const generatorIdentity = makeIdentity({ role: "generator", sprint, attempt: retry });
+    const generatorSpan = attemptSpan.startChild(timedName(generatorIdentity), {
       model: config.resolvedModelGenerator,
       sprint,
       attempt: retry,
@@ -54,23 +55,19 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
           () =>
             agents.runGenerator({
               config,
+              identity: generatorIdentity,
               spec,
               contract,
               previousFeedback: lastEval,
               attempt: retry,
               skills: skills?.generator,
-              logTimestamp: generatorTs,
             }),
           "generator",
         ),
       );
       generatorSessionId = result.sessionId;
       if (result.sdkResult) {
-        usage.recordStage(
-          `sprint-${sprint}-attempt-${retry}-generator`,
-          config.resolvedModelGenerator,
-          result.sdkResult,
-        );
+        usage.recordStage(bareName(generatorIdentity), config.resolvedModelGenerator, result.sdkResult);
       }
     } catch (err) {
       generatorSpan.end({ error: String(err) });
@@ -157,8 +154,8 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
       supplementaryContext += `\n\n## Static Analysis Results\n\n${staticAnalysisResult.output}`;
     }
 
-    const evaluatorTs = fileTimestamp();
-    const evaluatorSpan = attemptSpan.startChild(`${evaluatorTs}-sprint-${sprint}-attempt-${retry}-evaluator`, {
+    const evaluatorIdentity = makeIdentity({ role: "evaluator", sprint, attempt: retry });
+    const evaluatorSpan = attemptSpan.startChild(timedName(evaluatorIdentity), {
       model: config.resolvedModelEvaluator,
       sprint,
       attempt: retry,
@@ -169,21 +166,17 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
           () =>
             agents.runEvaluator({
               config,
+              identity: evaluatorIdentity,
               contract,
               attempt: retry,
               skills: skills?.evaluator,
               supplementaryContext: supplementaryContext || undefined,
-              logTimestamp: evaluatorTs,
             }),
           "evaluator",
         ),
       );
       if (evalWithUsage.sdkResult) {
-        usage.recordStage(
-          `sprint-${sprint}-attempt-${retry}-evaluator`,
-          config.resolvedModelEvaluator,
-          evalWithUsage.sdkResult,
-        );
+        usage.recordStage(bareName(evaluatorIdentity), config.resolvedModelEvaluator, evalWithUsage.sdkResult);
       }
       lastEval = evalWithUsage;
     } catch (err) {

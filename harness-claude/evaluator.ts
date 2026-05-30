@@ -1,21 +1,17 @@
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
-import { createConversationLog } from "../shared/conversation-logger.ts";
 import { gitDir } from "../shared/files.ts";
 import { log, logError, shouldLog } from "../shared/logger.ts";
 import type { RunEvaluatorOptions } from "../shared/orchestration/types.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
 import type { EvalResult, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
-import { processAgentStream } from "./agent-stream.ts";
 import { extractBalancedJson, extractUnclosedFence } from "./contract.ts";
-import type { Options } from "./tracing-claude.ts";
-import { query } from "./tracing-claude.ts";
+import { resumeAgent, runAgent } from "./run-agent.ts";
 
 export type { RunEvaluatorOptions };
 
 export async function runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
-  const { config, contract, skills, supplementaryContext } = opts;
-  const attempt = opts.attempt ?? 0;
+  const { config, identity, contract, skills, supplementaryContext } = opts;
   const { workDir, isGreenfield, noBdd, sourceDir, testDir, passThreshold } = config;
   const model = config.resolvedModelEvaluator;
   const level = config.logLevel;
@@ -40,29 +36,22 @@ ${supplementaryContext ?? ""}
 
 Examine the application in ${isGreenfield ? "the `app/` directory" : "the project root"}. Read the code, run it if possible, and score each criterion. Output ONLY the JSON evaluation object.`;
 
-  const options: Options = {
-    cwd: workDir,
+  const streamResult = await runAgent({
+    identity,
+    role: "EVALUATOR",
+    workDir,
+    prompt,
     systemPrompt,
-    permissionMode: "bypassPermissions",
-    allowDangerouslySkipPermissions: true,
-    tools: ["Read", "Bash", "Glob", "Grep"],
     model,
+    tools: ["Read", "Bash", "Glob", "Grep"],
     maxTurns: CLAUDE_MAX_TURNS,
     persistSession: false,
-    ...(skills?.additionalDirs.length ? { additionalDirectories: skills.additionalDirs } : {}),
-  };
-
-  const startTime = new Date();
-  const convLog = createConversationLog(workDir, "Evaluator", sprint, attempt, { model, startTime }, opts.logTimestamp);
-
-  const streamResult = await processAgentStream(prompt, options, "EVALUATOR", level, convLog, {
-    onResult() {
-      log("EVALUATOR", `Evaluation complete for sprint ${sprint}`);
+    logLevel: level,
+    additionalDirectories: skills?.additionalDirs,
+    callbacks: {
+      onResult: () => log("EVALUATOR", `Evaluation complete for sprint ${sprint}`),
     },
   });
-
-  const duration = Date.now() - startTime.getTime();
-  await convLog.finalize(duration);
 
   let parsed = tryParseEvalResult(streamResult.response, contract, passThreshold);
 
@@ -73,31 +62,17 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   if (!parsed && streamResult.sdkResult?.stop_reason === "max_tokens" && streamResult.sessionId) {
     log("EVALUATOR", "Parse failed with stop_reason=max_tokens — retrying with JSON-only follow-up");
     try {
-      const retryOptions: Options = {
-        cwd: workDir,
+      const retry = await resumeAgent({
+        workDir,
+        sessionId: streamResult.sessionId,
+        prompt: "Re-emit ONLY the JSON object with your evaluation. No preamble, no fences, no prose.",
         systemPrompt:
           "You are re-emitting structured output from a prior evaluation. Output ONLY the JSON object. No preamble, no markdown fences, no prose.",
-        permissionMode: "bypassPermissions",
-        allowDangerouslySkipPermissions: true,
-        tools: ["Read"],
         model,
+        tools: ["Read"],
         maxTurns: 2,
-        persistSession: false,
-        // Per sdk.d.ts:1159-1167 — `resume` loads the prior session's history.
-        resume: streamResult.sessionId,
-      };
-      let retryResponse = "";
-      for await (const msg of query({
-        prompt: "Re-emit ONLY the JSON object with your evaluation. No preamble, no fences, no prose.",
-        options: retryOptions,
-      })) {
-        if (msg.type === "assistant") {
-          for (const block of msg.message.content) {
-            if (block.type === "text") retryResponse += block.text;
-          }
-        }
-      }
-      parsed = tryParseEvalResult(retryResponse, contract, passThreshold);
+      });
+      parsed = tryParseEvalResult(retry.response, contract, passThreshold);
       if (parsed) {
         log("EVALUATOR", "Retry recovered valid JSON verdict");
       }
