@@ -4,9 +4,9 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
-## Phase 2: Contract Precision & Model Governance
+## [v0.6.0] - 2026-06-04
 
-Adds surface-aware contracts, a pre-evaluator coverage gate, configurable contract size ceilings, and a per-agent model tier matrix with an enforced Evaluator ≥ Generator invariant.
+Phase 2 — Contract Precision & Model Governance. Adds surface-aware contracts, a pre-evaluator surface coverage gate, configurable contract size ceilings, and a per-agent model tier matrix (current GA tiers) with an enforced Evaluator ≥ Generator invariant. Per-sprint detail follows.
 
 ### Sprint 1 — Surface Taxonomy
 
