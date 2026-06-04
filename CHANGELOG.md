@@ -37,12 +37,12 @@ Phase 2 — Contract Precision & Model Governance. Adds surface-aware contracts,
 
 ### Sprint 3 — Changed Files Helper & Coverage Gate
 
-**Features:** `changedFiles()` git helper, surface coverage pre-gate
+**Features:** `computeChangedFiles()` git helper, surface coverage pre-gate
 
 - Added `computeChangedFiles(workDir, beforeSha, attempt)` in `shared/diff.ts`: returns the product files an attempt touched (the diff `beforeSha..HEAD`), gracefully returning `undefined` on the first attempt, an empty SHA, or any git failure (so the gate runs on retries, alongside the diff-aware evaluation feed)
 - `.adhd/` paths are excluded from the changed-files list so metadata commits never inflate surface counts
 - Coverage gate wired into the sprint attempt loop: after each generator run, `checkSurfaceCoverage` compares declared vs. touched surfaces; a non-empty `missing` list fails the attempt before the evaluator runs (no LLM cost for clearly incomplete work)
-- Gate is skipped when a contract declares no surfaces, or when `changedFiles()` returns an empty list
+- Gate is skipped when a contract declares no surfaces, or when `computeChangedFiles()` yields no changed files
 - Failure result shape matches the lint gate so the retry loop's error-handling path is reused without duplication
 
 **Verified:** All criteria passed. Single attempt.
