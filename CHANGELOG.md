@@ -4,6 +4,92 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## Phase 2: Contract Precision & Model Governance
+
+Adds surface-aware contracts, a pre-evaluator coverage gate, configurable contract size ceilings, and a per-agent model tier matrix with an enforced Evaluator ≥ Generator invariant.
+
+### Sprint 1 — Surface Taxonomy
+
+**Features:** `SURFACE_VOCABULARY` constant, `surfaces` field on `SprintContract`, `normalizeSurfaces`
+
+- Added `SURFACE_VOCABULARY = ["backend","frontend","db","tests","docs","config"]` as the single source of truth for surface names in `shared/surfaces.ts`
+- Derived `Surface` type from the vocabulary constant; no other module re-declares the six values
+- Added optional `surfaces?: string[]` field to `SprintContract` in `shared/types.ts` for backward-compatible round-trips
+- `normalizeSurfaces()` normalizes stored/proposed surface lists: deduplicates, drops unknowns, returns `undefined` for absent/non-array input (never throws)
+- Contract proposer and reviewer prompts updated to declare and validate surfaces
+- `serializeContract` emits keys in stable order: `sprintNumber`, `features`, `surfaces`, `criteria`; legacy contracts without `surfaces` are re-persisted without the field (no spurious injection)
+- Unit tests cover round-trip, legacy-contract loading, normalization edge cases, and key order
+
+**Verified:** All 10 criteria passed. Single attempt.
+
+### Sprint 2 — Surface Classifier
+
+**Features:** `classifySurfaces()`, `SURFACE_PATTERNS`, `isSurface()`
+
+- Implemented `classifySurfaces(paths)` in `shared/surfaces.ts`: pure function mapping changed file paths to the deduplicated set of surfaces they touch, returned in canonical vocabulary order
+- `SURFACE_PATTERNS` table maps path patterns to surfaces via ordered precedence rules; `tests` precedes `frontend`/`backend` so `Button.test.tsx` classifies as `tests`, not `frontend`
+- Pattern matching runs against normalized paths (lowercased, unified separators) so rules are case- and OS-insensitive
+- Never throws: empty list, whitespace strings, non-strings, unrecognized extensions silently omit rather than raise
+- `checkSurfaceCoverage(declared, changedPaths)` compares a contract's declared surfaces against the paths actually changed, returning `{ covered, missing }` for the gate
+- Full unit coverage: all six surface types, multi-surface paths, test-file precedence, degenerate input, order independence
+
+**Verified:** All criteria passed. Single attempt.
+
+### Sprint 3 — Changed Files Helper & Coverage Gate
+
+**Features:** `changedFiles()` git helper, surface coverage pre-gate
+
+- Added `computeChangedFiles(workDir, beforeSha, attempt)` in `shared/diff.ts`: returns the product files an attempt touched (the diff `beforeSha..HEAD`), gracefully returning `undefined` on the first attempt, an empty SHA, or any git failure (so the gate runs on retries, alongside the diff-aware evaluation feed)
+- `.adhd/` paths are excluded from the changed-files list so metadata commits never inflate surface counts
+- Coverage gate wired into the sprint attempt loop: after each generator run, `checkSurfaceCoverage` compares declared vs. touched surfaces; a non-empty `missing` list fails the attempt before the evaluator runs (no LLM cost for clearly incomplete work)
+- Gate is skipped when a contract declares no surfaces, or when `changedFiles()` returns an empty list
+- Failure result shape matches the lint gate so the retry loop's error-handling path is reused without duplication
+
+**Verified:** All criteria passed. Single attempt.
+
+### Sprint 4 — Config Limits
+
+**Features:** `--max-features`, `--max-criteria`, `--max-surfaces` CLI flags and env vars
+
+- Added `maxFeatures` (default 3), `maxCriteria` (default 10), `maxSurfaces` (default 2) to `HarnessConfig` and `DEFAULT_CONFIG`
+- Parsed from `--max-features`/`MAX_FEATURES`, `--max-criteria`/`MAX_CRITERIA`, `--max-surfaces`/`MAX_SURFACES` with the standard CLI > env > `.adhd/.env` > default precedence
+- Validation rejects values ≤ 0 with a clear error message; non-numeric strings produce `NaN` and trigger the same guard
+- `resolveConfig` threads the three values through to `NegotiateContractOptions` so the negotiation loop receives them
+- `printHelp` documents all three flags with their defaults
+- `ContractLimits` interface in `shared/contract-limits.ts` carries the three values as the pure ceiling layer's input type
+- Unit tests: default resolution, CLI override, env-var override, precedence ordering, validation rejection, help output
+
+**Verified:** All criteria passed. Single attempt.
+
+### Sprint 5 — Contract Limits Enforcement
+
+**Features:** `trimContractToLimits()`, `exceedsContractLimits()`, bounded narrowing round in contract negotiation
+
+- `trimContractToLimits(contract, limits)` in `shared/contract-limits.ts`: produces an in-budget copy by keeping the first N features/criteria/surfaces within each cap; input is never mutated; degenerate input degrades cleanly; never throws
+- `exceedsContractLimits(contract, limits)` and `getLimitViolations` provide pure boolean/per-dimension checks
+- Contract negotiation in `harness-claude/contract.ts` applies enforcement after the final parsed contract: if the contract exceeds any limit, it is trimmed then fed to a single bounded reviewer round that tightens the contract to fit — no infinite loop
+- Narrowing round uses the configured reviewer model (`ctx.reviewModel`) and is observable: a `HARNESS` log line reports which dimensions were trimmed and by how much
+- Odd limit values (NaN, negatives, non-numbers) disable trimming for that dimension — treated as no cap — so misconfigured limits never crash a run or silently empty a contract
+- Unit tests cover: ceiling check, trim correctness, sort preservation, single-narrowing-round guarantee, custom-limits respected, degenerate contracts
+
+**Verified:** All criteria passed. Single attempt.
+
+### Sprint 6 — Per-Agent Model Tier System
+
+**Features:** `shared/models.ts`, per-agent default matrix, `evaluatorInvariantWarning`, `--model-contract`
+
+- Named tier constants defined once in `shared/models.ts`: `MODEL_OPUS`, `MODEL_SONNET`, `MODEL_HAIKU` — no model ID literal appears elsewhere in `shared/` or `harness-claude/`. Tiers pinned to the current generally-available IDs: Opus `claude-opus-4-8`, Sonnet `claude-sonnet-4-6`, Haiku `claude-haiku-4-5-20251001` (retiring the stale `claude-opus-4-6` uniform default)
+- Per-agent default matrix: Planner → Opus, Generator → Sonnet, Evaluator → Opus, Documenter → Haiku; each tier chosen on explicit grounds (cost, stakes, quality gate)
+- `resolveAgentModel(override, uniform, tierDefault)` encodes the three-level precedence; `blankToUndefined` normalizes whitespace-only overrides back to the matrix default
+- `evaluatorInvariantWarning(evaluatorModel, generatorModel)` returns an advisory string when the Evaluator tier is strictly weaker than the Generator tier; the harness logs it once at startup and continues (no hard-fail); silent on unrecognized model IDs
+- `describeAgentModels(config)` builds four standalone startup log lines — Planner/Generator/Evaluator/Documenter — so the printed configuration is honest now that the matrix makes agents differ by default
+- `--model-contract` CLI flag + `MODEL_CONTRACT` env var routes all three contract-negotiation calls (proposal, review, narrowing) through a single specified model; when unset, the generator/evaluator split is preserved
+- `shared/models.ts` is pure: zero Claude SDK imports, no I/O, never throws
+
+**Verified:** All criteria passed (scores 8–10). Single attempt.
+
+---
+
 ## [v0.5.1] - 2026-05-30
 
 Internal refactor and test-infrastructure release — no behavior, CLI, or file-format changes.

@@ -3,9 +3,11 @@ import {
   buildPlannerPrompt,
   buildGeneratorPrompt,
   buildEvaluatorPrompt,
-  CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
+  buildContractReviewPrompt,
   CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
 } from "../shared/prompts.ts";
+
+const reviewLimits = { maxFeatures: 3, maxCriteria: 10, maxSurfaces: 2 };
 import type { AgentSkills } from "../shared/skills.ts";
 
 const baseCtx = {
@@ -235,7 +237,21 @@ describe("contract negotiation prompts", () => {
     expect(CONTRACT_NEGOTIATION_GENERATOR_PROMPT).toContain("implementation");
   });
 
-  test("CONTRACT_NEGOTIATION_EVALUATOR_PROMPT contains quality criteria check", () => {
-    expect(CONTRACT_NEGOTIATION_EVALUATOR_PROMPT).toContain("quality");
+  test("buildContractReviewPrompt contains quality criteria check", () => {
+    expect(buildContractReviewPrompt(reviewLimits)).toContain("quality");
+  });
+
+  test("buildContractReviewPrompt injects the active size limits", () => {
+    const prompt = buildContractReviewPrompt({ maxFeatures: 2, maxCriteria: 8, maxSurfaces: 1 });
+    expect(prompt).toContain("At most 2 features.");
+    expect(prompt).toContain("At most 8 criteria.");
+    expect(prompt).toContain("At most 1 surfaces.");
+  });
+
+  test("buildContractReviewPrompt preserves the surface-vocabulary rules", () => {
+    const prompt = buildContractReviewPrompt(reviewLimits);
+    expect(prompt).toContain("surfaces");
+    expect(prompt).toContain("backend");
+    expect(prompt).toContain("APPROVED");
   });
 });

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { computeDiffSection } from "../shared/diff.ts";
+import { computeChangedFiles, computeDiffSection } from "../shared/diff.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_diff_test__");
 
@@ -98,5 +98,64 @@ describe("computeDiffSection", () => {
     const result = computeDiffSection(TMP_DIR, beforeSha, 3);
     expect(result).toBeDefined();
     expect(result).toContain("## Changes Since Last Attempt");
+  });
+});
+
+describe("computeChangedFiles", () => {
+  test("returns undefined on attempt 0 (first attempt)", () => {
+    expect(computeChangedFiles(TMP_DIR, "abc123", 0)).toBeUndefined();
+  });
+
+  test("returns undefined when beforeSha is empty string", () => {
+    expect(computeChangedFiles(TMP_DIR, "", 1)).toBeUndefined();
+  });
+
+  test("returns undefined when beforeSha is whitespace only", () => {
+    expect(computeChangedFiles(TMP_DIR, "   ", 1)).toBeUndefined();
+  });
+
+  test("returns undefined when git is not available (no git repo)", () => {
+    expect(computeChangedFiles(TMP_DIR, "abc123", 1)).toBeUndefined();
+  });
+
+  test("returns undefined with an invalid SHA (graceful degradation, no throw)", () => {
+    initGitRepo();
+    expect(() => computeChangedFiles(TMP_DIR, "invalid_sha_xyz", 1)).not.toThrow();
+    expect(computeChangedFiles(TMP_DIR, "invalid_sha_xyz", 1)).toBeUndefined();
+  });
+
+  test("returns the list of changed paths between beforeSha and HEAD", () => {
+    const beforeSha = initGitRepo();
+    writeFileSync(join(TMP_DIR, "server.ts"), "export const x = 1;\n");
+    writeFileSync(join(TMP_DIR, "README.md"), "# docs\n");
+    execSync("git add -A && git commit -m 'add files'", { cwd: TMP_DIR });
+
+    const result = computeChangedFiles(TMP_DIR, beforeSha, 1);
+    expect(result).toBeDefined();
+    expect(result).toContain("server.ts");
+    expect(result).toContain("README.md");
+  });
+
+  test("returns an empty list when only .adhd/ metadata changed", () => {
+    const beforeSha = initGitRepo();
+    mkdirSync(join(TMP_DIR, ".adhd", "contracts"), { recursive: true });
+    writeFileSync(join(TMP_DIR, ".adhd", "progress.json"), "{}\n");
+    execSync("git add -A && git commit -m 'adhd metadata'", { cwd: TMP_DIR });
+
+    const result = computeChangedFiles(TMP_DIR, beforeSha, 1);
+    expect(result).toEqual([]);
+  });
+
+  test("excludes .adhd/ paths even when they would classify to a surface", () => {
+    const beforeSha = initGitRepo();
+    mkdirSync(join(TMP_DIR, ".adhd"), { recursive: true });
+    // A .ts file under .adhd/ would classify as `backend` if not excluded.
+    writeFileSync(join(TMP_DIR, ".adhd", "snapshot.ts"), "export const y = 2;\n");
+    writeFileSync(join(TMP_DIR, "real.ts"), "export const z = 3;\n");
+    execSync("git add -A && git commit -m 'mixed'", { cwd: TMP_DIR });
+
+    const result = computeChangedFiles(TMP_DIR, beforeSha, 1);
+    expect(result).toEqual(["real.ts"]);
+    expect(result).not.toContain(".adhd/snapshot.ts");
   });
 });

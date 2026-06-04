@@ -266,6 +266,7 @@ Output a JSON object with this structure:
 {
   "sprintNumber": <number>,
   "features": ["feature1", "feature2", ...],
+  "surfaces": ["backend", "tests"],
   "criteria": [
     {
       "name": "criterion_name",
@@ -279,6 +280,14 @@ Output a JSON object with this structure:
 \`\`\`
 
 Rules:
+- The "surfaces" array names the parts of the codebase this sprint will change. Use ONLY these allowed values: "backend", "frontend", "db", "tests", "docs", "config". Do not invent any other value.
+  - backend: server-side source and logic
+  - frontend: UI source (components, styles, client app)
+  - db: migrations, schema, seed data
+  - tests: test files
+  - docs: markdown and documentation
+  - config: manifests, lockfiles, dotfiles, CI configuration
+- "surfaces" must be non-empty and reflect the sprint's real footprint — list every part you actually intend to touch, and nothing you do not.
 - Each criterion must be SPECIFIC and TESTABLE (not vague like "works well")
 - Include 5-15 criteria per sprint depending on complexity
 - Criteria should cover: functionality, error handling, code quality, user experience, and operational correctness (the app starts cleanly, infrastructure artifacts like migrations or schemas are consistent with the code, the system works end-to-end — not just in isolated tests)
@@ -288,13 +297,38 @@ Rules:
 - You MUST include at least one criterion with type "implementation" covering code quality. Specifically, include criteria assessing one or more of: naming conventions (consistent, descriptive variable/function/class names), code duplication (no copy-paste patterns, DRY principle), error handling patterns (proper try/catch, meaningful error messages, no swallowed errors), and maintainability (readable code, appropriate abstractions, single-responsibility). These quality criteria ensure the code is production-grade, not just functional.
 - Output ONLY the JSON, no other text`;
 
-export const CONTRACT_NEGOTIATION_EVALUATOR_PROMPT = `You are reviewing a proposed sprint contract. Evaluate whether the criteria are specific enough, testable, and comprehensive.
+/** The three per-sprint size ceilings injected into the reviewer prompt. */
+export interface ContractReviewLimits {
+  maxFeatures: number;
+  maxCriteria: number;
+  maxSurfaces: number;
+}
 
-If the contract is good, output exactly: APPROVED
+/**
+ * Build the contract-review (reviewer) system prompt with the active size
+ * limits baked in. This replaces the former static
+ * `CONTRACT_NEGOTIATION_EVALUATOR_PROMPT` const: because the ceiling numbers
+ * are configurable (F4) and must be enforced at negotiation time (F5), the
+ * reviewer has to be told the exact caps. It mirrors the existing dynamic
+ * builders (`buildPlannerPrompt`, `buildEvaluatorPrompt`, …) and preserves the
+ * original surface-vocabulary and quality-criteria rules verbatim.
+ */
+export function buildContractReviewPrompt(limits: ContractReviewLimits): string {
+  const { maxFeatures, maxCriteria, maxSurfaces } = limits;
+  return `You are reviewing a proposed sprint contract. Evaluate whether the criteria are specific enough, testable, and comprehensive, AND whether the contract stays within the configured size limits.
+
+If the contract is good AND within all size limits, output exactly: APPROVED
 
 If the contract needs changes, output a revised JSON contract with the same structure but improved criteria. Make criteria more specific, add missing edge cases, or adjust thresholds.
 
+Size limits (a sprint must stay small enough to actually ship):
+- At most ${maxFeatures} features.
+- At most ${maxCriteria} criteria.
+- At most ${maxSurfaces} surfaces.
+If the contract exceeds ANY of these limits, you MUST reject it and return a narrowed contract that keeps only the highest-priority items within each cap — drop the lower-priority features, criteria, and surfaces rather than merging or shrinking everything. Never approve a contract that is over any limit.
+
 Rules:
+- The contract MUST include a "surfaces" array that is present, non-empty, and uses ONLY these allowed values: "backend", "frontend", "db", "tests", "docs", "config". If "surfaces" is missing, empty, or contains any other token, you MUST reject the contract: drop unknown tokens, and add the correct surfaces the sprint clearly touches so the array ends up non-empty. Never approve a contract whose surfaces would be empty or contain an unknown value.
 - Criteria must be testable by reading code and running the app
 - Vague criteria like "works well" or "looks good" must be made specific
 - Ensure coverage of error handling and edge cases, not just happy paths
@@ -302,3 +336,4 @@ Rules:
 - The contract MUST include at least one quality-focused criterion with type "implementation" covering code quality aspects such as naming conventions, code duplication, error handling patterns, or maintainability. If the contract contains ONLY behavioral/functional criteria and no quality criteria, you MUST reject it and add appropriate quality criteria.
 - Quality criteria (naming, duplication, error handling, maintainability) should use type "implementation" so they do not accumulate in the regression set across sprints.
 - Output either "APPROVED" or the revised JSON contract, nothing else`;
+}

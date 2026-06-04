@@ -1,16 +1,26 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { makeIdentity } from "../shared/agent-identity.ts";
-import { createConversationLog } from "../shared/conversation-logger.ts";
+import { type ContractLimits, exceedsContractLimits, trimContractToLimits } from "../shared/contract-limits.ts";
+import { type ConversationLogger, createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logError } from "../shared/logger.ts";
 import type { NegotiateContractOptions } from "../shared/orchestration/types.ts";
-import { CONTRACT_NEGOTIATION_EVALUATOR_PROMPT, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
+import { buildContractReviewPrompt, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
+import { normalizeSurfaces } from "../shared/surfaces.ts";
 import type { SprintContract } from "../shared/types.ts";
+import type { UsageTracker } from "../shared/usage.ts";
 import { runAgent } from "./run-agent.ts";
 
 export async function negotiateContract(opts: NegotiateContractOptions): Promise<SprintContract> {
-  const { workDir, spec, sprintNumber, proposalModel, reviewModel, usage } = opts;
+  const { workDir, spec, sprintNumber, usage, maxFeatures, maxCriteria, maxSurfaces, modelContract } = opts;
+  // When --model-contract is set it overrides ALL negotiation calls (proposal,
+  // review, and the F5 narrowing round); otherwise keep the inherited
+  // Generator-propose / Evaluator-review split.
+  const proposalModel = modelContract ?? opts.proposalModel;
+  const reviewModel = modelContract ?? opts.reviewModel;
+  const limits: ContractLimits = { maxFeatures, maxCriteria, maxSurfaces };
+  const reviewPrompt = buildContractReviewPrompt(limits);
   const startTime = new Date();
 
   // Three identities at play:
@@ -55,7 +65,7 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
     role: "HARNESS",
     workDir,
     prompt: `## Proposed Sprint Contract\n\n${proposalText}\n\nReview this contract.`,
-    systemPrompt: CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
+    systemPrompt: reviewPrompt,
     model: reviewModel,
     tools: [],
     maxTurns: 1,
@@ -68,11 +78,123 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
   }
   const reviewText = reviewResult.response;
 
-  await convLog.finalize(Date.now() - startTime.getTime());
-
-  // Parse the final contract (either the proposal if approved, or the revised version)
+  // Parse the final contract (either the proposal if approved, or the revised
+  // version). Enforcement runs AFTER this selection so an oversized proposal the
+  // reviewer returned "APPROVED" on is still caught.
   const contractSource = reviewText.trim() === "APPROVED" ? proposalText : reviewText;
-  return parseContract(contractSource, sprintNumber, workDir);
+  const parsed = parseContract(contractSource, sprintNumber, workDir);
+
+  const finalContract = await enforceContractCeiling(parsed, limits, {
+    workDir,
+    sprintNumber,
+    reviewModel,
+    reviewPrompt,
+    usage,
+    convLog,
+    timestamp: negotiationIdentity.timestamp,
+  });
+
+  await convLog.finalize(Date.now() - startTime.getTime());
+  return finalContract;
+}
+
+/** Dependencies the bounded ceiling-enforcement round needs for its SDK call. */
+interface CeilingEnforcementContext {
+  workDir: string;
+  sprintNumber: number;
+  reviewModel: string;
+  reviewPrompt: string;
+  usage?: UsageTracker;
+  convLog: ConversationLogger;
+  timestamp: string;
+}
+
+/** Compact "F<features> C<criteria> S<surfaces>" size summary for logging. */
+function sizeSummary(contract: SprintContract): string {
+  const surfaces = normalizeSurfaces(contract.surfaces) ?? [];
+  return `${contract.features?.length ?? 0} features, ${contract.criteria?.length ?? 0} criteria, ${surfaces.length} surfaces`;
+}
+
+/**
+ * Bound a negotiated contract to the configured size ceilings (F5).
+ *
+ * If the parsed contract already fits, it is returned untouched. Otherwise we
+ * trigger EXACTLY ONE additional reviewer narrowing round (reusing the same
+ * limit-aware prompt) — never a loop. If the result is still over a limit, the
+ * deterministic pure trim ({@link trimContractToLimits}) guarantees an in-budget
+ * contract so the Generator never receives over-budget work. Both narrowing and
+ * trimming are logged with before/after counts in the plain HARNESS voice.
+ */
+async function enforceContractCeiling(
+  parsed: SprintContract,
+  limits: ContractLimits,
+  ctx: CeilingEnforcementContext,
+): Promise<SprintContract> {
+  if (!exceedsContractLimits(parsed, limits)) {
+    return parsed;
+  }
+
+  const before = sizeSummary(parsed);
+  log(
+    "HARNESS",
+    `Contract exceeds size limits (${before}; caps: ${limits.maxFeatures} features, ${limits.maxCriteria} criteria, ${limits.maxSurfaces} surfaces) — requesting one narrowing round.`,
+  );
+
+  let contract = await runNarrowingRound(parsed, ctx);
+
+  if (exceedsContractLimits(contract, limits)) {
+    // The reviewer did not bring it within budget after its single chance.
+    // Apply the deterministic trim so enforcement always terminates in-budget.
+    const result = trimContractToLimits(contract, limits);
+    contract = result.contract;
+    logError(
+      "HARNESS",
+      `Contract still over limits after the narrowing round — trimmed to the highest-priority items (${before} -> ${sizeSummary(contract)}).`,
+    );
+  } else {
+    log("HARNESS", `Contract narrowed to within limits (${before} -> ${sizeSummary(contract)}).`);
+  }
+
+  return contract;
+}
+
+/**
+ * Run a single reviewer narrowing round on an over-budget contract. Returns the
+ * reviewer's narrowed contract, or the original if the reviewer answered
+ * "APPROVED" or produced unparseable output (the deterministic trim is the
+ * safety net for those cases).
+ */
+async function runNarrowingRound(contract: SprintContract, ctx: CeilingEnforcementContext): Promise<SprintContract> {
+  const narrowIdentity = makeIdentity({
+    role: "contract-review",
+    sprint: ctx.sprintNumber,
+    variant: "narrowing",
+    timestamp: ctx.timestamp,
+  });
+
+  const result = await runAgent({
+    identity: narrowIdentity,
+    role: "HARNESS",
+    workDir: ctx.workDir,
+    prompt: `## Proposed Sprint Contract\n\n${JSON.stringify(contract, null, 2)}\n\nThis contract exceeds the configured size limits. Return a narrowed JSON contract that keeps only the highest-priority items within every limit.`,
+    systemPrompt: ctx.reviewPrompt,
+    model: ctx.reviewModel,
+    tools: [],
+    maxTurns: 1,
+    persistSession: false,
+    logLevel: "quiet",
+    inheritConvLog: ctx.convLog,
+  });
+  if (result.sdkResult) {
+    ctx.usage?.recordStage(`sprint-${ctx.sprintNumber}-contract-narrowing`, ctx.reviewModel, result.sdkResult);
+  }
+
+  // "APPROVED" means the reviewer declined to narrow; keep the current contract
+  // and let the deterministic trim handle it.
+  if (result.response.trim() === "APPROVED") {
+    return contract;
+  }
+  return parseContract(result.response, ctx.sprintNumber, ctx.workDir);
 }
 
 /**
@@ -169,6 +291,9 @@ export function parseContract(text: string, sprintNumber: number, workDir?: stri
       const parsed = JSON.parse(candidate) as SprintContract;
       if (parsed.criteria && Array.isArray(parsed.criteria)) {
         parsed.sprintNumber = sprintNumber;
+        // Filter surfaces to the allowed vocabulary; malformed input degrades
+        // gracefully rather than propagating unknown tokens downstream.
+        parsed.surfaces = normalizeSurfaces(parsed.surfaces);
         return parsed;
       }
     } catch {

@@ -1,11 +1,13 @@
 import { execSync } from "node:child_process";
 import { bareName, makeIdentity, timedName } from "../agent-identity.ts";
-import { computeDiffSection } from "../diff.ts";
+import { computeChangedFiles, computeDiffSection } from "../diff.ts";
+import { buildSkippedEvaluatorResult } from "../eval-result.ts";
 import { writeFeedback, writeProgress } from "../files.ts";
 import { promptGate } from "../interaction.ts";
-import { fileTimestamp, log, logError, shouldLog } from "../logger.ts";
+import { fileTimestamp, log, logDebug, logError, shouldLog } from "../logger.ts";
 import { notify } from "../notifications.ts";
 import { buildRegressionSection, readRegressionCriteria } from "../regression.ts";
+import { checkSurfaceCoverage, normalizeSurfaces } from "../surfaces.ts";
 import type { CommitSource, EvalResult } from "../types.ts";
 import { handleFatalError, withTransientRetry } from "./error-handling.ts";
 import { commitAdhdArtifacts } from "./git-ops.ts";
@@ -101,6 +103,58 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
       }
     }
 
+    // --- Surface coverage gate ---
+    // Surface coverage check: did the Generator touch every part of the code it
+    // promised to (the contract's declared surfaces)? This is a cheap, AI-free
+    // check that runs after the Generator commits but before the Evaluator, so a
+    // silently dropped surface fails the attempt at zero AI cost.
+    //
+    // Gate ordering: this gate runs BEFORE the static-analysis / --lint-gate
+    // block below because it is the cheaper of the two cost-saving gates (one
+    // `git diff --name-only` versus running the configured lint/test commands).
+    // When both gates are active, whichever fails first short-circuits the
+    // attempt without invoking the Evaluator. It degrades gracefully — a legacy
+    // contract with no surfaces, or a changed-file list that cannot be computed
+    // (missing beforeSha, git failure, or only .adhd/ metadata changed), simply
+    // skips the check and proceeds to the Evaluator as before.
+    const declaredSurfaces = normalizeSurfaces(contract.surfaces) ?? [];
+    if (declaredSurfaces.length > 0) {
+      const changedFiles = computeChangedFiles(gDir, beforeSha, retry);
+      if (changedFiles && changedFiles.length > 0) {
+        logDebug("HARNESS", `Surface coverage — changed files: ${changedFiles.join(", ")}`);
+        const { covered, missing } = checkSurfaceCoverage(declaredSurfaces, changedFiles);
+        if (shouldLog("verbose", config.logLevel)) {
+          log(
+            "HARNESS",
+            `Surface coverage — declared: [${declaredSurfaces.join(", ")}], touched: [${covered.join(", ") || "none"}]`,
+          );
+        }
+        if (missing.length > 0) {
+          const missingList = missing.join(", ");
+          // Always log the cost-saving decision (normal level).
+          log(
+            "HARNESS",
+            `Surface coverage check failed — the contract promised to change ${missingList} but no ${missingList} files were touched. Skipping Evaluator, no AI cost for this attempt.`,
+          );
+          lastEval = buildSkippedEvaluatorResult(
+            contract,
+            `Evaluator skipped: surface coverage check failed. Declared surface(s) not touched: ${missingList}.`,
+            `Surface coverage check failed. The contract declared these surfaces but the Generator did not touch them: ${missingList}. Surfaces actually touched: ${covered.join(", ") || "none"}. The Evaluator was skipped to save cost — change the missing surface(s) on the next attempt.`,
+          );
+          await writeFeedback(config.workDir, sprint, retry, lastEval);
+          attemptSpan.end({ passed: false, surfaceCoverage: false });
+          continue;
+        }
+        if (shouldLog("normal", config.logLevel)) {
+          log("HARNESS", "Surface coverage check passed — all declared surfaces were touched.");
+        }
+      } else if (shouldLog("verbose", config.logLevel)) {
+        log("HARNESS", "Surface coverage check skipped — no changed files could be computed for this attempt.");
+      }
+    } else if (shouldLog("verbose", config.logLevel)) {
+      log("HARNESS", "Surface coverage check skipped — the contract declared no surfaces.");
+    }
+
     // Evaluate
     progress.status = "evaluating";
     await writeProgress(config.workDir, progress);
@@ -126,16 +180,11 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
       // Hard gate: if --lint-gate and any command failed, skip evaluator
       if (config.lintGate && staticAnalysisResult.failed) {
         log("HARNESS", "Lint gate: static analysis failed, skipping evaluator");
-        lastEval = {
-          passed: false,
-          scores: {},
-          feedback: contract.criteria.map((c) => ({
-            criterion: c.name,
-            score: 0,
-            details: "Evaluator skipped due to --lint-gate: static analysis failed",
-          })),
-          overallSummary: `Static analysis failed (--lint-gate). Output:\n${staticAnalysisResult.output}`,
-        };
+        lastEval = buildSkippedEvaluatorResult(
+          contract,
+          "Evaluator skipped due to --lint-gate: static analysis failed",
+          `Static analysis failed (--lint-gate). Output:\n${staticAnalysisResult.output}`,
+        );
         await writeFeedback(config.workDir, sprint, retry, lastEval);
         attemptSpan.end({ passed: false, lintGate: true });
         continue;

@@ -1,9 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
   CONTRACT_NEGOTIATION_GENERATOR_PROMPT,
-  CONTRACT_NEGOTIATION_EVALUATOR_PROMPT,
+  buildContractReviewPrompt,
   buildEvaluatorPrompt,
 } from "../shared/prompts.ts";
+
+const CONTRACT_NEGOTIATION_EVALUATOR_PROMPT = buildContractReviewPrompt({
+  maxFeatures: 3,
+  maxCriteria: 10,
+  maxSurfaces: 2,
+});
 
 const baseCtx = {
   workDir: "/tmp/test-project",

@@ -1,15 +1,26 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import {
+  blankToUndefined,
+  DEFAULT_MODEL,
+  DEFAULT_MODEL_DOCUMENTER,
+  DEFAULT_MODEL_EVALUATOR,
+  DEFAULT_MODEL_GENERATOR,
+  DEFAULT_MODEL_PLANNER,
+  resolveAgentModel,
+} from "./models.ts";
 import type { HarnessConfig, LogLevel, ResolvedConfig } from "./types.ts";
 
 export const DEFAULT_CONFIG: Omit<HarnessConfig, "userPrompt" | "workDir"> = {
   maxSprints: 10,
   maxRetriesPerSprint: 3,
   passThreshold: 7,
+  maxFeatures: 3,
+  maxCriteria: 10,
+  maxSurfaces: 2,
 };
 
-export const CLAUDE_MODEL = "claude-opus-4-6";
 export const CLAUDE_MAX_TURNS = 50;
 
 // --- CLI Help Text ---
@@ -20,10 +31,13 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--project": "Path to the project directory (default: cwd)",
   "--greenfield": "Create a new project in app/ with git init",
   "--resume": "Resume from the last checkpoint",
-  "--model": "LLM model to use (default: claude-opus-4-6)",
+  "--model": "Uniform model for all four agents (env: CLAUDE_MODEL); overrides the per-agent matrix below",
   "--max-sprints": "Maximum number of sprints (default: 10)",
   "--max-retries": "Maximum retries per sprint (default: 3)",
   "--threshold": "Pass threshold score 1-10 (default: 7)",
+  "--max-features": "Maximum features per sprint contract (default: 3)",
+  "--max-criteria": "Maximum criteria per sprint contract (default: 10)",
+  "--max-surfaces": "Maximum surfaces per sprint contract (default: 2)",
   "--verbose": "Enable verbose logging",
   "--quiet": "Suppress non-essential output",
   "--no-interactive": "Disable interactive gates (auto-accept defaults)",
@@ -32,10 +46,12 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--gate-timeout": "Timeout in seconds for interactive gates (0 = skip all)",
   "--dry-run": "Run planner only, show spec, then exit",
   "--context": "Files to inject into the planner prompt (repeatable)",
-  "--model-planner": "Model override for the Planner agent",
-  "--model-generator": "Model override for the Generator agent",
-  "--model-evaluator": "Model override for the Evaluator agent",
-  "--model-documenter": "Model override for the Documenter agent",
+  "--model-planner": "Model override for the Planner agent (default tier: Opus)",
+  "--model-generator": "Model override for the Generator agent (default tier: Sonnet)",
+  "--model-evaluator": "Model override for the Evaluator agent (default tier: Opus)",
+  "--model-documenter": "Model override for the Documenter agent (default tier: Haiku)",
+  "--model-contract":
+    "Single model for all contract-negotiation calls — proposal, review, and narrowing (env: MODEL_CONTRACT)",
   "--branch": "Create a git branch before the sprint loop",
   "--source-dir": "Source directory convention (default: src)",
   "--test-dir": "Test directory convention (default: tests)",
@@ -63,6 +79,15 @@ export function printHelp(): void {
     console.log(`  ${flag.padEnd(maxKeyLen + 2)} ${desc}`);
   }
   console.log("");
+  console.log("Per-agent model defaults (used when neither --model nor a per-agent flag is set):");
+  console.log(`  Planner     ${DEFAULT_MODEL_PLANNER}    (Opus tier — runs once; its spec drives everything)`);
+  console.log(`  Generator   ${DEFAULT_MODEL_GENERATOR}    (Sonnet tier — cost-dominant; mistakes are recoverable)`);
+  console.log(`  Evaluator   ${DEFAULT_MODEL_EVALUATOR}    (Opus tier — the sole gate; must out-judge the Generator)`);
+  console.log(`  Documenter  ${DEFAULT_MODEL_DOCUMENTER}    (Haiku tier — lowest stakes; advisory output)`);
+  console.log("");
+  console.log("Invariant: keep the Evaluator tier at or above the Generator tier — the judge must");
+  console.log("never be weaker than the producer. A weaker Evaluator only triggers a warning, not a stop.");
+  console.log("");
 }
 
 interface ParsedCli {
@@ -75,6 +100,9 @@ interface ParsedCli {
   maxSprints?: number;
   maxRetries?: number;
   threshold?: number;
+  maxFeatures?: number;
+  maxCriteria?: number;
+  maxSurfaces?: number;
   verbose: boolean;
   quiet: boolean;
   noInteractive: boolean;
@@ -93,6 +121,7 @@ interface ParsedCli {
   noTdd: boolean;
   noDocs: boolean;
   modelDocumenter?: string;
+  modelContract?: string;
   lintGate?: boolean;
   sprint?: number;
   refineSpec?: boolean;
@@ -121,6 +150,9 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "max-sprints": { type: "string" },
       "max-retries": { type: "string" },
       threshold: { type: "string" },
+      "max-features": { type: "string" },
+      "max-criteria": { type: "string" },
+      "max-surfaces": { type: "string" },
       verbose: { type: "boolean", default: false },
       quiet: { type: "boolean", default: false },
       "no-interactive": { type: "boolean", default: false },
@@ -139,6 +171,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "no-tdd": { type: "boolean", default: false },
       "no-docs": { type: "boolean", default: false },
       "model-documenter": { type: "string" },
+      "model-contract": { type: "string" },
       "lint-gate": { type: "boolean", default: false },
       sprint: { type: "string" },
       "refine-spec": { type: "boolean", default: false },
@@ -160,6 +193,9 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     maxSprints: values["max-sprints"] ? parseInt(values["max-sprints"] as string, 10) : undefined,
     maxRetries: values["max-retries"] ? parseInt(values["max-retries"] as string, 10) : undefined,
     threshold: values.threshold ? parseInt(values.threshold as string, 10) : undefined,
+    maxFeatures: values["max-features"] ? parseInt(values["max-features"] as string, 10) : undefined,
+    maxCriteria: values["max-criteria"] ? parseInt(values["max-criteria"] as string, 10) : undefined,
+    maxSurfaces: values["max-surfaces"] ? parseInt(values["max-surfaces"] as string, 10) : undefined,
     verbose: values.verbose as boolean,
     quiet: values.quiet as boolean,
     noInteractive: values["no-interactive"] as boolean,
@@ -178,6 +214,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     noTdd: values["no-tdd"] as boolean,
     noDocs: values["no-docs"] as boolean,
     modelDocumenter: values["model-documenter"] as string | undefined,
+    modelContract: values["model-contract"] as string | undefined,
     lintGate: values["lint-gate"] as boolean,
     sprint: values.sprint ? parseInt(values.sprint as string, 10) : undefined,
     refineSpec: values["refine-spec"] as boolean,
@@ -253,8 +290,14 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     throw new Error("A prompt is required. Provide one as a positional argument, with --file, or use --resume.");
   }
 
-  // Resolve individual settings: CLI > env > default
-  const model = cli.model ?? process.env.CLAUDE_MODEL ?? CLAUDE_MODEL;
+  // Resolve the uniform model. We must distinguish "the user explicitly set a
+  // uniform model" (which should apply to all agents, preserving old behavior)
+  // from "nothing was set" (which lets the per-agent matrix apply). A blank
+  // value counts as unset so odd input never produces an empty model string.
+  const userUniformModel = blankToUndefined(cli.model ?? process.env.CLAUDE_MODEL);
+  // `model` stays a concrete string for run-level metadata/logging; it falls
+  // back to the base default tier when the user supplied no uniform model.
+  const model = userUniformModel ?? DEFAULT_MODEL;
 
   const maxSprints =
     cli.maxSprints ??
@@ -270,6 +313,21 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     cli.threshold ??
     (process.env.PASS_THRESHOLD ? parseInt(process.env.PASS_THRESHOLD, 10) : undefined) ??
     DEFAULT_CONFIG.passThreshold;
+
+  const maxFeatures =
+    cli.maxFeatures ??
+    (process.env.MAX_FEATURES ? parseInt(process.env.MAX_FEATURES, 10) : undefined) ??
+    DEFAULT_CONFIG.maxFeatures;
+
+  const maxCriteria =
+    cli.maxCriteria ??
+    (process.env.MAX_CRITERIA ? parseInt(process.env.MAX_CRITERIA, 10) : undefined) ??
+    DEFAULT_CONFIG.maxCriteria;
+
+  const maxSurfaces =
+    cli.maxSurfaces ??
+    (process.env.MAX_SURFACES ? parseInt(process.env.MAX_SURFACES, 10) : undefined) ??
+    DEFAULT_CONFIG.maxSurfaces;
 
   // Determine log level
   let logLevel: LogLevel = "normal";
@@ -300,10 +358,15 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
   const langfuseSecretKey = process.env.LANGFUSE_SECRET_KEY || undefined;
   const langfuseBaseUrl = process.env.LANGFUSE_BASE_URL || undefined;
 
-  const modelPlanner = cli.modelPlanner ?? process.env.MODEL_PLANNER ?? undefined;
-  const modelGenerator = cli.modelGenerator ?? process.env.MODEL_GENERATOR ?? undefined;
-  const modelEvaluator = cli.modelEvaluator ?? process.env.MODEL_EVALUATOR ?? undefined;
-  const modelDocumenter = cli.modelDocumenter ?? process.env.MODEL_DOCUMENTER ?? undefined;
+  // Per-agent overrides: CLI flag > env var. Blank values degrade to undefined
+  // so they fall through to the uniform model / matrix default cleanly.
+  const modelPlanner = blankToUndefined(cli.modelPlanner ?? process.env.MODEL_PLANNER);
+  const modelGenerator = blankToUndefined(cli.modelGenerator ?? process.env.MODEL_GENERATOR);
+  const modelEvaluator = blankToUndefined(cli.modelEvaluator ?? process.env.MODEL_EVALUATOR);
+  const modelDocumenter = blankToUndefined(cli.modelDocumenter ?? process.env.MODEL_DOCUMENTER);
+  // Optional single model for the whole contract negotiation (proposal, review,
+  // narrowing). When unset, negotiation keeps the inherited Generator/Evaluator split.
+  const modelContract = blankToUndefined(cli.modelContract ?? process.env.MODEL_CONTRACT);
 
   const config: ResolvedConfig = {
     userPrompt,
@@ -311,6 +374,9 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     maxSprints,
     maxRetriesPerSprint,
     passThreshold,
+    maxFeatures,
+    maxCriteria,
+    maxSurfaces,
     model,
     isGreenfield: cli.greenfield,
     isResume: cli.resume,
@@ -325,11 +391,13 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     noDocs: cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS),
     lintGate: cli.lintGate || false,
     refineSpec: cli.refineSpec || false,
-    // Per-agent resolved models
-    resolvedModelPlanner: modelPlanner ?? model,
-    resolvedModelGenerator: modelGenerator ?? model,
-    resolvedModelEvaluator: modelEvaluator ?? model,
-    resolvedModelDocumenter: modelDocumenter ?? model,
+    // Per-agent resolved models. Precedence per agent:
+    //   explicit per-agent override > explicit uniform model > per-agent tier default.
+    // The matrix only applies when the user set neither an override nor --model.
+    resolvedModelPlanner: resolveAgentModel(modelPlanner, userUniformModel, DEFAULT_MODEL_PLANNER),
+    resolvedModelGenerator: resolveAgentModel(modelGenerator, userUniformModel, DEFAULT_MODEL_GENERATOR),
+    resolvedModelEvaluator: resolveAgentModel(modelEvaluator, userUniformModel, DEFAULT_MODEL_EVALUATOR),
+    resolvedModelDocumenter: resolveAgentModel(modelDocumenter, userUniformModel, DEFAULT_MODEL_DOCUMENTER),
     // Genuinely optional
     tzDisplay,
     langfusePublicKey,
@@ -342,6 +410,7 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     modelGenerator,
     modelEvaluator,
     modelDocumenter,
+    modelContract,
     branch: cli.branch,
     sprint: cli.sprint,
     notify: cli.notify || false,
@@ -376,5 +445,14 @@ export function validateConfig(config: HarnessConfig): void {
   }
   if (config.maxRetriesPerSprint < 0) {
     throw new Error(`Invalid max-retries: ${config.maxRetriesPerSprint}. Must be >= 0.`);
+  }
+  if (!Number.isInteger(config.maxFeatures) || config.maxFeatures < 1) {
+    throw new Error(`Invalid max-features: ${config.maxFeatures}. Must be an integer >= 1.`);
+  }
+  if (!Number.isInteger(config.maxCriteria) || config.maxCriteria < 1) {
+    throw new Error(`Invalid max-criteria: ${config.maxCriteria}. Must be an integer >= 1.`);
+  }
+  if (!Number.isInteger(config.maxSurfaces) || config.maxSurfaces < 1) {
+    throw new Error(`Invalid max-surfaces: ${config.maxSurfaces}. Must be an integer >= 1.`);
   }
 }

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { access, mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { log } from "./logger.ts";
+import { normalizeSurfaces } from "./surfaces.ts";
 import type { EvalResult, HarnessProgress, SprintContract } from "./types.ts";
 
 /** Resolve the .adhd metadata directory for a given project root. */
@@ -124,19 +125,41 @@ export async function readSpec(workDir: string): Promise<string> {
   return readFile(join(harnessDir(workDir), "spec.md"), "utf-8");
 }
 
+/**
+ * Serialize a contract with a stable, diff-friendly key order (matching the
+ * convention used in usage.json). `surfaces` is only emitted when it is
+ * actually present, so re-persisting a legacy contract never injects the field.
+ */
+function serializeContract(contract: SprintContract): Record<string, unknown> {
+  const surfaces = normalizeSurfaces(contract.surfaces);
+  const serialized: Record<string, unknown> = {
+    sprintNumber: contract.sprintNumber,
+    features: contract.features,
+  };
+  if (surfaces !== undefined) {
+    serialized.surfaces = surfaces;
+  }
+  serialized.criteria = contract.criteria;
+  return serialized;
+}
+
 export async function writeContract(workDir: string, contract: SprintContract): Promise<void> {
   const path = join(harnessDir(workDir), "contracts", `sprint-${contract.sprintNumber}.json`);
-  await writeFile(path, JSON.stringify(contract, null, 2), "utf-8");
+  await writeFile(path, JSON.stringify(serializeContract(contract), null, 2), "utf-8");
 }
 
 export async function readContract(workDir: string, sprintNumber: number): Promise<SprintContract> {
   const path = join(harnessDir(workDir), "contracts", `sprint-${sprintNumber}.json`);
   const raw = await readFile(path, "utf-8");
+  let parsed: SprintContract;
   try {
-    return JSON.parse(raw) as SprintContract;
+    parsed = JSON.parse(raw) as SprintContract;
   } catch {
     throw new Error(`Invalid JSON in contract file: ${path}`);
   }
+  // Degrade malformed/absent surfaces gracefully; never crash on a stored file.
+  parsed.surfaces = normalizeSurfaces(parsed.surfaces);
+  return parsed;
 }
 
 /**
@@ -159,6 +182,8 @@ export async function loadExistingContract(workDir: string, sprintNumber: number
     }
     // Ensure sprintNumber matches
     parsed.sprintNumber = sprintNumber;
+    // Degrade malformed/absent surfaces gracefully; never crash on a stored file.
+    parsed.surfaces = normalizeSurfaces(parsed.surfaces);
     return parsed as SprintContract;
   } catch {
     return null;

@@ -15,6 +15,7 @@ import {
 } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { fileTimestamp, log, logDebug, logDivider, logError, setDisplayTimezone } from "../logger.ts";
+import { describeAgentModels, evaluatorInvariantWarning } from "../models.ts";
 import { notify } from "../notifications.ts";
 import { resolveAllAgentSkills } from "../skills.ts";
 import { countSprintHeadings } from "../sprint-count.ts";
@@ -43,13 +44,20 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
 
   log("HARNESS", "Initializing Claude Agent SDK harness");
   log("HARNESS", `Work directory: ${config.workDir}`);
-  const { resolvedModelPlanner, resolvedModelGenerator, resolvedModelEvaluator } = config;
-  const modelInfo = [config.modelPlanner, config.modelGenerator, config.modelEvaluator].some(Boolean)
-    ? `Models: planner=${resolvedModelPlanner}, generator=${resolvedModelGenerator}, evaluator=${resolvedModelEvaluator}`
-    : `Model: ${model}`;
+  // Print the resolved model for every agent (including the Documenter, which was
+  // previously omitted) so the startup configuration is honest now that the
+  // per-agent default matrix makes the agents differ.
+  for (const line of describeAgentModels(config)) {
+    log("HARNESS", line);
+  }
+  // Advisory check: warn (don't stop) when the judge is a weaker tier than the producer.
+  const invariantWarning = evaluatorInvariantWarning(config.resolvedModelEvaluator, config.resolvedModelGenerator);
+  if (invariantWarning) {
+    logError("HARNESS", invariantWarning);
+  }
   log(
     "HARNESS",
-    `${modelInfo} | Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`,
+    `Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`,
   );
 
   // --- Resume path ---
@@ -456,6 +464,10 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
                 proposalModel: config.resolvedModelGenerator,
                 reviewModel: config.resolvedModelEvaluator,
                 usage,
+                maxFeatures: config.maxFeatures,
+                maxCriteria: config.maxCriteria,
+                maxSurfaces: config.maxSurfaces,
+                modelContract: config.modelContract,
               }),
             "contract negotiation",
           ),

@@ -7,6 +7,9 @@ export interface HarnessConfig {
   maxSprints: number;
   maxRetriesPerSprint: number;
   passThreshold: number;
+  maxFeatures: number;
+  maxCriteria: number;
+  maxSurfaces: number;
   model?: string;
   isGreenfield?: boolean;
   isResume?: boolean;
@@ -31,6 +34,8 @@ export interface HarnessConfig {
   noTdd?: boolean;
   noDocs?: boolean;
   modelDocumenter?: string;
+  /** Optional single model for ALL contract-negotiation SDK calls (F6). */
+  modelContract?: string;
   lintGate?: boolean;
   sprint?: number;
   refineSpec?: boolean;
@@ -46,6 +51,9 @@ export interface ResolvedConfig {
   maxSprints: number;
   maxRetriesPerSprint: number;
   passThreshold: number;
+  maxFeatures: number;
+  maxCriteria: number;
+  maxSurfaces: number;
   model: string;
   isGreenfield: boolean;
   isResume: boolean;
@@ -77,6 +85,8 @@ export interface ResolvedConfig {
   modelGenerator?: string;
   modelEvaluator?: string;
   modelDocumenter?: string;
+  /** Optional single model for ALL contract-negotiation SDK calls (F6). */
+  modelContract?: string;
   branch?: string;
   sprint?: number;
   notify: boolean;
@@ -88,6 +98,13 @@ export interface SprintContract {
   sprintNumber: number;
   features: string[];
   criteria: SprintCriterion[];
+  /**
+   * The parts of the codebase this sprint intends to change, drawn only from
+   * the surface vocabulary (see shared/surfaces.ts). Optional on read for
+   * backward compatibility with legacy contracts; populated on write going
+   * forward.
+   */
+  surfaces?: string[];
 }
 
 export interface SprintCriterion {

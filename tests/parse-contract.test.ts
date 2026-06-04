@@ -65,4 +65,21 @@ describe("parseContract", () => {
     const result = parseContract(JSON.stringify(contractWithWrongSprint), 4);
     expect(result.sprintNumber).toBe(4);
   });
+
+  test("preserves a valid surfaces array", () => {
+    const withSurfaces = { ...validContract, surfaces: ["backend", "tests"] };
+    const result = parseContract(JSON.stringify(withSurfaces), 1);
+    expect(result.surfaces).toEqual(["backend", "tests"]);
+  });
+
+  test("filters unknown surface tokens from a proposed contract", () => {
+    const withBadSurface = { ...validContract, surfaces: ["backend", "api", "frontend"] };
+    const result = parseContract(JSON.stringify(withBadSurface), 1);
+    expect(result.surfaces).toEqual(["backend", "frontend"]);
+  });
+
+  test("leaves surfaces undefined when the field is absent", () => {
+    const result = parseContract(JSON.stringify(validContract), 1);
+    expect(result.surfaces).toBeUndefined();
+  });
 });

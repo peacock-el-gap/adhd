@@ -106,6 +106,19 @@ export interface NegotiateContractOptions {
   proposalModel: string;
   reviewModel: string;
   usage?: UsageTracker;
+  /** Maximum features the finalized contract may declare (F5 ceiling enforcement). */
+  maxFeatures: number;
+  /** Maximum criteria the finalized contract may declare (F5 ceiling enforcement). */
+  maxCriteria: number;
+  /** Maximum surfaces the finalized contract may declare (F5 ceiling enforcement). */
+  maxSurfaces: number;
+  /**
+   * Optional single model for ALL negotiation SDK calls (F6). When set, it
+   * overrides both `proposalModel` and `reviewModel` (and therefore the bounded
+   * narrowing round, which runs on the review model). When unset, the inherited
+   * Generator-propose / Evaluator-review split is used.
+   */
+  modelContract?: string;
 }
 
 /** Convenience type for the planner function signature, used by gates and spec-refinement. */

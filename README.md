@@ -48,7 +48,7 @@ After `bun link`, you can run `adhd` from any directory -- it operates on the cu
 | [Preview the plan without building](#dry-run) | `adhd --dry-run "Add auth with JWT"` |
 | [Provide reference docs to the planner](#context-injection) | `adhd --context api-spec.yaml "Implement the API"` |
 | [Use a cheaper model](#configuration) | `adhd --model claude-sonnet-4-6 "Add auth"` |
-| [Use different models per agent](#configuration) | `adhd --model-planner claude-sonnet-4-6 "Add auth"` |
+| [Use different models per agent](#configuration) | `adhd --model-planner claude-opus-4-8 "Add auth"` |
 | [Work on a dedicated branch](#configuration) | `adhd --branch feature/auth "Add auth"` |
 | [Run non-interactively](#configuration) | `adhd --no-interactive --file spec.md` |
 | [Skip all interactive gates](#configuration) | `adhd --gate-timeout 0 --file spec.md` |
@@ -161,7 +161,7 @@ In interactive mode, you review a diff of proposed changes and can accept or rej
 
 **Duration:** A typical run takes 10-60 minutes depending on project complexity and number of sprints.
 
-**Cost:** Uses Claude Opus by default. A full run with multiple sprints can consume significant API credits. Use `--model claude-sonnet-4-6` for lower cost, or `--max-sprints` to limit scope.
+**Cost:** Planner and Evaluator default to Opus tier; Generator defaults to Sonnet. A full run with multiple sprints can consume significant API credits. Use `--model claude-sonnet-4-6` to override all agents to Sonnet, or `--max-sprints` to limit scope.
 
 **What happens to your files:** In existing-project mode, the generator makes changes directly and creates git commits. In greenfield mode, all code goes into `app/`. The `.adhd/` directory stores metadata and logs -- add it to your `.gitignore`.
 
@@ -300,11 +300,15 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Prompt file | `--file`, `-f` `<path>` | -- | -- |
 | Project directory | `--project <path>` | -- | current directory |
 | Greenfield mode | `--greenfield` | -- | off (existing project) |
-| Model (all agents) | `--model <name>` | `CLAUDE_MODEL` | `claude-opus-4-6` |
-| Planner model | `--model-planner <name>` | `MODEL_PLANNER` | same as `--model` |
-| Generator model | `--model-generator <name>` | `MODEL_GENERATOR` | same as `--model` |
-| Evaluator model | `--model-evaluator <name>` | `MODEL_EVALUATOR` | same as `--model` |
-| Documenter model | `--model-documenter <name>` | `MODEL_DOCUMENTER` | same as `--model` |
+| Model (all agents) | `--model <name>` | `CLAUDE_MODEL` | per-agent matrix below |
+| Planner model | `--model-planner <name>` | `MODEL_PLANNER` | Opus (`claude-opus-4-8`) |
+| Generator model | `--model-generator <name>` | `MODEL_GENERATOR` | Sonnet (`claude-sonnet-4-6`) |
+| Evaluator model | `--model-evaluator <name>` | `MODEL_EVALUATOR` | Opus (`claude-opus-4-8`) |
+| Documenter model | `--model-documenter <name>` | `MODEL_DOCUMENTER` | Haiku (`claude-haiku-4-5-20251001`) |
+| Contract negotiation model | `--model-contract <name>` | `MODEL_CONTRACT` | generator model (proposal) / evaluator model (review) |
+| Max features/sprint | `--max-features <n>` | `MAX_FEATURES` | `3` |
+| Max criteria/sprint | `--max-criteria <n>` | `MAX_CRITERIA` | `10` |
+| Max surfaces/sprint | `--max-surfaces <n>` | `MAX_SURFACES` | `2` |
 | Max sprints | `--max-sprints <n>` | `MAX_SPRINTS` | `10` |
 | Max retries/sprint | `--max-retries <n>` | `MAX_RETRIES` | `3` |
 | Pass threshold | `--threshold <n>` | `PASS_THRESHOLD` | `7` |
@@ -333,19 +337,38 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 
 ```env
 # Example .adhd/.env file
-CLAUDE_MODEL=claude-sonnet-4-6
+# Omit CLAUDE_MODEL to use the per-agent default matrix (recommended).
+# Set it to force a single model for all four agents.
+# CLAUDE_MODEL=claude-sonnet-4-6
 MAX_SPRINTS=6
 PASS_THRESHOLD=8
 LOG_LEVEL=verbose
 TZ_DISPLAY=Europe/Warsaw
 ADHD_EDITOR=code --wait
-MODEL_PLANNER=claude-sonnet-4-6
+MODEL_PLANNER=claude-opus-4-8
 
 # Langfuse tracing (optional)
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 # LANGFUSE_BASE_URL=https://your-instance.example.com  # only for self-hosted
 ```
+
+### Per-Agent Model Matrix
+
+When no `--model` flag is set, each agent uses a tier-appropriate default:
+
+| Agent | Default model | Rationale |
+|-------|--------------|-----------|
+| Planner | `claude-opus-4-8` (Opus) | Runs once; its spec drives all downstream agents |
+| Generator | `claude-sonnet-4-6` (Sonnet) | Cost-dominant; mistakes are recoverable via feedback |
+| Evaluator | `claude-opus-4-8` (Opus) | The sole pass/fail gate; must out-judge the Generator |
+| Documenter | `claude-haiku-4-5-20251001` (Haiku) | Lowest stakes; advisory output only |
+
+**Resolution precedence** (per agent): `--model-<agent>` > `--model` > tier default above.
+
+**Invariant warning:** If the Evaluator tier is weaker than the Generator tier, the harness prints an advisory warning at startup and continues — it does not hard-fail. The judge should never be weaker than the producer.
+
+**`--model-contract`:** Overrides the model for all three contract-negotiation calls (proposal, review, and the bounded narrowing round). When unset, proposal uses the generator's model and review uses the evaluator's model.
 
 ### Notifications (`--notify`)
 
@@ -488,8 +511,13 @@ Key data flow:
 - **Progressive Spec Refinement** (`--refine-spec`) -- Spec adapts after each sprint based on what was actually built
 - **Dry Run** (`--dry-run`) -- Preview the plan without building
 - **Context Injection** (`--context`) -- Provide reference docs to the planner
-- **Per-Agent Models** -- Use different models for planner, generator, evaluator, and documenter
+- **Per-Agent Models** -- Independent model selection per agent with a reasoned tier matrix (Opus/Sonnet/Opus/Haiku); uniform `--model` overrides all; `--model-contract` overrides all contract-negotiation calls
 - **Branch Creation** (`--branch`) -- Auto-create a git branch before the sprint loop
+
+### Contract Quality
+- **Surface Taxonomy** -- Six canonical surfaces (`backend`, `frontend`, `db`, `tests`, `docs`, `config`); contracts declare which surfaces a sprint intends to touch
+- **Surface Coverage Gate** -- After each generator attempt, changed file paths are classified against declared surfaces; a mismatch fails the attempt early (before evaluator) to save LLM cost
+- **Contract Size Limits** -- `--max-features`, `--max-criteria`, `--max-surfaces` cap contract inflation; oversized contracts are trimmed deterministically and then re-reviewed in a bounded narrowing round
 
 ### Observability
 - Per-stage cost and token tracking with per-model attribution (`.adhd/usage.json`)
@@ -505,8 +533,8 @@ The `example-prompts/` directory contains sample spec files for reference -- a R
 ## Development
 
 ```bash
-# Run tests
-bun test
+# Run tests (use the npm script — raw `bun test` fails due to mock isolation)
+bun run test
 
 # Type check
 bun run typecheck

@@ -155,7 +155,7 @@ Key properties:
 | Feature | Description |
 |---------|-------------|
 | **Dry-run mode** (`--dry-run`) | Run planner + spec approval only. Zero generation cost. |
-| **Multi-model strategy** | Per-agent model overrides (`--model-planner`, `--model-generator`, `--model-evaluator`, `--model-documenter`) |
+| **Multi-model strategy** | Per-agent model overrides (`--model-planner`, `--model-generator`, `--model-evaluator`, `--model-documenter`, `--model-contract`) layered over a reasoned per-agent default matrix (see §1.23–§1.24) |
 | **Context injection** (`--context <file>`) | Feed API specs, schemas, design docs into planner prompt |
 | **Branch creation** (`--branch <name>`) | Create feature branch before sprint loop |
 | **Greenfield mode** (`--greenfield`) | Scaffold fresh `app/` with git init |
@@ -217,11 +217,47 @@ When `--refine-spec` is set, after each passing sprint (except the last), the Pl
 4. A HITL gate allows accepting or rejecting the revised spec (auto-accepted in non-interactive mode)
 5. Sprint count is recalculated from the revised spec
 
+### 1.20 Surface-Aware Sprint Contracts
+
+Each sprint contract names the parts of the codebase it intends to change, drawn from a fixed six-value vocabulary defined once in `shared/surfaces.ts`: `backend`, `frontend`, `db`, `tests`, `docs`, `config`. Contract negotiation requires it — the Generator proposes a non-empty `surfaces` array reflecting the sprint's real footprint, and the Evaluator's contract review rejects any contract whose surfaces are missing, empty, or contain a token outside the vocabulary.
+
+Surfaces are normalized on every read and write: unknown and duplicate tokens are dropped, first-seen order is preserved, and malformed stored values degrade to "absent" rather than crashing a run. Contract JSON persists with a stable key order (`sprintNumber`, `features`, `surfaces`, `criteria`); legacy contracts that predate the field round-trip untouched and never gain a spurious empty array.
+
+Declaring surfaces is what makes scope checkable — it is the input both the coverage gate (§1.21) and the size ceiling (§1.22) measure against.
+
+### 1.21 Pre-Evaluation Surface Coverage Gate
+
+A cheap, AI-free check that runs after the Generator commits but before the Evaluator: did the sprint actually touch every surface its contract promised? The harness lists the files the attempt changed with `git diff --name-only` (excluding `.adhd/` metadata so harness bookkeeping never inflates the count) and classifies each path to at most one surface using an ordered pattern table covering common Bun/Node/TS, Python, Go, and Ruby layouts. Test paths take precedence, so a test file with a UI extension (e.g. `Button.test.tsx`) classifies as `tests`, not `frontend`.
+
+If any declared surface was left untouched, the attempt fails immediately with a skipped-Evaluator result and feedback naming the missing surfaces — no Evaluator spend on work that visibly dropped part of its scope. This is the cheaper of the two pre-Evaluator gates and runs before the static-analysis gate (§1.15); whichever fails first short-circuits the attempt.
+
+Like diff-aware evaluation (§1.16), the gate measures against the previous attempt's commit, so it engages on retry attempts. It degrades gracefully: a contract that declares no surfaces, or an attempt whose changed-file list cannot be computed, simply proceeds to the Evaluator as before.
+
+### 1.22 Contract Size Ceiling
+
+Contract negotiation enforces configurable per-sprint size limits to stop scope inflation before any code is generated: at most `maxFeatures` features, `maxCriteria` criteria, and `maxSurfaces` surfaces (defaults 3 / 10 / 2), set via `--max-features` / `--max-criteria` / `--max-surfaces` or the matching `MAX_FEATURES` / `MAX_CRITERIA` / `MAX_SURFACES` env vars, following the standard CLI > env > `.adhd/.env` > default precedence.
+
+The reviewer is told the active caps and must narrow an over-budget proposal rather than approve it. If the negotiated contract still exceeds a limit, the harness runs exactly one additional reviewer narrowing round — never a loop — and, as a final guarantee, applies a pure deterministic trim that keeps the first items within every cap so the Generator is never handed over-budget work. Odd limit values (NaN, negatives, non-numbers) are treated as "no cap" for that dimension, so a misconfiguration disables trimming rather than crashing or emptying a contract. The ceiling logic lives in pure, never-throwing helpers in `shared/contract-limits.ts`; only the single narrowing round touches the SDK.
+
+This is the negotiation-time complement to the coverage gate (§1.21): the ceiling stops a sprint from being defined too large; the gate catches a sprint that silently delivers less than it declared.
+
+### 1.23 Per-Agent Model Defaults & the Evaluator ≥ Generator Invariant
+
+Each of the four agents runs on a tier chosen for its role and blast radius, applied automatically when no model flag is set: **Planner** and **Evaluator** on Opus, **Generator** on Sonnet, **Documenter** on Haiku. The three tier IDs live in one place (`shared/models.ts`) and are referenced by name everywhere else — no model-ID string appears elsewhere in `shared/` or `harness-claude/`.
+
+Per agent, selection follows a fixed precedence: an explicit per-agent flag (`--model-planner` / `--model-generator` / `--model-evaluator` / `--model-documenter`, or the matching `MODEL_*` env var) overrides a uniform `--model` / `CLAUDE_MODEL`, which in turn overrides the agent's tier default; blank values are ignored so they fall through cleanly. At startup the harness prints the resolved model for all four agents (the Documenter included) so the run's configuration is shown honestly.
+
+A governing invariant holds across every profile: **the Evaluator's tier must be at least the Generator's.** The Evaluator is the sole pass/fail gate (§1.1), and a judge weaker than the producer would rubber-stamp code it cannot out-reason — and a false PASS is never re-litigated, whereas a weak Generator is always caught and retried. If a chosen configuration puts the Evaluator below the Generator, the harness logs a one-time advisory warning at startup and continues; it never hard-fails, and it stays silent when either model is an unrecognized ID it cannot rank.
+
+### 1.24 Single-Model Contract Negotiation Override
+
+Contract negotiation normally inherits a split — the Generator's model proposes the contract, and the Evaluator's model reviews it and runs any narrowing round (§1.22). The optional `--model-contract` flag (or `MODEL_CONTRACT` env var) collapses all three negotiation calls onto one model, letting a project decouple negotiation from the Generator/Evaluator picks without disturbing the rest of the matrix. When unset, the inherited propose/review split is used.
+
 ---
 
 ## Part 2: What's Missing — Opportunities
 
-Each opportunity below is an open gap or enhancement. Opportunities are numbered with their original IDs for traceability in Part 3. Implemented opportunities have been removed from this section — they are documented as current capabilities in Part 1 (§1.12-1.19).
+Each opportunity below is an open gap or enhancement. Opportunities are numbered with their original IDs for traceability in Part 3. Implemented opportunities have been removed from this section — they are documented as current capabilities in Part 1 (§1.12-1.24).
 
 ### OPP-04: Generator Context Priming
 
@@ -292,7 +328,7 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Pros**: Higher success rate on hard sprints; uses cheaper models by default, expensive ones only when needed
 - **Cons**: Model escalation adds complexity to orchestration; decomposition requires re-negotiating the contract mid-sprint; cost becomes less predictable
 - **Alternative**: Keep the current fixed retry but add a `--escalate` flag that enables model escalation. Conservative default, power-user opt-in.
-- **Interaction**: Model escalation must respect the Evaluator ≥ Generator invariant (OPP-14). Escalating the Generator to Opus on a retry requires the Evaluator to be at least Opus, or the gate degrades exactly when the sprint is hardest.
+- **Interaction**: Model escalation must respect the Evaluator ≥ Generator invariant (§1.23). Escalating the Generator to Opus on a retry requires the Evaluator to be at least Opus, or the gate degrades exactly when the sprint is hardest.
 - **Effort**: Medium (model escalation alone). Large (if including decomposition).
 
 ### OPP-11: Parallel Sprint Execution
@@ -316,69 +352,6 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Pros**: Enables evidence-based prompt engineering and model selection; data already exists in `.adhd/usage.json` and `progress.json`
 - **Cons**: Requires run-ID or timestamp-based run identification; needs a storage convention for historical runs (currently each run overwrites the previous)
 - **Effort**: Medium
-
-### OPP-13: Sprint Scope Control (Surfaces + Coverage + Ceiling)
-
-**Problem**: Dogfooding ADHD against CRIST initiative-tracker (19 sprints across 7 runs) surfaced a systemic failure mode: planned sprints are too big, contract negotiation inflates them further, and the generator silently drops whole features. 63% of sprints needed retries (33 attempts across 19 sprints); 2 of 7 runs were abandoned mid-sprint; one sprint cost $20.48 across 4 failed attempts and never finished. A typical evaluator verdict on a failure: "Backend implementation is solid. However, two critical frontend features are completely missing." The contract negotiator approved a feature list growing 1 → 5 → 11 across renegotiations of a single sprint, with no pushback.
-
-**Opportunity**: Three coordinated changes that reinforce each other.
-
-1. **Surface declaration in contracts.** Each sprint contract names the parts of the code it will touch (backend / frontend / db / tests / docs / config) as a field in the contract JSON. Makes scope explicit and checkable.
-
-2. **Surface coverage check after the generator.** Between the generator's commit and the evaluator's run, compare the declared surfaces against the files actually changed in the diff. If the contract declared backend + frontend but only backend files changed, the attempt fails before the evaluator runs. No evaluator spend on a sprint where the generator dropped half the work. Exact result, no AI cost. Fits into the same step as the existing pre-evaluation static-analysis gate (§1.15). Default file-path patterns target the common Bun/Node/TS + Python/Go stacks; a per-project override can be added later if real projects need it.
-
-3. **Contract size ceiling in the negotiator.** The reviewer rejects contracts above measurable limits (defaults: features > 3, criteria > 10, surfaces > 2; configurable per project via `--max-features`, `--max-criteria`, `--max-surfaces`). One extra revision round narrows the contract before approval — no infinite loop. Stops the 1 → 5 → 11 inflation pattern at negotiation time, before any code runs.
-
-Why all three together: declaring surfaces makes coverage checkable; the coverage check forces honest declarations; the ceiling stops scope inflation at negotiation time so the generator is never asked to do too much in the first place.
-
-**Validation**: Re-run the CRIST initiative-tracker scenario with the changes on. Pass criteria: retry rate below the current 33% baseline; no abandoned runs; cost per sprint trending down. The harness already records everything needed in `.adhd/usage.json` and `.adhd/logs/` to make that comparison directly.
-
-**Interactions with other items**:
-- Extends §1.3 (contract negotiation) and §1.6 (build-evaluate retry loop) — same shape, more checks.
-- Same kind of check as §1.15 (pre-evaluation static-analysis gate). Both run in the same step, both can fail the attempt before the evaluator.
-- OPP-10 (adaptive retry — model escalation) becomes less urgent. Most CRIST retries were caused by oversized scope, not model capability ceilings.
-- OPP-06 (5th reviewer agent) unaffected — that's about code quality, this is about scope.
-- "Structured reviewer output envelope" in [enhancements-new-features-ideas.md](enhancements-new-features-ideas.md) would make narrowing decisions more visible, but isn't required for this to work.
-
-**Effort**: M overall. Surface declaration: S. Coverage check: M. Size ceiling: M.
-
-### OPP-14: Per-Agent Model Defaults & Selection Guidance
-
-**Problem**: The harness exposes per-agent model overrides (§1.13 — `--model-planner`, `--model-generator`, `--model-evaluator`, `--model-documenter`), but ships a single uniform default that is two generations out of date (`claude-opus-4-6` in `shared/config.ts`), applied to every agent. Two consequences: every run pays top-tier Opus rates on agents where the tier changes nothing (the Documenter is non-blocking and runs once; only the Generator dominates cost), and there is no published guidance on how to set the knobs. The override mechanism exists but ships unconfigured — a capability without a recommended configuration.
-
-**Governing constraint**: **the Evaluator's tier must be ≥ the Generator's tier**, under any budget. The Evaluator is the GAN discriminator (§1.1) and the sole pass/fail gate; if the judge is weaker than the producer, it rubber-stamps code it cannot out-reason, silently corrupting every downstream sprint. A weak Generator is recoverable — the Evaluator fails it and feeds back fixes; a weak Evaluator is not, because a false PASS is never re-litigated. Scarce capability belongs on the judge before the coder.
-
-**Opportunity**: Ship a recommended per-agent matrix and refresh the stale default, grounded in each agent's role and blast radius.
-
-Recommended matrix (best quality-per-dollar):
-
-| Agent | Tier | Rationale |
-|-------|------|-----------|
-| Planner | Opus | Runs once; its spec is the contract every other agent reads across 3-6 sprints with no auto-recovery. Maximum blast radius at ~zero marginal cost. |
-| Generator | Sonnet | The cost-dominant agent (sprints × retries, up to 50 turns each); near-Opus coding at a lower tier, and its mistakes are recoverable via the Evaluator's feedback. |
-| Evaluator | Opus | The discriminator and sole gate; must out-judge a Sonnet Generator and sustain long, strict-JSON verdicts without truncating. Non-negotiable per the governing constraint. |
-| Documenter | Haiku | Lowest stakes: runs once, reverse-engineers finished code into docs, validation is advisory-only (§1.12). Nothing builds on its output. |
-| Contract negotiation | inherited | No independent knob — inherits Sonnet (propose) + Opus (review) from the Generator/Evaluator picks, which is the ideal split. |
-
-Two alternative profiles for the same knobs:
-- **Max quality** (hard brownfield, output-critical): Planner / Generator / Evaluator = Opus, Documenter = Sonnet.
-- **Min cost** (keep the loop honest for the least money): Planner / Generator = Sonnet, Evaluator = Opus, Documenter = Haiku.
-
-The Evaluator stays Opus in all three profiles — the governing constraint in action.
-
-Sub-changes:
-1. **Refresh the stale default.** Update the uniform default from the retired `claude-opus-4-6` to the current top tier so out-of-the-box runs aren't pinned to an old model. Current tier IDs: Opus `claude-opus-4-8`, Sonnet `claude-sonnet-4-6`, Haiku `claude-haiku-4-5`.
-2. **Document the matrix.** Publish the recommended matrix and the max-quality / min-cost profiles (README or a config doc) so the existing flags have a default to copy. Content only, no code.
-3. **(Optional) `--model-contract` knob.** Contract negotiation has no independent override — `harness.ts` wires its proposal half to the Generator model and its review half to the Evaluator model. With the recommended matrix this already yields Sonnet-proposes / Opus-reviews, so a dedicated knob is only needed if a project wants to decouple them.
-
-- **Pros**: Cuts the dominant cost leg (Generator) ~1.7× versus all-Opus while preserving loop integrity; replaces a retired default; gives the existing override flags a published, reasoned configuration; encodes the Evaluator ≥ Generator invariant as guidance.
-- **Cons**: "Best" tiers shift as new models ship, so the matrix needs occasional review; the contract knob adds a fourth model flag to an already wide CLI surface.
-- **Recommended**: Sub-changes 1 and 2 (refresh default + document matrix) are near-zero-effort quick wins — do them first. Treat sub-change 3 (`--model-contract`) as optional, only if real projects need to decouple the negotiation halves.
-- **Effort**: S (refresh + docs). S–M (optional contract knob).
-
-**Interactions with other items**:
-- Gives §1.13 (multi-model strategy) a recommended configuration rather than just the mechanism.
-- Constrains OPP-10 (adaptive retry — model escalation): escalating the Generator Sonnet → Opus on a retry must not leave the Evaluator below the Generator. Either hold the Evaluator at the top tier (the recommended matrix already does) or escalate the Evaluator in lockstep, or the gate degrades exactly when scope is hardest.
 
 ---
 
@@ -414,14 +387,12 @@ These items use the existing skills system and contract negotiation prompts. The
 
 | # | Feature | Source | Effort | Justification |
 |---|---------|--------|--------|---------------|
-| 2.1 | **Sprint scope control (surfaces + coverage + ceiling)** | OPP-13 | M | Reduces retry burn at the root: surface declaration + post-generator coverage check + contract size ceiling. Highest-leverage reliability fix surfaced by dogfooding. |
-| 2.2 | **Per-agent model defaults & selection guidance** | OPP-14 | S | Refresh the retired uniform default and publish a recommended per-agent matrix; encodes the Evaluator ≥ Generator invariant. Low-effort quick win affecting every run's cost and gate integrity. |
-| 2.3 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on 2.2's per-agent baseline and must keep the Evaluator ≥ Generator. Lower priority once 2.1 lands — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
-| 2.4 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
-| 2.5 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
-| 2.6 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
+| 2.1 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23) and must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) has shipped — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
+| 2.2 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
+| 2.3 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
+| 2.4 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
 
-**Rationale**: Item 2.1 is the highest-leverage reliability fix from dogfooding evidence. Item 2.2 is a near-zero-effort quick win that retires a stale default and gives every run a reasoned per-agent model configuration. Item 2.3 addresses a retry limitation in cases where scope control isn't enough, and builds directly on 2.2's baseline. Items 2.4-2.5 are ecosystem and tooling. Item 2.6 is contingent — it's the escalation path if quality criteria in contracts don't deliver enough signal.
+**Rationale**: Item 2.1 addresses a retry limitation in the cases where sprint scope control (§1.20–§1.22) isn't enough, and builds directly on the per-agent model baseline (§1.23). Items 2.2-2.3 are ecosystem and tooling. Item 2.4 is contingent — it's the escalation path if the quality criteria in contracts (§1.18) don't deliver enough signal.
 
 ---
 
@@ -443,12 +414,10 @@ These items use the existing skills system and contract negotiation prompts. The
 | **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills (security, a11y, API) + project-local template |
 | | CS-2 | Codebase context guidance | OPP-04 | User guide, not a harness skill |
 | --- | --- | --- | --- | --- |
-| **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Sprint scope control (surfaces + coverage + ceiling) | OPP-13 | Highest-leverage reliability fix from dogfooding |
-| | 2.2 | Per-agent model defaults & selection guidance | OPP-14 | Refresh retired default + recommended matrix; Evaluator ≥ Generator |
-| | 2.3 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag; builds on 2.2 baseline |
-| | 2.4 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
-| | 2.5 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
-| | 2.6 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
+| **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag; builds on the §1.23 model baseline |
+| | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
+| | 2.3 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
+| | 2.4 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
 | --- | --- | --- | --- | --- |
 | **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
 | | 3.2 | Web dashboard | OPP-12 | Requires stabilized CLI + data formats |
@@ -461,6 +430,6 @@ The harness's highest-leverage extension point is the **skills system**. It's a 
 
 The second insight is that **BDD scenarios are the natural regression mechanism**. They already exist as structured JSON in sprint contracts. They represent behavioral invariants, not implementation details. Accumulating them across sprints (§1.14) turns the contract system from a per-sprint checklist into a growing behavioral specification of the entire system — and pairs naturally with progressive spec refinement (§1.19) because the accumulated BDD criteria provide the stable contract floor that persists even as the spec evolves above them.
 
-The third insight: **dogfooding exposes operational issues that unit tests and design reviews miss** — phantom sprints from regex false positives, log file overwrites destroying forensic evidence, silent fallbacks masking contract parse failures. The operational-hardening capabilities now described in §1.3, §1.9, §1.11, and §1.13 exist because running the harness against its own codebase revealed these gaps.
+The third insight: **dogfooding exposes operational issues that unit tests and design reviews miss**. Running the harness against its own codebase surfaced phantom sprints from regex false positives, log file overwrites destroying forensic evidence, and silent fallbacks masking contract parse failures — now hardened in §1.3, §1.9, §1.11, and §1.13. Running it against a separate 19-sprint project (CRIST) surfaced the systemic scope-inflation failure mode that the surface and contract-ceiling suite (§1.20–§1.22) now addresses. Neither set of gaps was visible from unit tests or design reviews alone.
 
-The fourth insight: **the discriminator must never rank below the producer**. §1.1's adversarial asymmetry — the Evaluator can only report, not fix — has a model-tier corollary surfaced by OPP-14: if the Evaluator's *capability* falls below the Generator's, it approves code it cannot out-reason and the gate silently fails open. This makes Evaluator tier ≥ Generator tier a design invariant rather than a tuning preference, and it identifies the judge as the cheapest place to spend capability — a Generator's mistakes are caught and retried, an Evaluator's are not.
+The fourth insight: **the discriminator must never rank below the producer**. §1.1's adversarial asymmetry — the Evaluator can only report, not fix — has a model-tier corollary, now built into the harness as a startup invariant (§1.23): if the Evaluator's *capability* falls below the Generator's, it approves code it cannot out-reason and the gate silently fails open. This makes Evaluator tier ≥ Generator tier a design invariant rather than a tuning preference, and it identifies the judge as the cheapest place to spend capability — a Generator's mistakes are caught and retried, an Evaluator's are not.

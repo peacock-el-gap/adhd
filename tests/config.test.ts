@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import { loadHarnessEnv, parseCli, resolveConfig, validateConfig } from "../shared/config.ts";
+import { CLI_FLAG_HELP, loadHarnessEnv, parseCli, resolveConfig, validateConfig } from "../shared/config.ts";
+import {
+  DEFAULT_MODEL_DOCUMENTER,
+  DEFAULT_MODEL_EVALUATOR,
+  DEFAULT_MODEL_GENERATOR,
+  DEFAULT_MODEL_PLANNER,
+} from "../shared/models.ts";
 import type { HarnessConfig } from "../shared/types.ts";
 
 // --- validateConfig ---
@@ -13,6 +19,9 @@ describe("validateConfig", () => {
     maxSprints: 5,
     maxRetriesPerSprint: 3,
     passThreshold: 7,
+    maxFeatures: 3,
+    maxCriteria: 10,
+    maxSurfaces: 2,
   };
 
   test("accepts valid config", () => {
@@ -43,6 +52,35 @@ describe("validateConfig", () => {
     expect(() => validateConfig({ ...base, passThreshold: 1 })).not.toThrow();
     expect(() => validateConfig({ ...base, passThreshold: 10 })).not.toThrow();
   });
+
+  // F4: contract size ceiling validation
+  test("rejects maxFeatures below 1", () => {
+    expect(() => validateConfig({ ...base, maxFeatures: 0 })).toThrow("Invalid max-features");
+  });
+
+  test("rejects negative maxFeatures", () => {
+    expect(() => validateConfig({ ...base, maxFeatures: -2 })).toThrow("Invalid max-features");
+  });
+
+  test("rejects non-integer maxFeatures", () => {
+    expect(() => validateConfig({ ...base, maxFeatures: 2.5 })).toThrow("Invalid max-features");
+  });
+
+  test("rejects NaN maxCriteria (non-numeric flag value)", () => {
+    expect(() => validateConfig({ ...base, maxCriteria: NaN })).toThrow("Invalid max-criteria");
+  });
+
+  test("rejects maxCriteria below 1", () => {
+    expect(() => validateConfig({ ...base, maxCriteria: 0 })).toThrow("Invalid max-criteria");
+  });
+
+  test("rejects maxSurfaces below 1", () => {
+    expect(() => validateConfig({ ...base, maxSurfaces: 0 })).toThrow("Invalid max-surfaces");
+  });
+
+  test("accepts boundary limit values", () => {
+    expect(() => validateConfig({ ...base, maxFeatures: 1, maxCriteria: 1, maxSurfaces: 1 })).not.toThrow();
+  });
 });
 
 // --- parseCli ---
@@ -69,6 +107,20 @@ describe("parseCli", () => {
     expect(cli.maxSprints).toBe(8);
     expect(cli.maxRetries).toBe(5);
     expect(cli.threshold).toBe(9);
+  });
+
+  test("parses contract size limit flags", () => {
+    const cli = parseCli(["--max-features", "2", "--max-criteria", "5", "--max-surfaces", "1", "test"]);
+    expect(cli.maxFeatures).toBe(2);
+    expect(cli.maxCriteria).toBe(5);
+    expect(cli.maxSurfaces).toBe(1);
+  });
+
+  test("contract size limit flags default to undefined", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.maxFeatures).toBeUndefined();
+    expect(cli.maxCriteria).toBeUndefined();
+    expect(cli.maxSurfaces).toBeUndefined();
   });
 
   test("parses --verbose and --quiet", () => {
@@ -566,6 +618,220 @@ describe("resolveConfig", () => {
       if (prev === undefined) delete process.env.MODEL_DOCUMENTER;
       else process.env.MODEL_DOCUMENTER = prev;
     }
+  });
+
+  // F4: contract size ceiling resolution
+  function withoutLimitEnv<T>(fn: () => T): T {
+    const prev = {
+      f: process.env.MAX_FEATURES,
+      c: process.env.MAX_CRITERIA,
+      s: process.env.MAX_SURFACES,
+    };
+    delete process.env.MAX_FEATURES;
+    delete process.env.MAX_CRITERIA;
+    delete process.env.MAX_SURFACES;
+    try {
+      return fn();
+    } finally {
+      if (prev.f !== undefined) process.env.MAX_FEATURES = prev.f;
+      if (prev.c !== undefined) process.env.MAX_CRITERIA = prev.c;
+      if (prev.s !== undefined) process.env.MAX_SURFACES = prev.s;
+    }
+  }
+
+  test("contract size limits default to 3 / 10 / 2", () => {
+    withoutLimitEnv(() => {
+      const config = resolveConfig({ ...baseCli });
+      expect(config.maxFeatures).toBe(3);
+      expect(config.maxCriteria).toBe(10);
+      expect(config.maxSurfaces).toBe(2);
+    });
+  });
+
+  test("contract size limits resolve from CLI flags as integers", () => {
+    withoutLimitEnv(() => {
+      const config = resolveConfig({ ...baseCli, maxFeatures: 2, maxCriteria: 5, maxSurfaces: 1 });
+      expect(config.maxFeatures).toBe(2);
+      expect(config.maxCriteria).toBe(5);
+      expect(config.maxSurfaces).toBe(1);
+    });
+  });
+
+  test("contract size limits resolve from env vars", () => {
+    withoutLimitEnv(() => {
+      process.env.MAX_FEATURES = "4";
+      process.env.MAX_CRITERIA = "8";
+      process.env.MAX_SURFACES = "3";
+      const config = resolveConfig({ ...baseCli });
+      expect(config.maxFeatures).toBe(4);
+      expect(config.maxCriteria).toBe(8);
+      expect(config.maxSurfaces).toBe(3);
+    });
+  });
+
+  test("CLI contract size limit flag takes precedence over env var", () => {
+    withoutLimitEnv(() => {
+      process.env.MAX_FEATURES = "9";
+      const config = resolveConfig({ ...baseCli, maxFeatures: 2 });
+      expect(config.maxFeatures).toBe(2);
+    });
+  });
+
+  test("rejects invalid contract size limit during resolveConfig", () => {
+    withoutLimitEnv(() => {
+      expect(() => resolveConfig({ ...baseCli, maxCriteria: 0 })).toThrow("Invalid max-criteria");
+    });
+  });
+});
+
+// --- F6: per-agent model defaults, precedence, and --model-contract ---
+
+describe("F6 per-agent model resolution", () => {
+  const baseCliF6 = {
+    prompt: "test",
+    greenfield: false,
+    resume: false,
+    verbose: false,
+    quiet: false,
+    noInteractive: false,
+    debug: false,
+    dryRun: false,
+    noBdd: false,
+    noTdd: false,
+    noDocs: false,
+  };
+
+  /** Run fn with every model-related env var cleared, then restore. */
+  function withoutModelEnv<T>(fn: () => T): T {
+    const keys = ["CLAUDE_MODEL", "MODEL_PLANNER", "MODEL_GENERATOR", "MODEL_EVALUATOR", "MODEL_DOCUMENTER", "MODEL_CONTRACT"];
+    const prev: Record<string, string | undefined> = {};
+    for (const k of keys) {
+      prev[k] = process.env[k];
+      delete process.env[k];
+    }
+    try {
+      return fn();
+    } finally {
+      for (const k of keys) {
+        if (prev[k] === undefined) delete process.env[k];
+        else process.env[k] = prev[k];
+      }
+    }
+  }
+
+  test("no flags → recommended matrix (Opus/Sonnet/Opus/Haiku)", () => {
+    withoutModelEnv(() => {
+      const config = resolveConfig({ ...baseCliF6 });
+      expect(config.resolvedModelPlanner).toBe(DEFAULT_MODEL_PLANNER);
+      expect(config.resolvedModelGenerator).toBe(DEFAULT_MODEL_GENERATOR);
+      expect(config.resolvedModelEvaluator).toBe(DEFAULT_MODEL_EVALUATOR);
+      expect(config.resolvedModelDocumenter).toBe(DEFAULT_MODEL_DOCUMENTER);
+      // Each resolved field must be a concrete, non-empty string
+      for (const m of [
+        config.resolvedModelPlanner,
+        config.resolvedModelGenerator,
+        config.resolvedModelEvaluator,
+        config.resolvedModelDocumenter,
+      ]) {
+        expect(typeof m).toBe("string");
+        expect(m.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  test("explicit uniform --model applies to all four agents (matrix not applied)", () => {
+    withoutModelEnv(() => {
+      const config = resolveConfig({ ...baseCliF6, model: "my-uniform-model" });
+      expect(config.resolvedModelPlanner).toBe("my-uniform-model");
+      expect(config.resolvedModelGenerator).toBe("my-uniform-model");
+      expect(config.resolvedModelEvaluator).toBe("my-uniform-model");
+      expect(config.resolvedModelDocumenter).toBe("my-uniform-model");
+    });
+  });
+
+  test("per-agent override wins over the matrix default", () => {
+    withoutModelEnv(() => {
+      const config = resolveConfig({ ...baseCliF6, modelGenerator: "override-gen" });
+      expect(config.resolvedModelGenerator).toBe("override-gen");
+      // The others still follow the matrix
+      expect(config.resolvedModelPlanner).toBe(DEFAULT_MODEL_PLANNER);
+    });
+  });
+
+  test("per-agent override wins over an explicit uniform --model", () => {
+    withoutModelEnv(() => {
+      const config = resolveConfig({ ...baseCliF6, model: "uniform", modelEvaluator: "override-eval" });
+      expect(config.resolvedModelEvaluator).toBe("override-eval");
+      expect(config.resolvedModelGenerator).toBe("uniform");
+    });
+  });
+
+  test("graceful degradation: blank --model falls back to the matrix, never empty", () => {
+    withoutModelEnv(() => {
+      const config = resolveConfig({ ...baseCliF6, model: "   " });
+      expect(config.resolvedModelPlanner).toBe(DEFAULT_MODEL_PLANNER);
+      expect(config.resolvedModelGenerator).toBe(DEFAULT_MODEL_GENERATOR);
+    });
+  });
+
+  test("graceful degradation: blank per-agent override falls back, never empty", () => {
+    withoutModelEnv(() => {
+      const config = resolveConfig({ ...baseCliF6, modelGenerator: "  " });
+      expect(config.resolvedModelGenerator).toBe(DEFAULT_MODEL_GENERATOR);
+    });
+  });
+
+  test("unknown per-agent override is passed through unchanged (no throw)", () => {
+    withoutModelEnv(() => {
+      const config = resolveConfig({ ...baseCliF6, modelDocumenter: "some-future-model-id" });
+      expect(config.resolvedModelDocumenter).toBe("some-future-model-id");
+    });
+  });
+
+  test("parses --model-contract flag; defaults to undefined", () => {
+    expect(parseCli(["--model-contract", "contract-model", "test"]).modelContract).toBe("contract-model");
+    expect(parseCli(["test"]).modelContract).toBeUndefined();
+  });
+
+  test("resolves modelContract from CLI flag and MODEL_CONTRACT env var", () => {
+    withoutModelEnv(() => {
+      expect(resolveConfig({ ...baseCliF6, modelContract: "cli-contract" }).modelContract).toBe("cli-contract");
+      process.env.MODEL_CONTRACT = "env-contract";
+      expect(resolveConfig({ ...baseCliF6 }).modelContract).toBe("env-contract");
+    });
+  });
+
+  test("modelContract defaults to undefined when unset", () => {
+    withoutModelEnv(() => {
+      expect(resolveConfig({ ...baseCliF6 }).modelContract).toBeUndefined();
+    });
+  });
+});
+
+// --- printHelp / CLI_FLAG_HELP ---
+
+describe("CLI_FLAG_HELP contract size limits", () => {
+  test("documents all three new flags with descriptions and defaults", () => {
+    expect(CLI_FLAG_HELP["--max-features"]).toContain("default: 3");
+    expect(CLI_FLAG_HELP["--max-criteria"]).toContain("default: 10");
+    expect(CLI_FLAG_HELP["--max-surfaces"]).toContain("default: 2");
+  });
+});
+
+describe("CLI_FLAG_HELP model documentation (F6)", () => {
+  test("--model help no longer cites the stale claude-opus-4-6 default ID", () => {
+    expect(CLI_FLAG_HELP["--model"]).not.toContain("claude-opus-4-6");
+  });
+
+  test("documents --model-contract including its MODEL_CONTRACT env var", () => {
+    expect(CLI_FLAG_HELP["--model-contract"]).toBeDefined();
+    expect(CLI_FLAG_HELP["--model-contract"]).toContain("MODEL_CONTRACT");
+  });
+
+  test("per-agent flag help names the recommended default tiers", () => {
+    expect(CLI_FLAG_HELP["--model-generator"]).toContain("Sonnet");
+    expect(CLI_FLAG_HELP["--model-evaluator"]).toContain("Opus");
+    expect(CLI_FLAG_HELP["--model-documenter"]).toContain("Haiku");
   });
 });
 
