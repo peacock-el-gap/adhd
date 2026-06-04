@@ -292,6 +292,7 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Pros**: Higher success rate on hard sprints; uses cheaper models by default, expensive ones only when needed
 - **Cons**: Model escalation adds complexity to orchestration; decomposition requires re-negotiating the contract mid-sprint; cost becomes less predictable
 - **Alternative**: Keep the current fixed retry but add a `--escalate` flag that enables model escalation. Conservative default, power-user opt-in.
+- **Interaction**: Model escalation must respect the Evaluator ≥ Generator invariant (OPP-14). Escalating the Generator to Opus on a retry requires the Evaluator to be at least Opus, or the gate degrades exactly when the sprint is hardest.
 - **Effort**: Medium (model escalation alone). Large (if including decomposition).
 
 ### OPP-11: Parallel Sprint Execution
@@ -341,6 +342,44 @@ Why all three together: declaring surfaces makes coverage checkable; the coverag
 
 **Effort**: M overall. Surface declaration: S. Coverage check: M. Size ceiling: M.
 
+### OPP-14: Per-Agent Model Defaults & Selection Guidance
+
+**Problem**: The harness exposes per-agent model overrides (§1.13 — `--model-planner`, `--model-generator`, `--model-evaluator`, `--model-documenter`), but ships a single uniform default that is two generations out of date (`claude-opus-4-6` in `shared/config.ts`), applied to every agent. Two consequences: every run pays top-tier Opus rates on agents where the tier changes nothing (the Documenter is non-blocking and runs once; only the Generator dominates cost), and there is no published guidance on how to set the knobs. The override mechanism exists but ships unconfigured — a capability without a recommended configuration.
+
+**Governing constraint**: **the Evaluator's tier must be ≥ the Generator's tier**, under any budget. The Evaluator is the GAN discriminator (§1.1) and the sole pass/fail gate; if the judge is weaker than the producer, it rubber-stamps code it cannot out-reason, silently corrupting every downstream sprint. A weak Generator is recoverable — the Evaluator fails it and feeds back fixes; a weak Evaluator is not, because a false PASS is never re-litigated. Scarce capability belongs on the judge before the coder.
+
+**Opportunity**: Ship a recommended per-agent matrix and refresh the stale default, grounded in each agent's role and blast radius.
+
+Recommended matrix (best quality-per-dollar):
+
+| Agent | Tier | Rationale |
+|-------|------|-----------|
+| Planner | Opus | Runs once; its spec is the contract every other agent reads across 3-6 sprints with no auto-recovery. Maximum blast radius at ~zero marginal cost. |
+| Generator | Sonnet | The cost-dominant agent (sprints × retries, up to 50 turns each); near-Opus coding at a lower tier, and its mistakes are recoverable via the Evaluator's feedback. |
+| Evaluator | Opus | The discriminator and sole gate; must out-judge a Sonnet Generator and sustain long, strict-JSON verdicts without truncating. Non-negotiable per the governing constraint. |
+| Documenter | Haiku | Lowest stakes: runs once, reverse-engineers finished code into docs, validation is advisory-only (§1.12). Nothing builds on its output. |
+| Contract negotiation | inherited | No independent knob — inherits Sonnet (propose) + Opus (review) from the Generator/Evaluator picks, which is the ideal split. |
+
+Two alternative profiles for the same knobs:
+- **Max quality** (hard brownfield, output-critical): Planner / Generator / Evaluator = Opus, Documenter = Sonnet.
+- **Min cost** (keep the loop honest for the least money): Planner / Generator = Sonnet, Evaluator = Opus, Documenter = Haiku.
+
+The Evaluator stays Opus in all three profiles — the governing constraint in action.
+
+Sub-changes:
+1. **Refresh the stale default.** Update the uniform default from the retired `claude-opus-4-6` to the current top tier so out-of-the-box runs aren't pinned to an old model. Current tier IDs: Opus `claude-opus-4-8`, Sonnet `claude-sonnet-4-6`, Haiku `claude-haiku-4-5`.
+2. **Document the matrix.** Publish the recommended matrix and the max-quality / min-cost profiles (README or a config doc) so the existing flags have a default to copy. Content only, no code.
+3. **(Optional) `--model-contract` knob.** Contract negotiation has no independent override — `harness.ts` wires its proposal half to the Generator model and its review half to the Evaluator model. With the recommended matrix this already yields Sonnet-proposes / Opus-reviews, so a dedicated knob is only needed if a project wants to decouple them.
+
+- **Pros**: Cuts the dominant cost leg (Generator) ~1.7× versus all-Opus while preserving loop integrity; replaces a retired default; gives the existing override flags a published, reasoned configuration; encodes the Evaluator ≥ Generator invariant as guidance.
+- **Cons**: "Best" tiers shift as new models ship, so the matrix needs occasional review; the contract knob adds a fourth model flag to an already wide CLI surface.
+- **Recommended**: Sub-changes 1 and 2 (refresh default + document matrix) are near-zero-effort quick wins — do them first. Treat sub-change 3 (`--model-contract`) as optional, only if real projects need to decouple the negotiation halves.
+- **Effort**: S (refresh + docs). S–M (optional contract knob).
+
+**Interactions with other items**:
+- Gives §1.13 (multi-model strategy) a recommended configuration rather than just the mechanism.
+- Constrains OPP-10 (adaptive retry — model escalation): escalating the Generator Sonnet → Opus on a retry must not leave the Evaluator below the Generator. Either hold the Evaluator at the top tier (the recommended matrix already does) or escalate the Evaluator in lockstep, or the gate degrades exactly when scope is hardest.
+
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -376,12 +415,13 @@ These items use the existing skills system and contract negotiation prompts. The
 | # | Feature | Source | Effort | Justification |
 |---|---------|--------|--------|---------------|
 | 2.1 | **Sprint scope control (surfaces + coverage + ceiling)** | OPP-13 | M | Reduces retry burn at the root: surface declaration + post-generator coverage check + contract size ceiling. Highest-leverage reliability fix surfaced by dogfooding. |
-| 2.2 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Lower priority once 2.1 lands — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
-| 2.3 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
-| 2.4 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
-| 2.5 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
+| 2.2 | **Per-agent model defaults & selection guidance** | OPP-14 | S | Refresh the retired uniform default and publish a recommended per-agent matrix; encodes the Evaluator ≥ Generator invariant. Low-effort quick win affecting every run's cost and gate integrity. |
+| 2.3 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on 2.2's per-agent baseline and must keep the Evaluator ≥ Generator. Lower priority once 2.1 lands — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
+| 2.4 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
+| 2.5 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
+| 2.6 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
 
-**Rationale**: Item 2.1 is the highest-leverage reliability fix from dogfooding evidence. Item 2.2 addresses a retry limitation in cases where scope control isn't enough. Items 2.3-2.4 are ecosystem and tooling. Item 2.5 is contingent — it's the escalation path if quality criteria in contracts don't deliver enough signal.
+**Rationale**: Item 2.1 is the highest-leverage reliability fix from dogfooding evidence. Item 2.2 is a near-zero-effort quick win that retires a stale default and gives every run a reasoned per-agent model configuration. Item 2.3 addresses a retry limitation in cases where scope control isn't enough, and builds directly on 2.2's baseline. Items 2.4-2.5 are ecosystem and tooling. Item 2.6 is contingent — it's the escalation path if quality criteria in contracts don't deliver enough signal.
 
 ---
 
@@ -404,10 +444,11 @@ These items use the existing skills system and contract negotiation prompts. The
 | | CS-2 | Codebase context guidance | OPP-04 | User guide, not a harness skill |
 | --- | --- | --- | --- | --- |
 | **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Sprint scope control (surfaces + coverage + ceiling) | OPP-13 | Highest-leverage reliability fix from dogfooding |
-| | 2.2 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag; lower priority once 2.1 lands |
-| | 2.3 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
-| | 2.4 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
-| | 2.5 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
+| | 2.2 | Per-agent model defaults & selection guidance | OPP-14 | Refresh retired default + recommended matrix; Evaluator ≥ Generator |
+| | 2.3 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag; builds on 2.2 baseline |
+| | 2.4 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
+| | 2.5 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
+| | 2.6 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
 | --- | --- | --- | --- | --- |
 | **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
 | | 3.2 | Web dashboard | OPP-12 | Requires stabilized CLI + data formats |
@@ -421,3 +462,5 @@ The harness's highest-leverage extension point is the **skills system**. It's a 
 The second insight is that **BDD scenarios are the natural regression mechanism**. They already exist as structured JSON in sprint contracts. They represent behavioral invariants, not implementation details. Accumulating them across sprints (§1.14) turns the contract system from a per-sprint checklist into a growing behavioral specification of the entire system — and pairs naturally with progressive spec refinement (§1.19) because the accumulated BDD criteria provide the stable contract floor that persists even as the spec evolves above them.
 
 The third insight: **dogfooding exposes operational issues that unit tests and design reviews miss** — phantom sprints from regex false positives, log file overwrites destroying forensic evidence, silent fallbacks masking contract parse failures. The operational-hardening capabilities now described in §1.3, §1.9, §1.11, and §1.13 exist because running the harness against its own codebase revealed these gaps.
+
+The fourth insight: **the discriminator must never rank below the producer**. §1.1's adversarial asymmetry — the Evaluator can only report, not fix — has a model-tier corollary surfaced by OPP-14: if the Evaluator's *capability* falls below the Generator's, it approves code it cannot out-reason and the gate silently fails open. This makes Evaluator tier ≥ Generator tier a design invariant rather than a tuning preference, and it identifies the judge as the cheapest place to spend capability — a Generator's mistakes are caught and retried, an Evaluator's are not.
