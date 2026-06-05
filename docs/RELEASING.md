@@ -19,7 +19,7 @@ Tags are always `vMAJOR.MINOR.PATCH`. Never `v0.01`-style — those don't sort, 
 - **Always develop on a topic branch** — `dev/*`, `feat/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*`.
 - **No direct commits to `main`.** Every change lands on `main` via a squash-merge from a topic branch. A direct commit is allowed only when the maintainer explicitly requests it and confirms it's an intentional exception — never a default, and never merely because `main` is the current branch.
 - **Squash-merge** to `main`. Never merge-commit, never fast-forward a noisy branch. `main` holds one clean, squashed commit per change.
-- **Keep `.adhd/` out of `main`.** A harness-developed branch carries `.adhd/` self-development metadata; a plain squash would drag it onto `main`. Drop it before committing the squash (see the checklist). The branch's `.adhd/` trail lives only in its `archive/*` tag.
+- **Keep `.adhd/` out of `main` — except two durable assets.** A harness-developed branch carries `.adhd/` self-development metadata; a plain squash would drag it onto `main`. Drop it before committing the squash (see the checklist). The branch's `.adhd/` trail lives only in its `archive/*` tag. **The exceptions are `.adhd/usage.json` (the cumulative cost ledger) and `.adhd/regression.json` (the accumulated behavioural-criteria suite) — these are tracked on `main` and carried forward at each merge.** When stripping, keep *their* updates and drop everything else under `.adhd/`. (`.adhd/.env` holds secrets and is git-ignored.)
 - Squash messages use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`; `feat!:` / `BREAKING CHANGE:` for breaks) — see **Commit messages**.
 
 ### Releases ride the branch — no separate release commit on `main`
@@ -59,7 +59,9 @@ git commit -am "chore(release): v$NEW"               # 5. on the branch (will be
 # Land it on main:
 git checkout main && git pull --ff-only
 git merge --squash <branch>
-git restore --staged --worktree .adhd && git clean -fdq .adhd   # 6. drop .adhd self-dev metadata
+# 6. drop .adhd self-dev metadata, but KEEP the two durable assets (cost ledger + behavioural suite):
+git restore --staged --worktree .adhd ':(exclude).adhd/usage.json' ':(exclude).adhd/regression.json'
+git clean -fdq .adhd   # removes only untracked .adhd exhaust; tracked usage.json/regression.json stay
 git commit                                                       #    squash; REPLACE the prefilled message
 git tag -a v$NEW -m "v$NEW — <one-line theme>"       # 7. annotated; see Tag messages
 git push origin main && git push origin v$NEW        # 8. push commit + release tag

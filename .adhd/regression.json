@@ -376,5 +376,323 @@
     "description": "README.md contains updated Cost tracking paragraph and Observability bullet mentioning per-model attribution. docs/INTERNALS.md Cost Tracking section describes both summary views and the persisted `model` field. docs/ROADMAP.md Part 1 §1.11 bullet 3 is extended; Parts 2 and 3 contain no new per-model tracking entry. CHANGELOG.md contains a new `## Phase 1.6: Observability Sharpening` section with `### Sprint 1 -- Per-Model Usage Tracking` immediately after the Phase 1.5 block, using identical heading levels and Features→bullets→Verified line ordering.",
     "threshold": 8,
     "sprintNumber": 1
+  },
+  {
+    "name": "surfaces_round_trip",
+    "description": "Writing a negotiated contract with surfaces to .adhd/contracts/sprint-N.json and re-reading it yields the identical surfaces array (same values, same membership, same order), with stable key ordering in the persisted JSON matching existing conventions.",
+    "threshold": 8,
+    "sprintNumber": 1
+  },
+  {
+    "name": "legacy_contract_loads",
+    "description": "Parsing a legacy contract JSON that has no surfaces field succeeds without throwing; the absent field is treated as unspecified (empty or undefined surface list), never crashing the run, and re-persisting it does not inject spurious values.",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "proposer_emits_surfaces",
+    "description": "After contract negotiation runs, the resulting contract contains a non-empty surfaces array drawn only from the allowed vocabulary, reflecting the sprint's footprint. The proposer prompt explicitly instructs use of only the allowed vocabulary.",
+    "threshold": 7,
+    "sprintNumber": 1
+  },
+  {
+    "name": "reviewer_validates_surfaces",
+    "description": "Given a candidate contract whose surfaces is missing, empty, or contains an unknown token, the reviewer step produces an approved contract whose surfaces is present, non-empty, and contains only allowed vocabulary values: unknown tokens are dropped, and a contract that would end up with an empty surfaces list is rejected rather than approved.",
+    "threshold": 7,
+    "sprintNumber": 1
+  },
+  {
+    "name": "app_starts_and_tests_pass",
+    "description": "bun run typecheck, bun run lint, and bun test all pass cleanly. The harness still starts and negotiates a contract end-to-end without regressions to existing contract persistence.",
+    "threshold": 8,
+    "sprintNumber": 1
+  },
+  {
+    "name": "graceful_degradation_no_crash",
+    "description": "Model/tier resolution never throws and never crashes a run on odd input (missing env vars, empty/whitespace-only strings, unknown model overrides, mixed-case env values); it always produces concrete non-empty resolved model strings, consistent with the project's graceful-degradation convention. An unknown explicit override is passed through (or mapped) rather than causing an exception.",
+    "threshold": 7,
+    "sprintNumber": 6
+  },
+  {
+    "name": "classifier_lives_in_surfaces_module",
+    "description": "The new classification function is added to and exported from the existing shared/surfaces.ts module (no new parallel surface module is created), and it reuses the already-defined SURFACE_VOCABULARY, Surface type, and isSurface rather than redefining them.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "returns_deduplicated_surface_set",
+    "description": "Given a list of file path strings, the function returns the deduplicated set of Surface values touched. Backend source paths plus a test path classify to exactly {backend, tests}; frontend UI files plus a markdown file classify to exactly {frontend, docs}; duplicate paths or multiple paths of the same surface yield a single entry.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "covers_all_six_surfaces",
+    "description": "Default patterns correctly classify representative paths for every vocabulary token: db (migrations/schema/seed files), config (package manifests, lockfiles, dotfiles, CI config), tests (test directories or test-named files), frontend (.tsx/.jsx/.vue/.css and client UI dirs), backend (server-side source not frontend/tests), and docs (markdown/documentation). Covers both TS/Node and Python/Go style paths.",
+    "threshold": 8,
+    "sprintNumber": 2
+  },
+  {
+    "name": "documented_single_surface_precedence",
+    "description": "Each path maps to at most one surface via an explicit, documented evaluation order. A test file with a frontend extension (e.g. a .test.tsx file) resolves to tests only, not frontend, and this precedence is verified by a test.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "deterministic_order_independent",
+    "description": "Classifying the same path list in different orders yields an identical resulting set; results are deterministic across repeated calls with no dependence on input ordering.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "never_throws_on_odd_input",
+    "description": "The function never throws on degenerate input — empty path list returns an empty set; empty strings, whitespace, paths with no extension, and unrecognized paths are silently omitted from the result rather than causing an error (mirroring normalizeSurfaces' best-effort contract).",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "purity_no_io_or_sdk",
+    "description": "The function performs no git, filesystem, or network calls and has no side effects — it operates solely on the provided path strings. shared/surfaces.ts contains zero Claude SDK imports, preserving the shared/ boundary.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "full_unit_test_coverage",
+    "description": "tests/ contains unit tests for the classifier covering every acceptance scenario: multi-surface lists, each of the six surfaces, the .test.tsx precedence case, empty input, order-independence, and odd/unclassifiable input. All tests pass under `bun test`.",
+    "threshold": 8,
+    "sprintNumber": 2
+  },
+  {
+    "name": "clean_typecheck_lint_build",
+    "description": "`bun run typecheck` reports no errors, `bun run lint` passes with no new violations, and the full `bun test` suite (including pre-existing Sprint 1 tests) passes — the module integrates cleanly with the existing codebase end-to-end.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "changed_files_helper_returns_paths",
+    "description": "A new name-only changed-files helper in shared/diff.ts returns the list of changed path strings for an attempt (via `git diff --name-only beforeSha..HEAD`), sitting alongside computeDiffSection and reusing the same workDir/beforeSha/attempt inputs.",
+    "threshold": 8,
+    "sprintNumber": 3
+  },
+  {
+    "name": "changed_files_helper_graceful_degradation",
+    "description": "The changed-files helper returns undefined (or empty) on attempt 0, empty beforeSha, or any git failure, and never throws — matching computeDiffSection's degradation contract.",
+    "threshold": 8,
+    "sprintNumber": 3
+  },
+  {
+    "name": "adhd_metadata_excluded",
+    "description": "Paths under `.adhd/` are filtered out of the changed-file list before classification, so the committed metadata commit between beforeSha and HEAD never influences the coverage decision (verified even with a path that would otherwise classify to a surface).",
+    "threshold": 8,
+    "sprintNumber": 3
+  },
+  {
+    "name": "coverage_gate_fails_on_uncovered_surface",
+    "description": "When the contract declares surfaces (e.g. backend + frontend) but the classified changed files cover only a subset, the attempt fails before any Evaluator SDK call, and the overallSummary names exactly the declared surfaces that were not touched.",
+    "threshold": 9,
+    "sprintNumber": 3
+  },
+  {
+    "name": "evaluator_skipped_no_cost_on_failure",
+    "description": "On a coverage failure the Evaluator is never invoked (zero AI cost), and a normal-level log line states the check ran, that it failed, and that the Evaluator was skipped to save cost.",
+    "threshold": 9,
+    "sprintNumber": 3
+  },
+  {
+    "name": "coverage_pass_runs_evaluator",
+    "description": "When the changed files cover all declared surfaces, the coverage check passes and the Evaluator runs normally, unchanged from prior behavior.",
+    "threshold": 8,
+    "sprintNumber": 3
+  },
+  {
+    "name": "failure_eval_result_shape_matches_lint_gate",
+    "description": "A coverage failure produces an EvalResult with the same shape the --lint-gate failure produces (passed:false, scores:{}, per-criterion feedback entries scored 0, an overallSummary), is persisted via writeFeedback, calls attemptSpan.end(...), and `continue`s the retry loop — identical control flow to the lint gate.",
+    "threshold": 8,
+    "sprintNumber": 3
+  },
+  {
+    "name": "retry_feedback_propagates_missed_surface",
+    "description": "After a coverage failure on a non-final attempt, the next Generator invocation receives the failure feedback identifying the missed surface(s), via the same retry-feedback path as a normal failed attempt.",
+    "threshold": 8,
+    "sprintNumber": 3
+  },
+  {
+    "name": "skip_when_no_declared_surfaces_or_no_diff",
+    "description": "The gate is skipped (Evaluator proceeds as before, no crash) when the contract declares no/empty surfaces, or when the changed-file list cannot be computed (missing beforeSha, git failure, empty list).",
+    "threshold": 9,
+    "sprintNumber": 3
+  },
+  {
+    "name": "gate_ordering_documented",
+    "description": "When --lint-gate is also active, the relative order of the two cheap gates is documented in code/comments, and whichever fails first short-circuits to a failed attempt without invoking the Evaluator.",
+    "threshold": 7,
+    "sprintNumber": 3
+  },
+  {
+    "name": "clean_build_and_tests",
+    "description": "`bun run typecheck`, `bun run lint`, and `bun test` all pass; new unit tests cover the changed-files helper (including degradation and .adhd/ exclusion) and the gate's pass/fail/skip branches.",
+    "threshold": 9,
+    "sprintNumber": 3
+  },
+  {
+    "name": "default_limits_resolved",
+    "description": "With no flags or env vars set, resolveConfig produces a ResolvedConfig where maxFeatures=3, maxCriteria=10, and maxSurfaces=2, sourced from DEFAULT_CONFIG.",
+    "threshold": 8,
+    "sprintNumber": 4
+  },
+  {
+    "name": "cli_flags_override_defaults",
+    "description": "Passing --max-features 2, --max-criteria 5, or --max-surfaces 1 results in the corresponding resolved field taking the flag value, parsed via parseInt as an integer (not a string), overriding the default.",
+    "threshold": 8,
+    "sprintNumber": 4
+  },
+  {
+    "name": "env_var_resolution_and_precedence",
+    "description": "When MAX_FEATURES/MAX_CRITERIA/MAX_SURFACES env vars are set without a corresponding CLI flag, the env value is used; when both a flag and env var are present for the same limit, the CLI flag wins. Precedence matches the existing maxSprints/maxRetries shape (flag > env > .adhd/.env > default).",
+    "threshold": 8,
+    "sprintNumber": 4
+  },
+  {
+    "name": "validation_rejects_invalid_limits",
+    "description": "validateConfig throws a clear, specific error for non-positive or non-integer limit values (e.g. --max-criteria 0, negative, or a non-numeric string), with a message consistent in style with the existing threshold/max-sprints/max-retries validation errors.",
+    "threshold": 8,
+    "sprintNumber": 4
+  },
+  {
+    "name": "help_output_lists_new_flags",
+    "description": "printHelp output (driven by CLI_FLAG_HELP) includes all three new flags (--max-features, --max-criteria, --max-surfaces) each with a human-readable description and stated default value.",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "type_definitions_consistent",
+    "description": "The three limit fields exist on both HarnessConfig and ResolvedConfig in shared/types.ts with correct types, so validateConfig (typed against HarnessConfig) and downstream Sprint 5 consumers can reference them without type errors.",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "no_enforcement_this_sprint",
+    "description": "The limits are only resolved, exposed, and validated; negotiation and contract parsing behavior is unchanged this sprint (no trimming or rejection of contracts based on these limits is introduced).",
+    "threshold": 7,
+    "sprintNumber": 4
+  },
+  {
+    "name": "app_starts_and_typechecks_cleanly",
+    "description": "bun run typecheck passes with no errors, the harness starts cleanly, and the existing test suite (bun test) continues to pass alongside the new config tests.",
+    "threshold": 8,
+    "sprintNumber": 4
+  },
+  {
+    "name": "shared_has_no_sdk_imports",
+    "description": "All new config logic stays in shared/config.ts and shared/types.ts with zero Claude SDK imports, respecting the shared/ SDK-independence boundary.",
+    "threshold": 8,
+    "sprintNumber": 4
+  },
+  {
+    "name": "limits_threaded_into_negotiation",
+    "description": "NegotiateContractOptions in shared/orchestration/types.ts gains maxFeatures, maxCriteria, maxSurfaces, and the agents.negotiateContract call site in runSprintLoop (shared/orchestration/harness.ts) passes config.maxFeatures/maxCriteria/maxSurfaces while keeping proposalModel/reviewModel/usage and the withTransientRetry wrapper intact.",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "reviewer_prompt_is_limit_aware_builder",
+    "description": "The static CONTRACT_NEGOTIATION_EVALUATOR_PROMPT becomes a builder (e.g. buildContractReviewPrompt({maxFeatures,maxCriteria,maxSurfaces})) in shared/prompts.ts that injects the active limit numbers, instructs the reviewer to reject over-limit contracts and return a narrowed one keeping highest-priority items, while preserving the existing surface-vocabulary rules; the harness-claude/contract.ts call site builds it with the threaded limits.",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "pure_ceiling_check_and_trim",
+    "description": "A pure, side-effect-free function in shared/ (new shared/contract-limits.ts or an extension of shared/surfaces.ts) takes a SprintContract plus the three limits, reports which limits are exceeded, and returns a trimmed contract keeping the first N features, first N criteria, and first N declared surfaces routed through normalizeSurfaces; it never throws on odd input and never performs git/filesystem/network I/O.",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "features_capped",
+    "description": "Given default limits and a proposed contract with 5 features, the finalized contract has at most maxFeatures (3) features; likewise 12 criteria is reduced to at most maxCriteria (10) and 3 declared surfaces to at most maxSurfaces (2).",
+    "threshold": 8,
+    "sprintNumber": 5
+  },
+  {
+    "name": "enforcement_on_final_parsed_contract",
+    "description": "Enforcement in negotiateContract (harness-claude/contract.ts) runs after the reviewText.trim()===\"APPROVED\" ? proposalText : reviewText selection and parseContract, so an oversized proposal that the reviewer returned APPROVED on is still narrowed/trimmed to within all limits.",
+    "threshold": 8,
+    "sprintNumber": 5
+  },
+  {
+    "name": "bounded_single_narrowing_round",
+    "description": "If the parsed contract still exceeds any limit, exactly one additional reviewer narrowing round (using the limit-aware prompt) is triggered; if still over after that single round, the deterministic pure trim is applied so the loop never recurses indefinitely and the Generator never receives an over-budget contract.",
+    "threshold": 8,
+    "sprintNumber": 5
+  },
+  {
+    "name": "custom_limits_respected",
+    "description": "Given custom limits via --max-features/--max-criteria/--max-surfaces, the non-default values are the ones injected into the reviewer prompt and applied by the programmatic check; a contract already within all limits is left unchanged with no extra round run.",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "narrowing_observability",
+    "description": "When a contract is narrowed or trimmed, a normal-level HARNESS log line reports before/after counts for features, criteria, and surfaces in the existing plain-English voice; deterministic trims additionally log a clear warning that trimming occurred.",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "operational_integrity",
+    "description": "bun run typecheck, bun run lint, and bun test all pass; shared/ remains free of Claude SDK imports; the AgentRunners DI boundary is respected (pure ceiling logic lives in shared/, SDK/prompt-building enforcement lives in harness-claude/contract.ts); the harness still starts and negotiates a contract end-to-end.",
+    "threshold": 8,
+    "sprintNumber": 5
+  },
+  {
+    "name": "ceiling_logic_unit_coverage",
+    "description": "The pure ceiling check/trim has dedicated unit tests covering: under-limit (unchanged), over each individual limit, over all limits simultaneously, surface trimming with duplicate/unknown tokens dropped via normalizeSurfaces preserving declared order, and empty/odd input never throwing.",
+    "threshold": 7,
+    "sprintNumber": 5
+  },
+  {
+    "name": "named_tier_constants_replace_stale_default",
+    "description": "Model IDs are defined once as named tier constants (Opus/Sonnet/Haiku) in a single place (shared/models.ts or a delineated block in shared/config.ts) using current generally-available model IDs. The literal string 'claude-opus-4-6' no longer appears as the uniform default anywhere in the codebase; all former CLAUDE_MODEL call sites (the resolveConfig fallback and the --model help text) reference the named constants instead.",
+    "threshold": 8,
+    "sprintNumber": 6
+  },
+  {
+    "name": "per_agent_default_matrix",
+    "description": "With no model flags or env vars set, resolveConfig yields resolvedModelPlanner = Opus tier, resolvedModelGenerator = Sonnet tier, resolvedModelEvaluator = Opus tier, and resolvedModelDocumenter = Haiku tier. Each resolved field is a concrete non-empty string.",
+    "threshold": 8,
+    "sprintNumber": 6
+  },
+  {
+    "name": "resolution_precedence_per_agent",
+    "description": "Precedence is enforced per agent: an explicit --model-<agent>/MODEL_<AGENT> override wins over an explicit uniform --model/CLAUDE_MODEL, which wins over the per-agent tier default. The matrix only applies when the user set neither a per-agent override nor a uniform model. An explicit uniform --model X resolves all four agents to X (matrix not applied), and an explicit --model-generator override wins over the Sonnet matrix default. Resolution distinguishes a user-supplied uniform model from a fallback to the default constant.",
+    "threshold": 8,
+    "sprintNumber": 6
+  },
+  {
+    "name": "evaluator_ge_generator_invariant_warning",
+    "description": "When the resolved configuration would place the Evaluator tier below the Generator tier, a clear HARNESS-tagged warning naming the invariant is emitted exactly once and the run is NOT hard-failed. Explicit per-agent overrides still take effect; the warning is advisory only. When Evaluator tier ≥ Generator tier, no such warning is emitted.",
+    "threshold": 7,
+    "sprintNumber": 6
+  },
+  {
+    "name": "model_contract_knob",
+    "description": "A new optional --model-contract CLI flag plus matching MODEL_CONTRACT env var is plumbed through NegotiateContractOptions. When set, all negotiation SDK calls — proposal, review, and the F5 bounded narrowing round — use the specified model. When unset, negotiation preserves the existing inherited split (proposal on the Generator model, review and narrowing on the Evaluator model). The addition is additive and does not disturb the F5 size-limit option fields.",
+    "threshold": 8,
+    "sprintNumber": 6
+  },
+  {
+    "name": "honest_startup_model_log",
+    "description": "On startup, runHarness prints the resolved model for all four agents including the Documenter (which was previously omitted), reflecting the actual per-agent matrix rather than a single Model: line, in the plain HARNESS voice with each line standing alone.",
+    "threshold": 7,
+    "sprintNumber": 6
+  },
+  {
+    "name": "help_documents_matrix_and_flags",
+    "description": "CLI_FLAG_HELP/printHelp documents the recommended per-agent matrix, the Evaluator ≥ Generator rationale, and the new --model-contract flag (including its MODEL_CONTRACT env var). The --model help text no longer cites the stale claude-opus-4-6 default ID.",
+    "threshold": 7,
+    "sprintNumber": 6
+  },
+  {
+    "name": "operational_app_starts_clean",
+    "description": "The project typechecks (bun run typecheck), lints (bun run lint), and passes the full test suite (bun test) with no errors. The harness starts end-to-end with the new per-agent defaults and reaches normal operation without runtime errors.",
+    "threshold": 8,
+    "sprintNumber": 6
   }
 ]

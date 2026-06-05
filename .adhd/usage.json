@@ -5,6 +5,7 @@
       "stages": [
         {
           "stage": "planner",
+          "model": "unknown",
           "inputTokens": 19,
           "outputTokens": 6406,
           "cacheReadTokens": 590543,
@@ -19,6 +20,7 @@
       "stages": [
         {
           "stage": "sprint-1-contract-proposal",
+          "model": "unknown",
           "inputTokens": 1530,
           "outputTokens": 2215,
           "cacheReadTokens": 74250,
@@ -27,6 +29,7 @@
         },
         {
           "stage": "sprint-1-contract-review",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 415,
           "cacheReadTokens": 11569,
@@ -35,6 +38,7 @@
         },
         {
           "stage": "sprint-1-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 1544,
           "outputTokens": 11324,
           "cacheReadTokens": 943858,
@@ -43,6 +47,7 @@
         },
         {
           "stage": "sprint-1-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 2859,
           "outputTokens": 4545,
           "cacheReadTokens": 651491,
@@ -51,6 +56,7 @@
         },
         {
           "stage": "sprint-2-contract-proposal",
+          "model": "unknown",
           "inputTokens": 3977,
           "outputTokens": 2664,
           "cacheReadTokens": 173733,
@@ -59,6 +65,7 @@
         },
         {
           "stage": "sprint-2-contract-review",
+          "model": "unknown",
           "inputTokens": 1758,
           "outputTokens": 4062,
           "cacheReadTokens": 195424,
@@ -67,6 +74,7 @@
         },
         {
           "stage": "sprint-2-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 5667,
           "outputTokens": 16511,
           "cacheReadTokens": 3219258,
@@ -75,6 +83,7 @@
         },
         {
           "stage": "sprint-2-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 21,
           "outputTokens": 6535,
           "cacheReadTokens": 705585,
@@ -83,6 +92,7 @@
         },
         {
           "stage": "sprint-2-attempt-1-generator",
+          "model": "unknown",
           "inputTokens": 1839,
           "outputTokens": 3333,
           "cacheReadTokens": 708869,
@@ -91,6 +101,7 @@
         },
         {
           "stage": "sprint-2-attempt-1-evaluator",
+          "model": "unknown",
           "inputTokens": 1618,
           "outputTokens": 6494,
           "cacheReadTokens": 838819,
@@ -99,6 +110,7 @@
         },
         {
           "stage": "sprint-3-contract-proposal",
+          "model": "unknown",
           "inputTokens": 1605,
           "outputTokens": 2736,
           "cacheReadTokens": 261988,
@@ -107,6 +119,7 @@
         },
         {
           "stage": "sprint-3-contract-review",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 2156,
           "cacheReadTokens": 11710,
@@ -115,6 +128,7 @@
         },
         {
           "stage": "sprint-3-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 318,
           "outputTokens": 16137,
           "cacheReadTokens": 3397276,
@@ -123,6 +137,7 @@
         },
         {
           "stage": "sprint-3-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 2059,
           "outputTokens": 6112,
           "cacheReadTokens": 618690,
@@ -137,6 +152,7 @@
       "stages": [
         {
           "stage": "planner",
+          "model": "unknown",
           "inputTokens": 23,
           "outputTokens": 6536,
           "cacheReadTokens": 724288,
@@ -151,6 +167,7 @@
       "stages": [
         {
           "stage": "sprint-6-contract-proposal",
+          "model": "unknown",
           "inputTokens": 12,
           "outputTokens": 1704,
           "cacheReadTokens": 356781,
@@ -159,6 +176,7 @@
         },
         {
           "stage": "sprint-6-contract-review",
+          "model": "unknown",
           "inputTokens": 1277,
           "outputTokens": 3193,
           "cacheReadTokens": 190977,
@@ -167,6 +185,7 @@
         },
         {
           "stage": "sprint-6-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 52,
           "outputTokens": 9722,
           "cacheReadTokens": 3429312,
@@ -175,6 +194,7 @@
         },
         {
           "stage": "sprint-6-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 400,
           "outputTokens": 6210,
           "cacheReadTokens": 424944,
@@ -183,6 +203,7 @@
         },
         {
           "stage": "sprint-6-attempt-1-generator",
+          "model": "unknown",
           "inputTokens": 52,
           "outputTokens": 17912,
           "cacheReadTokens": 3376607,
@@ -191,6 +212,7 @@
         },
         {
           "stage": "sprint-6-attempt-1-evaluator",
+          "model": "unknown",
           "inputTokens": 18,
           "outputTokens": 5585,
           "cacheReadTokens": 410387,
@@ -199,6 +221,7 @@
         },
         {
           "stage": "sprint-6-attempt-2-generator",
+          "model": "unknown",
           "inputTokens": 39,
           "outputTokens": 7859,
           "cacheReadTokens": 1339884,
@@ -207,6 +230,7 @@
         },
         {
           "stage": "sprint-6-attempt-2-evaluator",
+          "model": "unknown",
           "inputTokens": 474,
           "outputTokens": 5372,
           "cacheReadTokens": 671897,
@@ -215,6 +239,7 @@
         },
         {
           "stage": "documenter",
+          "model": "unknown",
           "inputTokens": 809,
           "outputTokens": 10931,
           "cacheReadTokens": 777830,
@@ -229,6 +254,7 @@
       "stages": [
         {
           "stage": "sprint-1-contract-proposal",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 1219,
           "cacheReadTokens": 10707,
@@ -237,6 +263,7 @@
         },
         {
           "stage": "sprint-1-contract-review",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 419,
           "cacheReadTokens": 10988,
@@ -245,6 +272,7 @@
         },
         {
           "stage": "sprint-1-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 1238,
           "outputTokens": 13929,
           "cacheReadTokens": 2491149,
@@ -253,6 +281,7 @@
         },
         {
           "stage": "sprint-1-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 526,
           "outputTokens": 6391,
           "cacheReadTokens": 942175,
@@ -261,6 +290,7 @@
         },
         {
           "stage": "sprint-1-attempt-1-generator",
+          "model": "unknown",
           "inputTokens": 41,
           "outputTokens": 9812,
           "cacheReadTokens": 2200224,
@@ -269,6 +299,7 @@
         },
         {
           "stage": "sprint-1-attempt-1-evaluator",
+          "model": "unknown",
           "inputTokens": 359,
           "outputTokens": 4294,
           "cacheReadTokens": 520478,
@@ -277,6 +308,7 @@
         },
         {
           "stage": "sprint-2-contract-proposal",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 1203,
           "cacheReadTokens": 0,
@@ -285,6 +317,7 @@
         },
         {
           "stage": "sprint-2-contract-review",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 117,
           "cacheReadTokens": 10988,
@@ -293,6 +326,7 @@
         },
         {
           "stage": "sprint-2-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 3516,
           "outputTokens": 9167,
           "cacheReadTokens": 1017387,
@@ -301,6 +335,7 @@
         },
         {
           "stage": "sprint-2-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 9,
           "outputTokens": 4219,
           "cacheReadTokens": 210896,
@@ -309,6 +344,7 @@
         },
         {
           "stage": "sprint-3-contract-proposal",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 1337,
           "cacheReadTokens": 11133,
@@ -317,6 +353,7 @@
         },
         {
           "stage": "sprint-3-contract-review",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 236,
           "cacheReadTokens": 10707,
@@ -325,6 +362,7 @@
         },
         {
           "stage": "sprint-3-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 272,
           "outputTokens": 17548,
           "cacheReadTokens": 3140444,
@@ -333,6 +371,7 @@
         },
         {
           "stage": "sprint-3-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 732,
           "outputTokens": 7730,
           "cacheReadTokens": 1400918,
@@ -341,6 +380,7 @@
         },
         {
           "stage": "sprint-4-contract-proposal",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 1327,
           "cacheReadTokens": 11133,
@@ -349,6 +389,7 @@
         },
         {
           "stage": "sprint-4-contract-review",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 658,
           "cacheReadTokens": 0,
@@ -357,6 +398,7 @@
         },
         {
           "stage": "sprint-4-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 243,
           "outputTokens": 15025,
           "cacheReadTokens": 3659262,
@@ -365,6 +407,7 @@
         },
         {
           "stage": "sprint-4-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 1901,
           "outputTokens": 9886,
           "cacheReadTokens": 1881693,
@@ -373,6 +416,7 @@
         },
         {
           "stage": "sprint-5-contract-proposal",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 1479,
           "cacheReadTokens": 11133,
@@ -381,6 +425,7 @@
         },
         {
           "stage": "sprint-5-contract-review",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 543,
           "cacheReadTokens": 10988,
@@ -389,6 +434,7 @@
         },
         {
           "stage": "sprint-5-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 52,
           "outputTokens": 18936,
           "cacheReadTokens": 4783298,
@@ -397,6 +443,7 @@
         },
         {
           "stage": "sprint-5-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 1756,
           "outputTokens": 12449,
           "cacheReadTokens": 4406047,
@@ -405,6 +452,7 @@
         },
         {
           "stage": "sprint-5-attempt-1-generator",
+          "model": "unknown",
           "inputTokens": 52,
           "outputTokens": 14708,
           "cacheReadTokens": 2941827,
@@ -413,6 +461,7 @@
         },
         {
           "stage": "sprint-5-attempt-1-evaluator",
+          "model": "unknown",
           "inputTokens": 8004,
           "outputTokens": 11611,
           "cacheReadTokens": 2028573,
@@ -421,6 +470,7 @@
         },
         {
           "stage": "documenter",
+          "model": "unknown",
           "inputTokens": 972,
           "outputTokens": 4253,
           "cacheReadTokens": 750607,
@@ -435,6 +485,7 @@
       "stages": [
         {
           "stage": "planner",
+          "model": "unknown",
           "inputTokens": 11,
           "outputTokens": 7489,
           "cacheReadTokens": 192720,
@@ -443,6 +494,7 @@
         },
         {
           "stage": "sprint-1-contract-proposal",
+          "model": "unknown",
           "inputTokens": 3,
           "outputTokens": 2291,
           "cacheReadTokens": 11732,
@@ -451,6 +503,7 @@
         },
         {
           "stage": "sprint-1-contract-review",
+          "model": "unknown",
           "inputTokens": 6,
           "outputTokens": 9,
           "cacheReadTokens": 15716,
@@ -459,6 +512,7 @@
         },
         {
           "stage": "sprint-1-attempt-0-generator",
+          "model": "unknown",
           "inputTokens": 1615,
           "outputTokens": 19328,
           "cacheReadTokens": 3915132,
@@ -467,6 +521,7 @@
         },
         {
           "stage": "sprint-1-attempt-0-evaluator",
+          "model": "unknown",
           "inputTokens": 47,
           "outputTokens": 10818,
           "cacheReadTokens": 2307853,
@@ -475,6 +530,7 @@
         },
         {
           "stage": "sprint-1-attempt-1-generator",
+          "model": "unknown",
           "inputTokens": 12,
           "outputTokens": 2214,
           "cacheReadTokens": 309953,
@@ -483,6 +539,7 @@
         },
         {
           "stage": "sprint-1-attempt-1-evaluator",
+          "model": "unknown",
           "inputTokens": 21,
           "outputTokens": 5026,
           "cacheReadTokens": 601716,
@@ -491,7 +548,298 @@
         }
       ],
       "totalCostUsd": 10.3685226
+    },
+    {
+      "startedAt": "2026-06-04T16:32:35.785Z",
+      "stages": [
+        {
+          "stage": "planner",
+          "model": "claude-opus-4-8",
+          "inputTokens": 12,
+          "outputTokens": 13998,
+          "cacheReadTokens": 279347,
+          "costUsd": 2.9987505000000003,
+          "durationMs": 179440
+        }
+      ],
+      "totalCostUsd": 2.9987505000000003
+    },
+    {
+      "startedAt": "2026-06-04T16:42:25.340Z",
+      "stages": [
+        {
+          "stage": "sprint-1-contract-proposal",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 1705,
+          "cacheReadTokens": 0,
+          "costUsd": 0.5112675,
+          "durationMs": 21307
+        },
+        {
+          "stage": "sprint-1-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2953,
+          "cacheReadTokens": 11234,
+          "costUsd": 0.28281225,
+          "durationMs": 32080
+        },
+        {
+          "stage": "sprint-1-attempt-0-generator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 72,
+          "outputTokens": 16503,
+          "cacheReadTokens": 2187714,
+          "costUsd": 5.9388135,
+          "durationMs": 260462
+        },
+        {
+          "stage": "sprint-1-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 40,
+          "outputTokens": 12367,
+          "cacheReadTokens": 862197,
+          "costUsd": 3.2858955,
+          "durationMs": 225533
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 34,
+          "outputTokens": 20565,
+          "cacheReadTokens": 1023986,
+          "costUsd": 4.726276499999999,
+          "durationMs": 256506
+        },
+        {
+          "stage": "sprint-2-contract-proposal",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 1779,
+          "cacheReadTokens": 11843,
+          "costUsd": 0.36768824999999994,
+          "durationMs": 21237
+        },
+        {
+          "stage": "sprint-2-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 219,
+          "cacheReadTokens": 11660,
+          "costUsd": 0.07423874999999999,
+          "durationMs": 4406
+        },
+        {
+          "stage": "sprint-2-attempt-0-generator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 28,
+          "outputTokens": 13001,
+          "cacheReadTokens": 585629,
+          "costUsd": 2.8292197499999996,
+          "durationMs": 198040
+        },
+        {
+          "stage": "sprint-2-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 28,
+          "outputTokens": 12772,
+          "cacheReadTokens": 652637,
+          "costUsd": 2.9986192499999995,
+          "durationMs": 194036
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 16,
+          "outputTokens": 31829,
+          "cacheReadTokens": 465760,
+          "costUsd": 4.600698749999999,
+          "durationMs": 336252
+        },
+        {
+          "stage": "sprint-3-contract-proposal",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2015,
+          "cacheReadTokens": 0,
+          "costUsd": 0.75031125,
+          "durationMs": 22030
+        },
+        {
+          "stage": "sprint-3-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 706,
+          "cacheReadTokens": 11660,
+          "costUsd": 0.11410125000000002,
+          "durationMs": 11273
+        },
+        {
+          "stage": "sprint-3-attempt-0-generator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 58,
+          "outputTokens": 36420,
+          "cacheReadTokens": 2391977,
+          "costUsd": 8.620472999999999,
+          "durationMs": 489112
+        },
+        {
+          "stage": "sprint-3-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 34,
+          "outputTokens": 19230,
+          "cacheReadTokens": 1092533,
+          "costUsd": 4.10037825,
+          "durationMs": 295434
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 14,
+          "outputTokens": 34052,
+          "cacheReadTokens": 386174,
+          "costUsd": 4.7663085,
+          "durationMs": 338539
+        },
+        {
+          "stage": "sprint-4-contract-proposal",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 1930,
+          "cacheReadTokens": 18502,
+          "costUsd": 0.44412675,
+          "durationMs": 22738
+        },
+        {
+          "stage": "sprint-4-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 230,
+          "cacheReadTokens": 17893,
+          "costUsd": 0.0956445,
+          "durationMs": 4517
+        },
+        {
+          "stage": "sprint-4-attempt-0-generator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 58,
+          "outputTokens": 11624,
+          "cacheReadTokens": 1818087,
+          "costUsd": 4.6282755,
+          "durationMs": 183737
+        },
+        {
+          "stage": "sprint-4-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 32,
+          "outputTokens": 13163,
+          "cacheReadTokens": 953673,
+          "costUsd": 3.4446832499999998,
+          "durationMs": 216496
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 14,
+          "outputTokens": 38031,
+          "cacheReadTokens": 440389,
+          "costUsd": 5.250606,
+          "durationMs": 382423
+        },
+        {
+          "stage": "sprint-5-contract-proposal",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2203,
+          "cacheReadTokens": 18502,
+          "costUsd": 0.49580175000000004,
+          "durationMs": 24397
+        },
+        {
+          "stage": "sprint-5-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 213,
+          "cacheReadTokens": 18319,
+          "costUsd": 0.091371,
+          "durationMs": 5464
+        },
+        {
+          "stage": "sprint-5-attempt-0-generator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 98,
+          "outputTokens": 32729,
+          "cacheReadTokens": 4402238,
+          "costUsd": 10.87669575,
+          "durationMs": 506131
+        },
+        {
+          "stage": "sprint-5-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 34,
+          "outputTokens": 11893,
+          "cacheReadTokens": 878263,
+          "costUsd": 3.0852795,
+          "durationMs": 218931
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 14,
+          "outputTokens": 37462,
+          "cacheReadTokens": 430047,
+          "costUsd": 5.09553675,
+          "durationMs": 378255
+        },
+        {
+          "stage": "sprint-6-contract-proposal",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2242,
+          "cacheReadTokens": 11234,
+          "costUsd": 0.5116560000000001,
+          "durationMs": 27434
+        },
+        {
+          "stage": "sprint-6-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2958,
+          "cacheReadTokens": 11660,
+          "costUsd": 0.284745,
+          "durationMs": 29781
+        },
+        {
+          "stage": "sprint-6-attempt-0-generator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 100,
+          "outputTokens": 43861,
+          "cacheReadTokens": 6273948,
+          "costUsd": 15.590621999999998,
+          "durationMs": 690491
+        },
+        {
+          "stage": "sprint-6-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 857,
+          "outputTokens": 14517,
+          "cacheReadTokens": 1299961,
+          "costUsd": 4.168584,
+          "durationMs": 275116
+        },
+        {
+          "stage": "documenter",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 5899,
+          "outputTokens": 10894,
+          "cacheReadTokens": 1630272,
+          "costUsd": 0.9523761000000001,
+          "durationMs": 263113
+        }
+      ],
+      "totalCostUsd": 98.98310609999997
     }
   ],
-  "runTotalCostUsd": 60.957648850000005
+  "runTotalCostUsd": 162.93950544999998
 }
