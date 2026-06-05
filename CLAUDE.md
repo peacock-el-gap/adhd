@@ -85,10 +85,12 @@ bun run test         # Unit + integration + smoke tests
 
 ## Release Process
 
-- Branches: `feat/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*`. **Squash-merge** to `main`.
-- Squash commit message uses [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `feat!:` for breaking).
-- Before deleting a merged topic branch, tag the tip as `dev/<branch-name>` and push it — preserves the harness's per-sprint `[auto-commit]` history.
-- Tags are SemVer with `v` prefix (`v0.5.0`). Never `v0.01`-style.
+- **Always develop on a topic branch** — `dev/*`, `feat/*`, `fix/*`, `chore/*`, `docs/*`, `refactor/*`. **Never commit to `main` on your own initiative** — every change reaches `main` via a squash-merge. Commit directly to `main` only if the user explicitly tells you to and confirms, when you ask, that it's an intentional rule-break; being on `main` is never by itself a reason.
+- **Squash-merge** to `main` ([Conventional Commits](https://www.conventionalcommits.org/); `feat!:` / `BREAKING CHANGE:` for breaks). Replace the prefilled squash message with a clean subject + body — see [docs/RELEASING.md](docs/RELEASING.md) → Commit messages.
+- **Keep `.adhd/` out of `main`:** when squash-merging a harness-developed branch, drop its `.adhd/` self-development changes before committing (`git restore --staged --worktree .adhd && git clean -fdq .adhd`). The branch's `.adhd/` trail is preserved in its `archive/*` tag, never on `main`.
+- **Releases ride the branch:** on the topic branch, just before merging, check the version on `main` and set the next version above it — bump `package.json` and finalise `CHANGELOG.md` (`[Unreleased]` → `## [vX]`). The squash-merge lands code + version together; tag that merge commit `vX` (annotated, `vX — <theme>`) and push. No separate release commit on `main`.
+- **After merging, delete the topic branch (local + origin).** Preserve its per-sprint `[auto-commit]`/`[adhd]` history with a **local-only** tag `archive/<branch>`. **Never push a topic branch or an `archive/*` tag to `origin`.**
+- **Release tags** are SemVer with a `v` prefix (`v0.6.0`; never `v0.01`-style) and **are** pushed to `origin`.
 - Currently on `0.x` — breaking changes are allowed between minor versions; `1.0.0` is when we commit to backwards compatibility.
 - **Never force-push `main`. Never rewrite pushed history.**
 - Full runbook (per-release checklist, CHANGELOG format, copy-paste commands): [docs/RELEASING.md](docs/RELEASING.md)

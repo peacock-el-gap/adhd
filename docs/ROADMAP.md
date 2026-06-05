@@ -353,6 +353,20 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Cons**: Requires run-ID or timestamp-based run identification; needs a storage convention for historical runs (currently each run overwrites the previous)
 - **Effort**: Medium
 
+### OPP-15: Complete the `--commit-adhd` Metadata Set
+
+**Problem**: The opt-in `--commit-adhd` flag (§1.13) commits `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, and `.adhd/spec.md` after each sprint — but it never commits `.adhd/usage.json`, and the final terminal state (the post-Documenter `status: "complete"` write and `docsGenerated`) is written *after* the last sprint's metadata commit. So even with `--commit-adhd` on, a run's full cost record and its completed checkpoint are left uncommitted and easily lost.
+
+**Opportunity**:
+1. Add `.adhd/usage.json` to the staged paths in `commitAdhdMetadata()`.
+2. Add a final end-of-run metadata commit (after the Documenter) capturing the terminal `progress.json` state plus the final `usage.json`.
+
+**Why it matters**: It is a prerequisite for run analytics & comparison (OPP-12), which reads `.adhd/usage.json` and `progress.json` per run — those have to be preserved before runs can be compared. Default behaviour is unchanged: nothing is committed without `--commit-adhd`.
+
+- **Pros**: Closes a real data-loss gap; tiny, contained change; unblocks OPP-12; keeps the audit-trail philosophy (still opt-in)
+- **Cons**: `usage.json` changes on every API call, so committing it adds some churn to the `[adhd]` commit stream (acceptable, and opt-in)
+- **Effort**: Small
+
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -387,12 +401,13 @@ These items use the existing skills system and contract negotiation prompts. The
 
 | # | Feature | Source | Effort | Justification |
 |---|---------|--------|--------|---------------|
-| 2.1 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23) and must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) has shipped — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
-| 2.2 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
-| 2.3 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
-| 2.4 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
+| 2.1 | **Complete the `--commit-adhd` metadata set** | OPP-15 | S | Add `.adhd/usage.json` + a final end-of-run metadata commit so the full cost record and completed checkpoint are preserved. Closes a data-loss gap; prerequisite for run comparison (2.4). |
+| 2.2 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23) and must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) has shipped — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
+| 2.3 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
+| 2.4 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
+| 2.5 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
 
-**Rationale**: Item 2.1 addresses a retry limitation in the cases where sprint scope control (§1.20–§1.22) isn't enough, and builds directly on the per-agent model baseline (§1.23). Items 2.2-2.3 are ecosystem and tooling. Item 2.4 is contingent — it's the escalation path if the quality criteria in contracts (§1.18) don't deliver enough signal.
+**Rationale**: Item 2.1 is a small, low-effort fix that closes a data-loss gap and unblocks run comparison (2.4). Item 2.2 addresses a retry limitation in the cases where sprint scope control (§1.20–§1.22) isn't enough, and builds directly on the per-agent model baseline (§1.23). Items 2.3-2.4 are ecosystem and tooling. Item 2.5 is contingent — it's the escalation path if the quality criteria in contracts (§1.18) don't deliver enough signal.
 
 ---
 
@@ -414,10 +429,11 @@ These items use the existing skills system and contract negotiation prompts. The
 | **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills (security, a11y, API) + project-local template |
 | | CS-2 | Codebase context guidance | OPP-04 | User guide, not a harness skill |
 | --- | --- | --- | --- | --- |
-| **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag; builds on the §1.23 model baseline |
-| | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
-| | 2.3 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
-| | 2.4 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
+| **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Complete the `--commit-adhd` metadata set | OPP-15 | Preserve usage.json + final checkpoint; unblocks run comparison |
+| | 2.2 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag; builds on the §1.23 model baseline |
+| | 2.3 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
+| | 2.4 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
+| | 2.5 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
 | --- | --- | --- | --- | --- |
 | **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
 | | 3.2 | Web dashboard | OPP-12 | Requires stabilized CLI + data formats |
