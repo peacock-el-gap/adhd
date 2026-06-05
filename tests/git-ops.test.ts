@@ -3,8 +3,14 @@ import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { commitAdhdArtifacts, revertToCheckpoint } from "../shared/orchestration/git-ops.ts";
-import type { HarnessProgress } from "../shared/types.ts";
+import {
+  assertBranchAllowed,
+  commitAdhdArtifacts,
+  currentGitBranch,
+  revertToCheckpoint,
+  shouldRefuseOnDefaultBranch,
+} from "../shared/orchestration/git-ops.ts";
+import type { HarnessProgress, ResolvedConfig } from "../shared/types.ts";
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -256,6 +262,101 @@ describe("revertToCheckpoint uses git reset --hard with stash/unstash", () => {
       // Even without .adhd/ files, revert should complete fine
       expect(() => revertToCheckpoint(dir, false, progress)).not.toThrow();
       expect(getHeadSha(dir)).toBe(checkpointSha);
+    });
+  });
+});
+
+// =====================================================
+// Feature: run-on-main branch guard
+// =====================================================
+
+describe("shouldRefuseOnDefaultBranch (pure predicate)", () => {
+  test("refuses on main when not greenfield and not allowed", () => {
+    expect(shouldRefuseOnDefaultBranch({ branch: "main", isGreenfield: false, allowMain: false })).toBe(true);
+  });
+
+  test("refuses on master too", () => {
+    expect(shouldRefuseOnDefaultBranch({ branch: "master", isGreenfield: false, allowMain: false })).toBe(true);
+  });
+
+  test("allows a topic branch", () => {
+    expect(shouldRefuseOnDefaultBranch({ branch: "dev/feature", isGreenfield: false, allowMain: false })).toBe(false);
+  });
+
+  test("allows main when --allow-main is set", () => {
+    expect(shouldRefuseOnDefaultBranch({ branch: "main", isGreenfield: false, allowMain: true })).toBe(false);
+  });
+
+  test("allows main in greenfield mode (own app/ repo)", () => {
+    expect(shouldRefuseOnDefaultBranch({ branch: "main", isGreenfield: true, allowMain: false })).toBe(false);
+  });
+
+  test("does not block an unknown branch (undefined — not a git repo or detached HEAD)", () => {
+    expect(shouldRefuseOnDefaultBranch({ branch: undefined, isGreenfield: false, allowMain: false })).toBe(false);
+  });
+
+  test("tolerates surrounding whitespace around the branch name", () => {
+    expect(shouldRefuseOnDefaultBranch({ branch: " main ", isGreenfield: false, allowMain: false })).toBe(true);
+  });
+});
+
+describe("currentGitBranch", () => {
+  test("reads the checked-out branch from a real repo", () => {
+    withTmpDir((dir) => {
+      initGitRepo(dir);
+      execSync("git branch -M main", { cwd: dir, stdio: "pipe" });
+      expect(currentGitBranch(dir)).toBe("main");
+    });
+  });
+
+  test("returns undefined outside a git repo (graceful, no throw)", () => {
+    withTmpDir((dir) => {
+      expect(() => currentGitBranch(dir)).not.toThrow();
+      expect(currentGitBranch(dir)).toBeUndefined();
+    });
+  });
+});
+
+describe("assertBranchAllowed", () => {
+  // assertBranchAllowed only reads workDir, isGreenfield, and allowMain.
+  function cfg(dir: string, opts: { isGreenfield?: boolean; allowMain?: boolean } = {}): ResolvedConfig {
+    return {
+      workDir: dir,
+      isGreenfield: opts.isGreenfield ?? false,
+      allowMain: opts.allowMain ?? false,
+    } as ResolvedConfig;
+  }
+
+  test("throws an actionable error when on main without --allow-main", () => {
+    withTmpDir((dir) => {
+      initGitRepo(dir);
+      execSync("git branch -M main", { cwd: dir, stdio: "pipe" });
+      expect(() => assertBranchAllowed(cfg(dir))).toThrow(/Refusing to run on 'main'/);
+      expect(() => assertBranchAllowed(cfg(dir))).toThrow(/--allow-main/);
+    });
+  });
+
+  test("does not throw on a topic branch", () => {
+    withTmpDir((dir) => {
+      initGitRepo(dir);
+      execSync("git checkout -b dev/feature", { cwd: dir, stdio: "pipe" });
+      expect(() => assertBranchAllowed(cfg(dir))).not.toThrow();
+    });
+  });
+
+  test("does not throw on main when --allow-main is set", () => {
+    withTmpDir((dir) => {
+      initGitRepo(dir);
+      execSync("git branch -M main", { cwd: dir, stdio: "pipe" });
+      expect(() => assertBranchAllowed(cfg(dir, { allowMain: true }))).not.toThrow();
+    });
+  });
+
+  test("does not throw in greenfield mode even when the host repo is on main", () => {
+    withTmpDir((dir) => {
+      initGitRepo(dir);
+      execSync("git branch -M main", { cwd: dir, stdio: "pipe" });
+      expect(() => assertBranchAllowed(cfg(dir, { isGreenfield: true }))).not.toThrow();
     });
   });
 });

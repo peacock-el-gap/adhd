@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { bareName, makeIdentity, timedName } from "../agent-identity.ts";
-import { computeChangedFiles, computeDiffSection } from "../diff.ts";
+import { computeChangedFilesSince, computeDiffSection } from "../diff.ts";
 import { buildSkippedEvaluatorResult } from "../eval-result.ts";
 import { writeFeedback, writeProgress } from "../files.ts";
 import { promptGate } from "../interaction.ts";
@@ -19,8 +19,19 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
 
   let passed = false;
   let lastEval: EvalResult | undefined;
+  // The most recent EvalResult that came from an actual Evaluator run (not a
+  // gate skip). Carried into a later gate-skip's feedback so the next Generator
+  // attempt never loses the real defect under boilerplate (see Fix #2 below).
+  let lastRealEval: EvalResult | undefined;
   let attempts = 0;
   let lastCommitSource: CommitSource = "none";
+
+  // The sprint's starting checkpoint — HEAD captured before the FIRST attempt's
+  // generator commit, equal to the previous sprint's checkpoint. The surface
+  // coverage gate measures coverage cumulatively from here so a surface touched
+  // on any attempt counts as covered, even if a later attempt only fixes a
+  // different surface. Captured once (on retry 0) and reused on every retry.
+  let sprintBaseSha = "";
 
   for (let retry = 0; retry <= config.maxRetriesPerSprint; retry++) {
     attempts = retry + 1;
@@ -35,6 +46,8 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
     } catch {
       // No git repo or no commits yet
     }
+    // The first attempt's pre-generator HEAD is the sprint's base checkpoint.
+    if (retry === 0) sprintBaseSha = beforeSha;
 
     // Build
     progress.status = "building";
@@ -119,9 +132,18 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
     // skips the check and proceeds to the Evaluator as before.
     const declaredSurfaces = normalizeSurfaces(contract.surfaces) ?? [];
     if (declaredSurfaces.length > 0) {
-      const changedFiles = computeChangedFiles(gDir, beforeSha, retry);
+      // Cumulative coverage: measure every product file the sprint has touched
+      // since its base checkpoint, across ALL attempts so far — not just this
+      // attempt's commit. A surface touched on an earlier attempt stays covered
+      // when a later attempt only fixes a different surface, so the sprint can
+      // converge instead of ping-ponging between surfaces.
+      //
+      // Attempt 0 is exempt: the Evaluator always runs on the first attempt, so
+      // a feature that builds one surface first and another later is never
+      // failed before the Evaluator has seen anything.
+      const changedFiles = retry > 0 ? computeChangedFilesSince(gDir, sprintBaseSha) : undefined;
       if (changedFiles && changedFiles.length > 0) {
-        logDebug("HARNESS", `Surface coverage — changed files: ${changedFiles.join(", ")}`);
+        logDebug("HARNESS", `Surface coverage — files changed since sprint base: ${changedFiles.join(", ")}`);
         const { covered, missing } = checkSurfaceCoverage(declaredSurfaces, changedFiles);
         if (shouldLog("verbose", config.logLevel)) {
           log(
@@ -140,6 +162,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
             contract,
             `Evaluator skipped: surface coverage check failed. Declared surface(s) not touched: ${missingList}.`,
             `Surface coverage check failed. The contract declared these surfaces but the Generator did not touch them: ${missingList}. Surfaces actually touched: ${covered.join(", ") || "none"}. The Evaluator was skipped to save cost — change the missing surface(s) on the next attempt.`,
+            lastRealEval,
           );
           await writeFeedback(config.workDir, sprint, retry, lastEval);
           attemptSpan.end({ passed: false, surfaceCoverage: false });
@@ -149,7 +172,10 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
           log("HARNESS", "Surface coverage check passed — all declared surfaces were touched.");
         }
       } else if (shouldLog("verbose", config.logLevel)) {
-        log("HARNESS", "Surface coverage check skipped — no changed files could be computed for this attempt.");
+        log(
+          "HARNESS",
+          "Surface coverage check skipped — first attempt, or no cumulative changed files could be computed.",
+        );
       }
     } else if (shouldLog("verbose", config.logLevel)) {
       log("HARNESS", "Surface coverage check skipped — the contract declared no surfaces.");
@@ -184,6 +210,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
           contract,
           "Evaluator skipped due to --lint-gate: static analysis failed",
           `Static analysis failed (--lint-gate). Output:\n${staticAnalysisResult.output}`,
+          lastRealEval,
         );
         await writeFeedback(config.workDir, sprint, retry, lastEval);
         attemptSpan.end({ passed: false, lintGate: true });
@@ -228,6 +255,9 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
         usage.recordStage(bareName(evaluatorIdentity), config.resolvedModelEvaluator, evalWithUsage.sdkResult);
       }
       lastEval = evalWithUsage;
+      // Remember this as the last REAL evaluation so a subsequent gate skip can
+      // carry its per-criterion findings forward instead of boilerplate.
+      lastRealEval = evalWithUsage;
     } catch (err) {
       evaluatorSpan.end({ error: String(err) });
       attemptSpan.end({ error: String(err) });

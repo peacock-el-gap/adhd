@@ -106,3 +106,47 @@ export function computeChangedFiles(workDir: string, beforeSha: string, attempt:
     .map((line) => line.trim())
     .filter((line) => line !== "" && !isAdhdMetadataPath(line));
 }
+
+/**
+ * List the product files changed between a fixed base SHA and the current HEAD,
+ * cumulatively — `git diff --name-only baseSha..HEAD`. Unlike
+ * {@link computeChangedFiles}, it is **not** keyed to a single attempt: the
+ * caller passes the sprint's starting checkpoint (the HEAD captured before the
+ * sprint's first generator commit), so the result is every product file the
+ * sprint has touched across *all* its attempts so far. This is what lets the
+ * surface coverage gate accumulate coverage — a surface touched on attempt 0
+ * still counts as covered when a later attempt only fixes a different surface.
+ *
+ * Shares the exact graceful-degradation contract of {@link computeChangedFiles}
+ * minus the attempt guard: returns `undefined` on an empty/whitespace `baseSha`
+ * or any git failure, never throws, and filters harness metadata under `.adhd/`
+ * (see {@link isAdhdMetadataPath}). After filtering the list may legitimately be
+ * empty (e.g. only `.adhd/` files changed), which the caller treats the same as
+ * "nothing to check".
+ *
+ * @param workDir - The project root directory (must be a git repository)
+ * @param baseSha - The git SHA of the sprint's starting checkpoint
+ * @returns the list of changed product paths, or `undefined` when no list can
+ *   be computed
+ */
+export function computeChangedFilesSince(workDir: string, baseSha: string): string[] | undefined {
+  // Skip if no base SHA — mirrors computeChangedFiles' degradation contract.
+  if (!baseSha || baseSha.trim() === "") return undefined;
+
+  let nameOnlyOutput: string;
+  try {
+    nameOnlyOutput = execSync(`git diff --name-only ${baseSha}..HEAD`, {
+      cwd: workDir,
+      encoding: "utf-8",
+      maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+    });
+  } catch {
+    // Git not available, bad SHA, or other failure — graceful degradation
+    return undefined;
+  }
+
+  return nameOnlyOutput
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !isAdhdMetadataPath(line));
+}

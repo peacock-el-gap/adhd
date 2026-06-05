@@ -42,6 +42,8 @@ export interface HarnessConfig {
   notify?: boolean;
   commitAdhd?: boolean;
   commitAdhdLogs?: boolean;
+  /** Allow running on the default branch (main/master); the guard refuses by default. */
+  allowMain?: boolean;
 }
 
 /** Fully resolved config with all defaults applied. Used internally by the harness. */
@@ -92,6 +94,8 @@ export interface ResolvedConfig {
   notify: boolean;
   commitAdhd: boolean;
   commitAdhdLogs: boolean;
+  /** Allow running on the default branch (main/master); the guard refuses by default. */
+  allowMain: boolean;
 }
 
 export interface SprintContract {

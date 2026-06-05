@@ -263,6 +263,17 @@ describe("parseCli", () => {
     const cli = parseCli(["test"]);
     expect(cli.modelDocumenter).toBeUndefined();
   });
+
+  // Run-on-main guard
+  test("parses --allow-main flag", () => {
+    const cli = parseCli(["--allow-main", "test"]);
+    expect(cli.allowMain).toBe(true);
+  });
+
+  test("--allow-main defaults to false", () => {
+    const cli = parseCli(["test"]);
+    expect(cli.allowMain).toBe(false);
+  });
 });
 
 // --- loadHarnessEnv ---
@@ -460,6 +471,17 @@ describe("resolveConfig", () => {
   test("branch defaults to undefined", () => {
     const config = resolveConfig({ ...baseCli });
     expect(config.branch).toBeUndefined();
+  });
+
+  // Run-on-main guard
+  test("resolves allowMain from CLI flag", () => {
+    const config = resolveConfig({ ...baseCli, allowMain: true });
+    expect(config.allowMain).toBe(true);
+  });
+
+  test("allowMain defaults to false", () => {
+    const config = resolveConfig({ ...baseCli });
+    expect(config.allowMain).toBe(false);
   });
 
   // WP1: BDD/TDD config resolution
@@ -815,6 +837,13 @@ describe("CLI_FLAG_HELP contract size limits", () => {
     expect(CLI_FLAG_HELP["--max-features"]).toContain("default: 3");
     expect(CLI_FLAG_HELP["--max-criteria"]).toContain("default: 10");
     expect(CLI_FLAG_HELP["--max-surfaces"]).toContain("default: 2");
+  });
+});
+
+describe("CLI_FLAG_HELP run-on-main guard", () => {
+  test("documents --allow-main and explains the default refusal", () => {
+    expect(CLI_FLAG_HELP["--allow-main"]).toBeDefined();
+    expect(CLI_FLAG_HELP["--allow-main"]).toContain("main");
   });
 });
 

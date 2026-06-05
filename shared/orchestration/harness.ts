@@ -24,7 +24,7 @@ import type { HarnessProgress, HarnessResult, ResolvedConfig, SprintContract, Sp
 import { createUsageTracker, type UsageTracker } from "../usage.ts";
 import { handleFatalError, UserAbortError, withTransientRetry } from "./error-handling.ts";
 import { specApprovalGate } from "./gates.ts";
-import { checkDirtyTree, revertToCheckpoint } from "./git-ops.ts";
+import { assertBranchAllowed, checkDirtyTree, revertToCheckpoint } from "./git-ops.ts";
 import { runSprintAttempts } from "./sprint-attempts.ts";
 import { handleSprintSuccess, runDocumenterPhase } from "./sprint-success.ts";
 import type { AgentRunners, SprintLoopContext } from "./types.ts";
@@ -59,6 +59,12 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
     "HARNESS",
     `Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`,
   );
+
+  // Run-on-main guard: ADHD commits to the checked-out branch, so refuse to run
+  // on the default branch (main/master) unless --allow-main. Throws before any
+  // commit happens, and applies to every non-greenfield path (resume, sprint
+  // selection, and fresh runs alike). Greenfield uses its own app/ repo.
+  assertBranchAllowed(config);
 
   // --- Resume path ---
   if (config.isResume) {

@@ -254,6 +254,59 @@ export function revertToCheckpoint(workDir: string, isGreenfield: boolean, progr
   }
 }
 
+/** Default branches the run-on-main guard protects from accidental commits. */
+const DEFAULT_BRANCHES: ReadonlySet<string> = new Set(["main", "master"]);
+
+/**
+ * Pure predicate: must the harness refuse to run because it is sitting on a
+ * default branch and would commit there? Side-effect free so it is unit-testable
+ * without a git repo.
+ *
+ * Refuse only when ALL hold: not greenfield (greenfield commits to its own
+ * `app/` repo, never the host's main), no `--allow-main` override, and the
+ * current branch is a known default (`main`/`master`). An unknown branch
+ * (`undefined` — not a git repo, or detached HEAD) never blocks: the guard
+ * protects against a known footgun, it does not invent new failure modes.
+ */
+export function shouldRefuseOnDefaultBranch(opts: {
+  branch: string | undefined;
+  isGreenfield: boolean;
+  allowMain: boolean;
+}): boolean {
+  if (opts.isGreenfield) return false;
+  if (opts.allowMain) return false;
+  if (!opts.branch) return false;
+  return DEFAULT_BRANCHES.has(opts.branch.trim());
+}
+
+/** The current git branch in `dir`, or `undefined` if it can't be determined. */
+export function currentGitBranch(dir: string): string | undefined {
+  try {
+    const branch = execSync("git branch --show-current", { cwd: dir, encoding: "utf-8" }).trim();
+    return branch || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Refuse to run when the harness would commit to a default branch (main/master)
+ * without `--allow-main`. ADHD commits to whatever branch is checked out, so a
+ * run on `main` silently writes self-development commits to the wrong place.
+ * Throws a clear, actionable error BEFORE any commit happens; a no-op for
+ * greenfield runs (own `app/` repo) and topic branches.
+ */
+export function assertBranchAllowed(config: ResolvedConfig): void {
+  if (config.isGreenfield) return;
+  const branch = currentGitBranch(gitDir(config.workDir, config.isGreenfield));
+  if (shouldRefuseOnDefaultBranch({ branch, isGreenfield: config.isGreenfield, allowMain: config.allowMain })) {
+    throw new Error(
+      `Refusing to run on '${branch}': ADHD commits to the checked-out branch. ` +
+        `Create a topic branch (git switch -c dev/<name>) or pass --allow-main to override.`,
+    );
+  }
+}
+
 export async function checkDirtyTree(config: ResolvedConfig): Promise<void> {
   let status: string;
   try {

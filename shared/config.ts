@@ -64,6 +64,8 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--notify": "Send desktop notifications at HITL gates and errors",
   "--commit-adhd": "Commit .adhd/ metadata (contracts, feedback, progress) after each sprint",
   "--commit-adhd-logs": "Commit .adhd/ metadata + logs after each sprint (implies --commit-adhd)",
+  "--allow-main":
+    "Allow running on the default branch (main/master); by default the harness refuses, since it commits to the checked-out branch",
 };
 
 /**
@@ -128,6 +130,7 @@ interface ParsedCli {
   notify?: boolean;
   commitAdhd?: boolean;
   commitAdhdLogs?: boolean;
+  allowMain?: boolean;
   help?: boolean;
 }
 
@@ -178,6 +181,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       notify: { type: "boolean", default: false },
       "commit-adhd": { type: "boolean", default: false },
       "commit-adhd-logs": { type: "boolean", default: false },
+      "allow-main": { type: "boolean", default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -221,6 +225,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     notify: values.notify as boolean,
     commitAdhd: values["commit-adhd"] as boolean,
     commitAdhdLogs: values["commit-adhd-logs"] as boolean,
+    allowMain: values["allow-main"] as boolean,
     help: values.help as boolean,
   };
 }
@@ -416,6 +421,7 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     notify: cli.notify || false,
     commitAdhd: cli.commitAdhd || cli.commitAdhdLogs || false,
     commitAdhdLogs: cli.commitAdhdLogs || false,
+    allowMain: cli.allowMain || false,
   };
 
   // Validate

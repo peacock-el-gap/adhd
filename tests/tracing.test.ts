@@ -28,6 +28,7 @@ const baseConfig: ResolvedConfig = {
   notify: false,
   commitAdhd: false,
   commitAdhdLogs: false,
+  allowMain: false,
   resolvedModelPlanner: "claude-opus-4-6",
   resolvedModelGenerator: "claude-opus-4-6",
   resolvedModelEvaluator: "claude-opus-4-6",

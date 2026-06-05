@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { computeChangedFiles, computeDiffSection } from "../shared/diff.ts";
+import { computeChangedFiles, computeChangedFilesSince, computeDiffSection } from "../shared/diff.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_diff_test__");
 
@@ -157,5 +157,81 @@ describe("computeChangedFiles", () => {
     const result = computeChangedFiles(TMP_DIR, beforeSha, 1);
     expect(result).toEqual(["real.ts"]);
     expect(result).not.toContain(".adhd/snapshot.ts");
+  });
+});
+
+describe("computeChangedFilesSince", () => {
+  test("returns undefined when baseSha is empty string", () => {
+    expect(computeChangedFilesSince(TMP_DIR, "")).toBeUndefined();
+  });
+
+  test("returns undefined when baseSha is whitespace only", () => {
+    expect(computeChangedFilesSince(TMP_DIR, "   ")).toBeUndefined();
+  });
+
+  test("returns undefined when git is not available (no git repo)", () => {
+    expect(computeChangedFilesSince(TMP_DIR, "abc123")).toBeUndefined();
+  });
+
+  test("returns undefined with an invalid SHA (graceful degradation, no throw)", () => {
+    initGitRepo();
+    expect(() => computeChangedFilesSince(TMP_DIR, "invalid_sha_xyz")).not.toThrow();
+    expect(computeChangedFilesSince(TMP_DIR, "invalid_sha_xyz")).toBeUndefined();
+  });
+
+  test("lists changed paths from a base SHA with no per-attempt guard", () => {
+    // Unlike computeChangedFiles, there is no attempt parameter and no attempt-0
+    // skip — the very first commit since the base is already visible.
+    const baseSha = initGitRepo();
+    writeFileSync(join(TMP_DIR, "server.ts"), "export const x = 1;\n");
+    writeFileSync(join(TMP_DIR, "README.md"), "# docs\n");
+    execSync("git add -A && git commit -m 'add files'", { cwd: TMP_DIR });
+
+    const result = computeChangedFilesSince(TMP_DIR, baseSha);
+    expect(result).toBeDefined();
+    expect(result).toContain("server.ts");
+    expect(result).toContain("README.md");
+  });
+
+  test("accumulates files across multiple commits since the base", () => {
+    const baseSha = initGitRepo();
+    // First commit touches only backend.
+    writeFileSync(join(TMP_DIR, "server.ts"), "export const x = 1;\n");
+    execSync("git add -A && git commit -m 'backend'", { cwd: TMP_DIR });
+    // A later commit touches only tests — the base-relative diff must still
+    // include the earlier backend change (this is the cumulative property).
+    mkdirSync(join(TMP_DIR, "tests"), { recursive: true });
+    writeFileSync(join(TMP_DIR, "tests", "server.test.ts"), "test('x', () => {});\n");
+    execSync("git add -A && git commit -m 'tests'", { cwd: TMP_DIR });
+
+    const result = computeChangedFilesSince(TMP_DIR, baseSha);
+    expect(result).toContain("server.ts");
+    expect(result).toContain("tests/server.test.ts");
+  });
+
+  test("returns an empty list when only .adhd/ metadata changed", () => {
+    const baseSha = initGitRepo();
+    mkdirSync(join(TMP_DIR, ".adhd"), { recursive: true });
+    writeFileSync(join(TMP_DIR, ".adhd", "progress.json"), "{}\n");
+    execSync("git add -A && git commit -m 'adhd metadata'", { cwd: TMP_DIR });
+
+    expect(computeChangedFilesSince(TMP_DIR, baseSha)).toEqual([]);
+  });
+
+  test("excludes .adhd/ paths even when they would classify to a surface", () => {
+    const baseSha = initGitRepo();
+    mkdirSync(join(TMP_DIR, ".adhd"), { recursive: true });
+    writeFileSync(join(TMP_DIR, ".adhd", "snapshot.ts"), "export const y = 2;\n");
+    writeFileSync(join(TMP_DIR, "real.ts"), "export const z = 3;\n");
+    execSync("git add -A && git commit -m 'mixed'", { cwd: TMP_DIR });
+
+    const result = computeChangedFilesSince(TMP_DIR, baseSha);
+    expect(result).toEqual(["real.ts"]);
+    expect(result).not.toContain(".adhd/snapshot.ts");
+  });
+
+  test("returns an empty list when HEAD is still at the base (no commits since)", () => {
+    const baseSha = initGitRepo();
+    expect(computeChangedFilesSince(TMP_DIR, baseSha)).toEqual([]);
   });
 });

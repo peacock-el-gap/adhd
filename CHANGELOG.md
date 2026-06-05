@@ -4,6 +4,15 @@ All notable changes to this project are documented here, from the point of view 
 
 ## [Unreleased]
 
+## [v0.6.2] - 2026-06-05
+
+### Added
+- **A guard against running on your main branch** — the harness commits to whatever branch is checked out, so it now refuses to start on `main` or `master` and asks you to switch to a topic branch first. Pass `--allow-main` to override when you really mean to. Projects created with `--greenfield` are unaffected, since they use their own folder.
+
+### Fixed
+- **The coverage check now counts a sprint's whole effort, not just its last attempt.** The check that confirms a sprint touched every part it promised used to look only at the most recent attempt. A sprint that built one part on its first attempt and then fixed an unrelated part on the next could be failed for "not touching" the first part — and could get stuck repeating that forever. Coverage is now measured across all of a sprint's attempts together, so a sprint that legitimately works on different parts across attempts converges instead of stalling.
+- **A skipped evaluation no longer throws away the evaluator's last real feedback.** When a cheap pre-check (the coverage check or `--lint-gate`) skips the paid evaluation, the next attempt now still receives the evaluator's most recent real findings alongside the note about what the pre-check caught — so it keeps working on the actual problem instead of only "you missed part X."
+
 ## [v0.6.1] - 2026-06-05
 
 ### Fixed
