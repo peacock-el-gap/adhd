@@ -1,10 +1,11 @@
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { gitDir, harnessDir } from "../shared/files.ts";
 import { log, shouldLog } from "../shared/logger.ts";
-import { ensureAgentCommit } from "../shared/orchestration/git-ops.ts";
+import { type ExecLike, ensureAgentCommit } from "../shared/orchestration/git-ops.ts";
 import type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions } from "../shared/orchestration/types.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
 import type { CommitSource } from "../shared/types.ts";
+import type { QueryFn } from "./agent-stream.ts";
 import { resumeAgent, runAgent } from "./run-agent.ts";
 
 export type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions };
@@ -72,8 +73,15 @@ export async function runGenerator(opts: RunGeneratorOptions): Promise<Generator
  * Ensure the generator committed its work. Delegates to the shared
  * ensureAgentCommit primitive; this function only constructs the
  * SDK-specific resume runner and the generator's fallback message.
+ *
+ * `deps` is a test-only seam (defaulted, so the orchestration-facing `opts`
+ * and the `AgentRunners` signature stay untouched): it injects fakes for the
+ * subprocess runner and the SDK query so the unit test needs no `mock.module`.
  */
-export async function ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<CommitSource> {
+export async function ensureGeneratorCommit(
+  opts: EnsureCommitOptions,
+  deps?: { exec?: ExecLike; queryFn?: QueryFn },
+): Promise<CommitSource> {
   const { workDir, gitDir: gDir, beforeSha, sessionId, contract, isRetry, model } = opts;
 
   const resumePrompt = isRetry
@@ -97,6 +105,7 @@ export async function ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<
           tools: ["Bash"],
           maxTurns: 3,
           onToolUse: (name) => log("HARNESS", `  Commit resume tool: ${name}`),
+          queryFn: deps?.queryFn,
         });
       }
     : undefined;
@@ -108,5 +117,6 @@ export async function ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<
     beforeSha,
     fallbackMessage,
     runResume,
+    exec: deps?.exec,
   });
 }

@@ -1,17 +1,7 @@
-// ⚠️ .isolated.test.ts — runs in its own `bun test` process (see package.json
-// "test" script). mock.module("node:child_process") is process-global and
-// poisons the shared module cache (git-ops.ts binds the stubbed execSync), so
-// sharing a process with other files breaks them. Isolation keeps it contained.
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { ensureAgentCommit } from "../shared/orchestration/git-ops.ts";
 
 const execSyncMock = mock();
-
-mock.module("node:child_process", () => ({
-  execSync: execSyncMock,
-  exec: () => {},
-}));
-
-const { ensureAgentCommit } = await import("../shared/orchestration/git-ops.ts");
 
 function setupExecSync(responses: string[]) {
   let i = 0;
@@ -35,6 +25,7 @@ describe("ensureAgentCommit", () => {
       agentLabel: "generator",
       beforeSha: "oldsha",
       fallbackMessage: "[auto-commit] Sprint 1: fallback",
+      exec: execSyncMock,
     });
     expect(result).toBe("agent");
   });
@@ -47,6 +38,7 @@ describe("ensureAgentCommit", () => {
       agentLabel: "generator",
       beforeSha: "oldsha",
       fallbackMessage: "fallback",
+      exec: execSyncMock,
     });
     expect(result).toBe("none");
   });
@@ -62,6 +54,7 @@ describe("ensureAgentCommit", () => {
       beforeSha: "oldsha",
       fallbackMessage: "fallback",
       runResume,
+      exec: execSyncMock,
     });
     expect(result).toBe("resume");
     expect(runResume).toHaveBeenCalledTimes(1);
@@ -78,6 +71,7 @@ describe("ensureAgentCommit", () => {
       beforeSha: "oldsha",
       fallbackMessage: "[docs] fallback msg",
       runResume,
+      exec: execSyncMock,
     });
     expect(result).toBe("fallback");
     // Last execSync call should be the add+commit with fallback message
@@ -94,6 +88,7 @@ describe("ensureAgentCommit", () => {
       agentLabel: "documenter",
       beforeSha: "oldsha",
       fallbackMessage: "fallback",
+      exec: execSyncMock,
     });
     expect(result).toBe("fallback");
   });
@@ -112,6 +107,7 @@ describe("ensureAgentCommit", () => {
       beforeSha: "oldsha",
       fallbackMessage: "fallback",
       runResume,
+      exec: execSyncMock,
     });
     // Even though resume threw, tree is now clean → resume tier "succeeded"
     // (matches documented behavior: re-check tree after runResume returns/throws)

@@ -1,22 +1,10 @@
-// ⚠️ .isolated.test.ts — runs in its own `bun test` process (see package.json
-// "test" script). mock.module("../harness-claude/tracing-claude.ts") is
-// process-global; sharing a process leaks the stubbed initTracing/query into
-// tracing.test.ts and breaks it. Isolation keeps the mock contained.
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { processAgentStream } from "../harness-claude/agent-stream.ts";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import type { ConversationLogger } from "../shared/conversation-logger.ts";
 import { setLogLevel } from "../shared/logger.ts";
 
-setLogLevel("debug");
-
 const queryMock = mock();
-
-mock.module("../harness-claude/tracing-claude.ts", () => ({
-  query: queryMock,
-  initTracing: () => ({ flush: async () => {} }),
-}));
-
-const { processAgentStream } = await import("../harness-claude/agent-stream.ts");
 
 function makeConvLog(): ConversationLogger {
   return {
@@ -53,6 +41,9 @@ const origLog = console.log;
 const origErr = console.error;
 
 beforeEach(() => {
+  // setLogLevel is global state; set it here and restore the default in
+  // afterEach so this file never leaks a "debug" level into sibling tests.
+  setLogLevel("debug");
   logOutput = [];
   errOutput = [];
   console.log = (msg?: unknown) => {
@@ -64,6 +55,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setLogLevel("normal");
   console.log = origLog;
   console.error = origErr;
   queryMock.mockReset();
@@ -72,7 +64,7 @@ afterEach(() => {
 describe("processAgentStream diagnostic logging", () => {
   test("emits debug log on normal end_turn result", async () => {
     yieldResult({ stop_reason: "end_turn", num_turns: 3 });
-    await processAgentStream("p", {} as never, "EVALUATOR", "debug", makeConvLog());
+    await processAgentStream("p", {} as never, "EVALUATOR", "debug", makeConvLog(), undefined, queryMock);
     const joined = [...logOutput, ...errOutput].join("\n");
     expect(joined).toContain("SDK result: stop_reason=end_turn num_turns=3");
     expect(joined).not.toContain("WARNING");
@@ -80,7 +72,7 @@ describe("processAgentStream diagnostic logging", () => {
 
   test("warns on stop_reason=max_tokens", async () => {
     yieldResult({ stop_reason: "max_tokens", num_turns: 2 });
-    await processAgentStream("p", {} as never, "EVALUATOR", "normal", makeConvLog());
+    await processAgentStream("p", {} as never, "EVALUATOR", "normal", makeConvLog(), undefined, queryMock);
     const joined = [...logOutput, ...errOutput].join("\n");
     expect(joined).toContain("WARNING: SDK result");
     expect(joined).toContain("stop_reason=max_tokens");
@@ -88,7 +80,7 @@ describe("processAgentStream diagnostic logging", () => {
 
   test("warns when num_turns approaches CLAUDE_MAX_TURNS", async () => {
     yieldResult({ stop_reason: "end_turn", num_turns: CLAUDE_MAX_TURNS - 1 });
-    await processAgentStream("p", {} as never, "EVALUATOR", "normal", makeConvLog());
+    await processAgentStream("p", {} as never, "EVALUATOR", "normal", makeConvLog(), undefined, queryMock);
     const joined = [...logOutput, ...errOutput].join("\n");
     expect(joined).toContain("WARNING");
     expect(joined).toContain(`num_turns=${CLAUDE_MAX_TURNS - 1}/${CLAUDE_MAX_TURNS}`);
@@ -96,7 +88,7 @@ describe("processAgentStream diagnostic logging", () => {
 
   test("warns on is_error=true", async () => {
     yieldResult({ stop_reason: "end_turn", num_turns: 1, is_error: true });
-    await processAgentStream("p", {} as never, "EVALUATOR", "normal", makeConvLog());
+    await processAgentStream("p", {} as never, "EVALUATOR", "normal", makeConvLog(), undefined, queryMock);
     const joined = [...logOutput, ...errOutput].join("\n");
     expect(joined).toContain("WARNING");
     expect(joined).toContain("is_error=true");
@@ -108,7 +100,7 @@ describe("processAgentStream diagnostic logging", () => {
         // no messages
       })(),
     );
-    const res = await processAgentStream("p", {} as never, "EVALUATOR", "debug", makeConvLog());
+    const res = await processAgentStream("p", {} as never, "EVALUATOR", "debug", makeConvLog(), undefined, queryMock);
     expect(res.sdkResult).toBeUndefined();
     const joined = [...logOutput, ...errOutput].join("\n");
     expect(joined).not.toContain("SDK result:");

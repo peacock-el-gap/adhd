@@ -1,6 +1,6 @@
 {
   "name": "ADHD",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "bun run harness-claude/index.ts",
     "typecheck": "bunx tsc --noEmit",
-    "test": "bun test --path-ignore-patterns='**/*.isolated.test.ts' && bun test ./tests/*.isolated.test.ts",
+    "test": "bun test",
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write ."
   },

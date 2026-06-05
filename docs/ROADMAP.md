@@ -381,8 +381,6 @@ _The following opportunities form the Cost & Efficiency initiative (Part 3, Phas
 - **Recommended**: Option A as the baseline; Option B as an opt-in flag once the baseline-failure signal is trustworthy.
 - **Effort**: Medium.
 
-_Companion engineering task: https://github.com/peacock-el-gap/adhd/issues/1 — fix the harness's own test isolation so `bun test` runs green under one command, a prerequisite for this feature to be representative when the harness is run against itself._
-
 ### OPP-17: Efficient Progressive Refinement (patch, not full rewrite)
 
 **Problem**: When progressive spec refinement is enabled, the refinement step regenerates the entire spec document each sprint — observed at 500–650 lines, and written twice per call after a "file has not been read yet" round-trip — even though completed sprint sections are programmatically frozen and restored afterward. Re-emitting frozen content the harness will overwrite anyway is wasted output, and refinement is the second-largest cost role in a run (about a quarter of total spend) while running on the top model tier.

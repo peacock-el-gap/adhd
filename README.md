@@ -533,7 +533,7 @@ The `example-prompts/` directory contains sample spec files for reference -- a R
 ## Development
 
 ```bash
-# Run tests (use the npm script — raw `bun test` fails due to mock isolation)
+# Run tests
 bun run test
 
 # Type check

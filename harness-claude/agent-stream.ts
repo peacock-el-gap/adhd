@@ -1,3 +1,4 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import type { ConversationLogger } from "../shared/conversation-logger.ts";
 import { type AgentRole, log, logDebug, shouldLog, summarize } from "../shared/logger.ts";
@@ -5,6 +6,13 @@ import type { LogLevel } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 import type { Options } from "./tracing-claude.ts";
 import { query } from "./tracing-claude.ts";
+
+/**
+ * The SDK `query` function as a structural type, declared here (leaf-ward) so
+ * `run-agent.ts` can import it without creating an import cycle. Tests inject a
+ * bare async generator over `SDKMessage` in place of the real, traced `query`.
+ */
+export type QueryFn = (params: { prompt: string; options: Options }) => AsyncIterable<SDKMessage>;
 
 /** Callbacks for agent-specific handling of streaming events. */
 export interface StreamCallbacks {
@@ -35,12 +43,13 @@ export async function processAgentStream(
   logLevel: LogLevel,
   convLog: ConversationLogger,
   callbacks?: StreamCallbacks,
+  queryFn: QueryFn = query,
 ): Promise<StreamResult> {
   let fullResponse = "";
   let sessionId: string | undefined;
   let sdkResult: SDKResultFields | undefined;
 
-  for await (const msg of query({ prompt, options })) {
+  for await (const msg of queryFn({ prompt, options })) {
     if (msg.type === "assistant") {
       for (const block of msg.message.content) {
         if (block.type === "text") {

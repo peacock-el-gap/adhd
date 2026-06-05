@@ -4,7 +4,7 @@ import { createConversationLog } from "../shared/conversation-logger.ts";
 import type { AgentRole } from "../shared/logger.ts";
 import type { LogLevel } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
-import { processAgentStream, type StreamCallbacks, type StreamResult } from "./agent-stream.ts";
+import { processAgentStream, type QueryFn, type StreamCallbacks, type StreamResult } from "./agent-stream.ts";
 import type { Options } from "./tracing-claude.ts";
 import { query } from "./tracing-claude.ts";
 
@@ -103,6 +103,8 @@ export interface ResumeAgentRequest {
   maxTurns?: number;
   /** Fires for each tool_use block during the resumed turn. */
   onToolUse?: (toolName: string) => void;
+  /** Injected SDK query. Defaults to the real `query`; tests inject a fake. */
+  queryFn?: QueryFn;
 }
 
 export async function resumeAgent(req: ResumeAgentRequest): Promise<RunAgentResult> {
@@ -117,12 +119,13 @@ export async function resumeAgent(req: ResumeAgentRequest): Promise<RunAgentResu
     resume: req.sessionId,
   };
 
+  const queryFn = req.queryFn ?? query;
   const startTime = new Date();
   let response = "";
   let sessionId: string | undefined;
   let sdkResult: SDKResultFields | undefined;
 
-  for await (const msg of query({ prompt: req.prompt, options })) {
+  for await (const msg of queryFn({ prompt: req.prompt, options })) {
     if (msg.type === "assistant") {
       for (const block of msg.message.content) {
         if (block.type === "text") response += block.text;

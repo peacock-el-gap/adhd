@@ -8,6 +8,17 @@ import { notify } from "../notifications.ts";
 import type { CommitSource, HarnessProgress, ResolvedConfig } from "../types.ts";
 import { UserAbortError } from "./error-handling.ts";
 
+/**
+ * Minimal structural type for `execSync`. Deliberately narrower than
+ * `typeof execSync` — its overloads reject a simple `(cmd) => string` fake,
+ * which the unit tests rely on. Lives in `shared/` because it describes a
+ * `node:child_process` shape, not an LLM SDK (CLAUDE.md SDK-independence rule).
+ */
+export type ExecLike = (
+  command: string,
+  options?: { cwd?: string; encoding?: string; stdio?: string },
+) => string | Buffer;
+
 /** Options for the shared agent-directed commit primitive. */
 export interface EnsureAgentCommitOptions {
   workDir: string;
@@ -24,6 +35,13 @@ export interface EnsureAgentCommitOptions {
    * If omitted, the primitive skips the resume tier and goes straight to fallback.
    */
   runResume?: () => Promise<void>;
+  /**
+   * Injected subprocess runner. Defaults to the real `execSync`; tests inject a
+   * fake so the suite can run process-globally without `mock.module`. Only this
+   * primitive reads it — the other functions in this file keep using `execSync`
+   * directly (they are exercised by the real-git tests).
+   */
+  exec?: ExecLike;
 }
 
 /**
@@ -36,9 +54,10 @@ export interface EnsureAgentCommitOptions {
  */
 export async function ensureAgentCommit(opts: EnsureAgentCommitOptions): Promise<CommitSource> {
   const { gitDir: gDir, agentLabel, beforeSha, fallbackMessage, runResume } = opts;
+  const exec = opts.exec ?? execSync;
 
-  const currentSha = execSync("git rev-parse HEAD", { cwd: gDir, encoding: "utf-8" }).trim();
-  const dirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
+  const currentSha = exec("git rev-parse HEAD", { cwd: gDir, encoding: "utf-8" }).toString().trim();
+  const dirty = exec("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).toString().trim();
 
   if (currentSha !== beforeSha && !dirty) {
     return "agent";
@@ -66,7 +85,7 @@ export async function ensureAgentCommit(opts: EnsureAgentCommitOptions): Promise
       log("HARNESS", `WARNING: Resume session for ${agentLabel} commit failed: ${detail}`);
     }
 
-    const postResumeDirty = execSync("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).trim();
+    const postResumeDirty = exec("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).toString().trim();
     if (!postResumeDirty) {
       log("HARNESS", `${agentLabel} committed via session resume`);
       return "resume";
@@ -74,7 +93,7 @@ export async function ensureAgentCommit(opts: EnsureAgentCommitOptions): Promise
   }
 
   log("HARNESS", `WARNING: ${agentLabel} still did not commit — harness fallback auto-commit`);
-  execSync(`git add -A && git commit -m ${JSON.stringify(fallbackMessage)}`, { cwd: gDir, stdio: "pipe" });
+  exec(`git add -A && git commit -m ${JSON.stringify(fallbackMessage)}`, { cwd: gDir, stdio: "pipe" });
   return "fallback";
 }
 

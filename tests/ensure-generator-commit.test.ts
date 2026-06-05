@@ -1,32 +1,16 @@
-// ⚠️ .isolated.test.ts — runs in its own `bun test` process (see package.json
-// "test" script). mock.module() on node:child_process, the Claude SDK, and
-// tracing-claude.ts is process-global and poisons the shared module cache
-// (e.g. git-ops.ts binds the stubbed execSync), so sharing a process with other
-// files breaks them. Isolation keeps these mocks contained.
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { ensureGeneratorCommit } from "../harness-claude/generator.ts";
 import type { SprintContract } from "../shared/types.ts";
 
 // --- Mocks ---
+//
+// Both subprocess and SDK access are injected via the `deps` seam, so this file
+// runs process-globally without `mock.module` poisoning sibling tests.
 
 const execSyncMock = mock();
 const queryMock = mock();
 
-mock.module("node:child_process", () => ({
-  execSync: execSyncMock,
-  exec: () => {},
-}));
-
-mock.module("@anthropic-ai/claude-agent-sdk", () => ({
-  query: queryMock,
-}));
-
-mock.module("../harness-claude/tracing-claude.ts", () => ({
-  query: queryMock,
-  initTracing: () => ({ flush: async () => {} }),
-}));
-
-// Import after mocking so the module picks up the mocked dependencies
-const { ensureGeneratorCommit } = await import("../harness-claude/generator.ts");
+const deps = { exec: execSyncMock, queryFn: queryMock };
 
 // --- Helpers ---
 
@@ -68,7 +52,7 @@ describe("ensureGeneratorCommit", () => {
     // git rev-parse HEAD → new SHA, git status --porcelain → empty
     setupExecSync(["def456\n", ""]);
 
-    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     expect(result).toBe("agent");
     expect(queryMock).not.toHaveBeenCalled();
@@ -78,7 +62,7 @@ describe("ensureGeneratorCommit", () => {
     // git rev-parse HEAD → same SHA, git status --porcelain → empty
     setupExecSync(["abc123\n", ""]);
 
-    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     expect(result).toBe("none");
     expect(queryMock).not.toHaveBeenCalled();
@@ -90,7 +74,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     expect(result).toBe("resume");
     expect(queryMock).toHaveBeenCalledTimes(1);
@@ -102,7 +86,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["def456\n", "M leftover.ts\n", ""]);
     emptyQueryResult();
 
-    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     expect(result).toBe("resume");
     expect(queryMock).toHaveBeenCalledTimes(1);
@@ -115,7 +99,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     expect(result).toBe("fallback");
     // Last execSync call should be the fallback git add + commit
@@ -129,7 +113,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: true, model: "test-model" });
+    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: true, model: "test-model" }, deps);
 
     const lastCall = execSyncMock.mock.calls.at(-1);
     expect(lastCall?.[0]).toContain("fixes for");
@@ -139,7 +123,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     const lastCall = execSyncMock.mock.calls.at(-1);
     expect(lastCall?.[0]).toContain("work on");
@@ -156,7 +140,7 @@ describe("ensureGeneratorCommit", () => {
       })(),
     );
 
-    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     expect(result).toBe("fallback");
   });
@@ -167,7 +151,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-42", contract: CONTRACT, isRetry: false, model: "test-model" });
+    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-42", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     const queryCall = queryMock.mock.calls[0]?.[0];
     expect(queryCall?.options?.resume).toBe("sess-42");
@@ -179,7 +163,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: undefined, contract: CONTRACT, isRetry: false, model: "test-model" });
+    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: undefined, contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     expect(queryMock).not.toHaveBeenCalled();
   });
@@ -188,7 +172,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     const queryCall = queryMock.mock.calls[0]?.[0];
     expect(queryCall?.options?.tools).toEqual(["Bash"]);
@@ -199,7 +183,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: true, model: "test-model" });
+    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: true, model: "test-model" }, deps);
 
     const queryCall = queryMock.mock.calls[0]?.[0];
     expect(queryCall?.prompt).toContain("evaluation feedback");
@@ -209,7 +193,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     const queryCall = queryMock.mock.calls[0]?.[0];
     expect(queryCall?.prompt).toContain("built features");
@@ -219,7 +203,7 @@ describe("ensureGeneratorCommit", () => {
     setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
     emptyQueryResult();
 
-    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" });
+    await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     const lastCall = execSyncMock.mock.calls.at(-1);
     expect(lastCall?.[0]).toContain("JWT auth, user profile endpoint");

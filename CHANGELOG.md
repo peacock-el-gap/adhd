@@ -4,6 +4,11 @@ All notable changes to this project are documented here, from the point of view 
 
 ## [Unreleased]
 
+## [v0.6.1] - 2026-06-05
+
+### Fixed
+- **The test suite passes in a single `bun test`** — running the plain `bun test` command used to report two dozen false failures, so the suite had to be run in two separate passes to stay green. A few tests replaced their dependencies in a way that leaked into unrelated tests sharing the same process; those tests now receive their stand-ins directly instead. Contributors (and the harness's own agents while it improves itself) can trust the obvious command again. No change to how the harness runs.
+
 ## [v0.6.0] - 2026-06-04
 
 Contract precision and model governance.
