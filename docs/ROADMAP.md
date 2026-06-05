@@ -276,6 +276,7 @@ Each opportunity below is an open gap or enhancement. Opportunities are numbered
   - Cons: Extra LLM cost; may be redundant for greenfield projects
 - **Recommended**: **Option B** first (zero code changes, uses existing skills). Consider **Option A** as a later enhancement for projects without manually-authored context.
 - **Effort**: Option B is zero (documentation/guidance only). Option A is Small. Option C is Medium.
+- **Note**: OPP-04 Option A (a harness-generated context digest) is carried forward and generalised to the Planner and refinement agents in OPP-18.
 
 ### OPP-06: Separate Code Review Agent
 
@@ -367,6 +368,87 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Cons**: `usage.json` changes on every API call, so committing it adds some churn to the `[adhd]` commit stream (acceptable, and opt-in)
 - **Effort**: Small
 
+_The following opportunities form the Cost & Efficiency initiative (Part 3, Phase 2). They reduce token/run cost; the dominant cost in a run is context re-read on every agent turn, not code generation._
+
+### OPP-16: Harness-Owned Verification (single test run, shared result)
+
+**Problem**: During a sprint the Generator and the Evaluator each run the project's full test/lint/typecheck suite themselves, and re-run it repeatedly — 2–7 full-suite runs per agent session were observed in a real run. Because every agent turn re-reads the entire session context from cache, a large test-output block produced early in a session is paid for again on every later turn; across a run this cache traffic, not code generation, is the dominant cost. Agents also spend turns distinguishing a project's pre-existing/known-failing tests from regressions they actually caused (re-running, stashing, comparing against a clean tree). The harness already runs the project's lint/typecheck commands centrally for its static-analysis gate, but it never runs the test suite and never shares any of these results with the agents.
+
+**Opportunity**: Run the project's canonical verification commands (test, plus the existing lint/typecheck) once per attempt inside the harness, capture a compact structured result — pass/fail counts, failing test names, truncated output — and inject it into both the Generator (as the starting baseline) and the Evaluator (as the authoritative result). Instruct both agents not to re-run the full suite; a single scoped test file is allowed when inspecting one specific failure.
+
+- **Option A — extend the static-analysis runner**: add the project's test command to detection, reuse the central command-runner and output truncation already used for lint/typecheck, and feed the result through the same context-injection path. *Pros*: builds on proven plumbing; deterministic; one code path. *Cons*: needs per-project detection of the canonical test command and a way to record the known-failing baseline.
+- **Option B — add an optional hard test gate**: as Option A, plus optionally skip the Evaluator when post-Generator tests fail (mirrors the existing lint hard-gate). *Pros*: saves an Evaluator call on a broken build. *Cons*: needs a reliable green baseline to avoid false gating.
+- **Recommended**: Option A as the baseline; Option B as an opt-in flag once the baseline-failure signal is trustworthy.
+- **Effort**: Medium.
+
+_Companion engineering task: https://github.com/peacock-el-gap/adhd/issues/1 — fix the harness's own test isolation so `bun test` runs green under one command, a prerequisite for this feature to be representative when the harness is run against itself._
+
+### OPP-17: Efficient Progressive Refinement (patch, not full rewrite)
+
+**Problem**: When progressive spec refinement is enabled, the refinement step regenerates the entire spec document each sprint — observed at 500–650 lines, and written twice per call after a "file has not been read yet" round-trip — even though completed sprint sections are programmatically frozen and restored afterward. Re-emitting frozen content the harness will overwrite anyway is wasted output, and refinement is the second-largest cost role in a run (about a quarter of total spend) while running on the top model tier.
+
+**Opportunity**: Read the current spec into the refinement prompt up front (removing the failed-write/stub-read/re-write round-trip), and have refinement emit only the revised remaining-sprint sections — a patch spliced around the frozen sections — instead of rewriting the whole document, reusing the existing section-extraction and freeze machinery.
+
+- **Pros**: large output reduction on the second-largest cost role; reuses existing section surgery. **Cons**: splicing must be robust to heading drift.
+- **Effort**: Medium.
+
+### OPP-18: Context-Frugal Prompting & Per-Agent Budgets
+
+**Problem**: Cache-read cost grows with the volume of tool output held in a session multiplied by the number of turns. In a real run, agents read entire large files when a fragment was needed (e.g. an 800-line test file read whole to add a few tests), re-read files already present in context, narrated verbosely between every tool call, and shared a single global per-call turn ceiling of 50. Planner and refinement sessions re-read the same large source files from scratch every time; there is no harness-provided codebase digest, so each session re-explores the project.
+
+**Opportunity**: Reduce per-turn context and turn count across all agents:
+- Read-discipline prompt rules: locate a region first (grep) then read a bounded range rather than whole files; never re-read a file already shown in the session; run scoped tests during work; end with a short summary, not a long recap.
+- Per-agent turn caps replacing the single global ceiling, plus an optional per-message output cap, so the longest-running agents cannot run the multiplier up.
+- A harness-generated codebase map (key files, exports/signatures, conventions) injected into the Generator and the Planner/refinement sessions so they do not re-explore from scratch. This realises and generalises the "Generator Context Priming" opportunity (OPP-04, Option A — a harness-generated digest) to the planning agents as well.
+
+- **Option A — prompt rules + per-agent turn caps only** (no map): cheapest, immediate; broad effect; prompt-compliance dependent.
+- **Option B — add the harness-generated codebase map**: removes the largest recurring reads (especially for refinement); the map can drift, so regenerate it per run and scope it to signatures/structure, not full bodies.
+- **Recommended**: Option A first; Option B as the follow-on.
+- **Effort**: Small–Medium.
+
+### OPP-19: Regression-Suite Tiering & Criterion Retirement
+
+**Problem**: The accumulated behavioural regression suite is injected into the Evaluator on every attempt and only ever grows — it never loses a criterion whose behaviour was intentionally changed or dropped. In a real run it reached ~116 criteria (~10K tokens) and rising, which both inflates every evaluation's context and lets a stale criterion penalise correct new work. The Evaluator also re-emits a verdict covering the full accumulated set each sprint, multiplying output as the suite grows.
+
+**Opportunity**: Two complementary changes:
+1. **Tiering / relevance filter** — split the suite into core (always-checked) versus optional (sampled or relevance-filtered) so a large suite does not linearly inflate every evaluation, and have the Evaluator score the current sprint's contract criteria plus a compact regression pass/fail rather than re-listing every prior criterion.
+2. **Criterion retirement** — add an explicit retirement path (e.g. a contract marks a prior criterion as superseded/removed, or an `adhd regression rm <name>` command) so the suite stays a true description of current expected behaviour.
+
+- **Pros**: bounds evaluator context growth over a project's life; keeps the suite accurate; reduces evaluator output. **Cons**: narrowing/sampling regression coverage risks missing a distant regression — mitigate by always checking criteria for the surfaces touched this sprint.
+- **Effort**: Medium.
+
+### OPP-20: Structured Reviewer Output Envelope
+
+**Problem**: The contract reviewer outputs either the literal string "APPROVED" or a full replacement contract JSON, with no record of what changed or why. Re-emitting the entire contract to alter a few fields is wasted output and makes silent rewrites invisible.
+
+**Opportunity**: Change the reviewer's output to a JSON envelope — `{ verdict: "approved" | "revised", changes: [short descriptions of what changed and why], contract: <revised contract, only when revised> }` — so revisions are a transparent, minimal patch without changing the single-pass negotiation architecture.
+
+- **Pros**: smaller reviewer output; visible change history; no architectural change. **Cons**: the parsing path must accept the new envelope and the legacy forms during transition.
+- **Effort**: Small.
+
+### OPP-21: Tool & Settings Governance (MCP curation)
+
+**Problem**: The harness launches agents without explicitly controlling which filesystem settings or MCP servers they load, and the built-in tool list it passes does not restrict MCP tools. As a result agents inherit whatever MCP servers exist in the ambient environment; in a real run a planning agent wandered into unrelated MCP tools — wasted turns, and an unbounded tool-access surface given the agents run with permissions bypassed.
+
+**Opportunity**: Make tool and settings exposure explicit and controllable:
+- Set the settings sources deliberately so the harness inherits the project's configuration (user, project, and machine/organisation level) by default — matching how the tool is expected to behave inside a project — rather than relying on implicit defaults.
+- Apply a per-agent tool policy: the non-coding agents (Planner, refinement) get only the built-in tools they need and have MCP tools disallowed; coding agents keep their working set.
+- Expose user overrides to add or strip specific servers/sources (e.g. flags to choose which settings layers load, to add back a specific MCP server, or to disable MCP entirely).
+
+- **Pros**: cuts wasted exploration; closes an unrestricted-tool-access gap; honours project configuration by default while remaining configurable. **Cons**: requires threading new options through the agent-launch wiring and resolving user overrides.
+- **Effort**: Medium.
+
+### OPP-22: Cost Guardrails
+
+**Problem**: Cost can balloon silently. A uniform model override forces every agent onto the top tier — defeating the cost-optimised per-agent default matrix — with no warning; a real run cost roughly three times what the default matrix would have, purely from this override. There is also no per-run spend ceiling, so a run with many sprints, retries, and an expensive evaluator can consume substantial tokens before anyone notices.
+
+**Opportunity**: Add lightweight cost visibility and control:
+1. Warn at startup when a uniform model override puts agents above the cost-optimised per-agent default matrix (optionally showing an estimated cost delta), so the override is a deliberate choice rather than an accident.
+2. Per-sprint token budget with a soft limit: warn at 80% of budget; at 100%, pause and ask whether to extend or abort.
+
+- **Pros**: prevents the most common silent overspend; gives the user a spend ceiling; advisory by default. **Cons**: budget thresholds need sensible defaults to avoid nuisance prompts.
+- **Effort**: Small–Medium.
+
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -379,6 +461,7 @@ Each item is assessed on four dimensions:
 2. **Impact on reliability** — Does it reduce failures and wasted retries?
 3. **Impact on developer experience** — Does it make the harness easier/faster to use?
 4. **Implementation cost** — How much work and risk is involved?
+5. **Impact on run cost** — Does it reduce tokens/$ per run? (Now measurable: `.adhd/usage.json` is tracked as a durable cost ledger.)
 
 ---
 
@@ -395,30 +478,48 @@ These items use the existing skills system and contract negotiation prompts. The
 
 ---
 
-### Phase 2: Extend — New Capabilities
+### Phase 2: Cost & Efficiency
+
+**Goal**: Cut token/run cost. A full-run cost analysis showed that run cost is dominated by cache-read traffic — the whole agent session is re-read from cache on every turn — rather than by code generation, and that the single largest lever (the cost-optimised per-agent model matrix) already ships by default. These items attack the remaining drivers. Items are ordered by impact.
+
+| # | Feature | Source | Effort | Justification |
+|---|---------|--------|--------|---------------|
+| 2.1 | **Harness-owned verification** | OPP-16 | M | Run the canonical test/lint/typecheck once centrally and share the result; stops the Generator and Evaluator re-running the full suite 2–7× per session and re-investigating known-failing baselines. The largest behavioural cost lever. |
+| 2.2 | **Efficient progressive refinement** | OPP-17 | M | Refinement emits a patch, not a full-spec rewrite; it is the second-largest cost role and runs on the top tier. |
+| 2.3 | **Context-frugal prompting & per-agent budgets** | OPP-18 | S–M | Read-discipline rules, per-agent turn caps (replacing the global ceiling), and a harness-generated codebase map; broad reduction of per-turn context across all agents. Realises OPP-04 Option A. |
+| 2.4 | **Regression-suite tiering & criterion retirement** | OPP-19 | M | Tier/sample and retire behavioural criteria so the evaluator prompt stops growing without bound (~116 criteria today) and stale criteria stop penalising correct work. |
+| 2.5 | **Structured reviewer output envelope** | OPP-20 | S | Contract reviewer returns a patch envelope instead of re-emitting the whole contract; smaller output, visible changes. |
+| 2.6 | **Tool & settings governance** | OPP-21 | M | Explicit settings inheritance + per-agent MCP curation; cuts wasted exploration and closes an unrestricted-tool-access gap. |
+| 2.7 | **Cost guardrails** | OPP-22 | S–M | Warn on cost-matrix-defeating model overrides + a per-sprint token budget; cheap insurance against silent overspend. |
+
+**Rationale**: Phase 2 is prioritised HIGH — these levers attack the measured dominant cost (cache-read traffic) directly, and most are independent of the Extend/Transform work. On completion each item folds into Part 1 (per the normal lifecycle) and Key Insight 3 gains a sentence noting that a full-run cost analysis — itself a dogfooding finding — drove these efficiency capabilities.
+
+---
+
+### Phase 3: Extend — New Capabilities
 
 **Goal**: Capabilities that change how the harness operates, building on Phase 1 foundations.
 
 | # | Feature | Source | Effort | Justification |
 |---|---------|--------|--------|---------------|
-| 2.1 | **Complete the `--commit-adhd` metadata set** | OPP-15 | S | Add `.adhd/usage.json` + a final end-of-run metadata commit so the full cost record and completed checkpoint are preserved. Closes a data-loss gap; prerequisite for run comparison (2.4). |
-| 2.2 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23) and must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) has shipped — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
-| 2.3 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
-| 2.4 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
-| 2.5 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
+| 3.1 | **Complete the `--commit-adhd` metadata set** | OPP-15 | S | Add `.adhd/usage.json` + a final end-of-run metadata commit so the full cost record and completed checkpoint are preserved. Closes a data-loss gap; prerequisite for run comparison (3.4). |
+| 3.2 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23) and must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) has shipped — most CRIST-run retries were caused by oversized scope, not model capability. Decomposition (attempt 3) deferred. |
+| 3.3 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Becomes valuable once Content Stream skills and future community skills create an ecosystem worth managing. |
+| 3.4 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Enables systematic prompt engineering and model selection. |
+| 3.5 | **Code review agent (5th agent)** | OPP-06 | L | Separate Reviewer agent for code quality. **Contingent**: only if quality criteria in contracts (§1.18) proves insufficient. |
 
-**Rationale**: Item 2.1 is a small, low-effort fix that closes a data-loss gap and unblocks run comparison (2.4). Item 2.2 addresses a retry limitation in the cases where sprint scope control (§1.20–§1.22) isn't enough, and builds directly on the per-agent model baseline (§1.23). Items 2.3-2.4 are ecosystem and tooling. Item 2.5 is contingent — it's the escalation path if the quality criteria in contracts (§1.18) don't deliver enough signal.
+**Rationale**: Item 3.1 is a small, low-effort fix that closes a data-loss gap and unblocks run comparison (3.4). Item 3.2 addresses a retry limitation in the cases where sprint scope control (§1.20–§1.22) isn't enough, and builds directly on the per-agent model baseline (§1.23). Items 3.3-3.4 are ecosystem and tooling. Item 3.5 is contingent — it's the escalation path if the quality criteria in contracts (§1.18) don't deliver enough signal.
 
 ---
 
-### Phase 3: Transform — Architectural Changes
+### Phase 4: Transform — Architectural Changes
 
 **Goal**: Fundamentally new capabilities. Each requires validation from real-world usage.
 
 | # | Feature | Source | Effort | Justification & Prerequisite |
 |---|---------|--------|--------|------------------------------|
-| 3.1 | **Parallel sprint execution** | OPP-11 | L | Independent sprints in separate git worktrees, merged at completion. **Prerequisite**: Sprint dependency graph (Planner must declare dependencies) and evidence that sequential execution is too slow for target use cases. |
-| 3.2 | **Web dashboard** | OPP-12 | L | Visual UI over `.adhd/` data — run history, cost trends, sprint timelines. **Prerequisite**: CLI workflow stabilized; data formats frozen. |
+| 4.1 | **Parallel sprint execution** | OPP-11 | L | Independent sprints in separate git worktrees, merged at completion. **Prerequisite**: Sprint dependency graph (Planner must declare dependencies) and evidence that sequential execution is too slow for target use cases. |
+| 4.2 | **Web dashboard** | OPP-12 | L | Visual UI over `.adhd/` data — run history, cost trends, sprint timelines. **Prerequisite**: CLI workflow stabilized; data formats frozen. |
 
 ---
 
@@ -426,17 +527,25 @@ These items use the existing skills system and contract negotiation prompts. The
 
 | Stream / Phase | # | Feature | Source | Notes |
 |---|---|---|---|---|
-| **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills (security, a11y, API) + project-local template |
+| **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills + project-local template |
 | | CS-2 | Codebase context guidance | OPP-04 | User guide, not a harness skill |
 | --- | --- | --- | --- | --- |
-| **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Complete the `--commit-adhd` metadata set | OPP-15 | Preserve usage.json + final checkpoint; unblocks run comparison |
-| | 2.2 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag; builds on the §1.23 model baseline |
-| | 2.3 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
-| | 2.4 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
-| | 2.5 | Code review agent (5th agent) | OPP-06 | **Contingent**: only if §1.18 quality criteria insufficient |
+| **Phase 2**<br/>*Cost & Efficiency (HIGH)* | 2.1 | Harness-owned verification | OPP-16 | Run verification once, share it, forbid agent re-runs |
+| | 2.2 | Efficient progressive refinement | OPP-17 | Patch, not full-spec rewrite |
+| | 2.3 | Context-frugal prompting & per-agent budgets | OPP-18 | Read discipline, turn caps, codebase map |
+| | 2.4 | Regression-suite tiering & criterion retirement | OPP-19 | Bound evaluator context growth; retire stale criteria |
+| | 2.5 | Structured reviewer output envelope | OPP-20 | Patch-based contract revision |
+| | 2.6 | Tool & settings governance | OPP-21 | Per-agent MCP curation; project config inherited |
+| | 2.7 | Cost guardrails | OPP-22 | Model-override warning + per-sprint token budget |
 | --- | --- | --- | --- | --- |
-| **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
-| | 3.2 | Web dashboard | OPP-12 | Requires stabilized CLI + data formats |
+| **Phase 3**<br/>*Extend (MEDIUM)* | 3.1 | Complete the `--commit-adhd` metadata set | OPP-15 | Preserve usage.json + final checkpoint |
+| | 3.2 | Adaptive retry with model escalation | OPP-10 | Opt-in `--escalate` flag |
+| | 3.3 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
+| | 3.4 | Run comparison | OPP-12 | Evidence-based prompt/model tuning |
+| | 3.5 | Code review agent (5th agent) | OPP-06 | Contingent on §1.18 quality criteria proving insufficient |
+| --- | --- | --- | --- | --- |
+| **Phase 4**<br/>*Transform (LOW)* | 4.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
+| | 4.2 | Web dashboard | OPP-12 | Requires stabilised CLI + data formats |
 
 ---
 
