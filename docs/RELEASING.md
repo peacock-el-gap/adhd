@@ -32,17 +32,17 @@ The version bump (`package.json`) and changelog finalisation (`[Unreleased]` →
 
 ADHD is a self-developing harness. Topic branches accumulate commits like `[auto-commit] Sprint 3: …` from the harness's own generator. Squash-merging keeps `main` clean while the branch keeps the per-sprint trail.
 
-### After merging: delete the branch, preserve history locally
+### After merging: archive the branch's commits locally, then delete it
+
+The squash-merge collapses the entire branch into a single commit on `main`, so the branch's own development commits survive nowhere on `main`. **Always** preserve them first with a LOCAL archive tag, then delete the branch — whether those commits are the harness's `[auto-commit]`/`[adhd]` sprint trail or commits made directly on the branch. The archive tag is the only thing that keeps them reachable once the branch is gone (git garbage-collects unreachable commits after ~30 days), and it costs nothing.
 
 ```bash
-# Preserve per-sprint history with a LOCAL tag, only if the branch carries history worth
-# keeping (the harness's [auto-commit]/[adhd] commits). The tag mirrors the full branch name:
-git tag archive/<branch> <branch-tip-sha>     # e.g. archive/dev/feature-x — LOCAL ONLY
+git tag archive/<branch> <branch-tip-sha>     # mirrors the full branch name; LOCAL ONLY
 git branch -D <branch>
 git push origin --delete <branch>             # only if it had ever been pushed
 ```
 
-- **Never push an `archive/*` tag or a topic branch to `origin`.** They keep the per-sprint commits reachable on your machine only (git garbage-collects unreachable commits after ~30 days). `origin` carries only `main` and release (`v*`) tags.
+- **Never push an `archive/*` tag or a topic branch to `origin`.** They keep the branch's development commits reachable on your machine only. `origin` carries only `main` and release (`v*`) tags.
 
 ## Per-Release Checklist
 
@@ -68,7 +68,7 @@ git push origin main && git push origin v$NEW        # 8. push commit + release 
 
 gh release create v$NEW --title "v$NEW" \             # 9. GitHub release from the changelog
   --notes-file <(awk '/^## \[v'$NEW'\]/{flag=1;next} /^## \[/{flag=0} flag' CHANGELOG.md)
-#  10. delete branch + local archive/ tag (see "After merging")
+#  10. ALWAYS archive the branch's commits locally, then delete the branch (see "After merging")
 ```
 
 ### Commit messages
