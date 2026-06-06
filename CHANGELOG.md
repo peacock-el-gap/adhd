@@ -6,52 +6,25 @@ All notable changes to this project are documented here, from the point of view 
 
 ## [v0.7.0] - 2026-06-06
 
-**Phase 2: Cost & Efficiency** — Ten-sprint overhaul focused on cutting tokens and dollars per run without weakening the adversarial quality gate. The harness now runs verification once and shares it, teaches agents read-discipline, caps agent turns independently, builds and injects codebase maps, emits patches instead of full spec rewrites during refinement, bounds regression suites and surfaces, governs tool/MCP exposure deliberately, and provides operator cost visibility and spending ceilings.
+Cutting the cost of a run. Most of what a run costs comes from re-reading the whole agent conversation on every turn, not from generating code. This release attacks that from many sides — the harness verifies once and shares the result, asks agents to read less and re-read nothing, limits how long each agent runs, hands agents a ready-made map of the project, refines the spec with patches instead of full rewrites, keeps the growing regression suite from bloating every review, controls which tools each agent can reach, and gives you both visibility and a ceiling on spend — all without weakening the build-versus-review quality gate.
 
 ### Added
-
-#### Harness-Owned Verification (Sprints 1–3)
-- **Central test-command detection and single run per attempt** — The harness now detects the project's canonical test script (from `package.json` scripts) and runs it exactly once per attempt through a central, cached command-runner, capturing pass/fail counts, failing test names, and truncated output.
-- **Known-failing baseline** — Before the Generator runs each sprint, the harness captures which tests were already failing, then compares post-generation results against this baseline to classify failures as pre-existing or newly-introduced.
-- **Shared verification injection & no-rerun discipline** — The single verification result is injected into both the Generator (as a starting baseline) and the Evaluator (as the authoritative result), with both agents instructed not to re-run the full test suite. An optional hard test gate (`--test-gate`) skips the Evaluator when the Generator introduces new failures, saving evaluation cost.
-
-#### Read Discipline (Sprint 4)
-- **System prompt read-discipline rules** — Generator and Evaluator system prompts now include durable guidance: locate before reading (grep/search first, then read bounded ranges), never re-read files already shown in the current session, and run only scoped tests. These rules reduce per-turn context and the cache-read multiplier.
-
-#### Per-Agent Turn Caps (Sprint 5)
-- **Independent turn ceilings per agent** — Replaced the single global turn ceiling with per-agent turn caps via `--planner-max-turns`, `--generator-max-turns`, `--evaluator-max-turns`, `--documenter-max-turns` (all default to 50 for backward compatibility). Invalid values degrade to defaults with a warning. Precedence: CLI flag > env var > default.
-
-#### Harness-Generated Codebase Map (Sprint 6)
-- **Deterministic, body-free codebase map** — The harness now generates a lightweight, deterministic map of the project structure (key files, exports, signatures) once per run and injects it into both the Generator and the Planner/refinement prompts, so they don't need to re-explore the codebase from scratch. The map is bounded to ~32KB and never throws — a partial or empty map degrades gracefully.
-
-#### Patch-Based Progressive Spec Refinement (Sprint 7)
-- **Spec refinement emits patches, not full rewrites** — When `--refine-spec` is enabled, the Planner now emits only the revised remaining-sprint sections (the full current spec is provided as read-only reference), and the harness splices them around the frozen completed sections. This eliminates waste from re-stating completed content.
-
-#### Structured Contract Reviewer Envelope (Sprint 8)
-- **Contract reviewers return compact envelopes** — The contract reviewer now returns `{ verdict, changes, contract? }` instead of re-stating the entire contract or a literal `APPROVED` string, making revisions visible and cheaper to produce. Backward compatible with legacy responses.
-
-#### Regression Suite Retirement & Tiering (Sprint 9)
-- **Intentional criterion retirement** — Contracts can mark criteria for retirement via a `retire: [names]` field; retired criteria leave the persisted regression suite and won't penalize correct new work. Retired names are durable against re-accumulation (resurrection guard).
-- **Regression criterion tiering and relevance filter** — Criteria tagged as `core` always run; `optional` criteria run only when their declared surfaces overlap with the current sprint's surfaces. A large suite no longer inflates every evaluation linearly; the regression section is bounded to ~8KB with a visible truncation marker.
-
-#### Tool & MCP Governance (Sprint 10)
-- **Per-agent tool and MCP policy** — Non-coding agents (Planner, refinement, contract negotiation) now receive only their necessary built-in tools and no MCP servers. Coding agents (Generator, Evaluator, Documenter) retain their full working set. Overridable via `--disable-mcp` or `--mcp-servers`.
-
-#### Cost Guardrails (Sprint 10)
-- **Startup advisory for model overrides** — When a uniform `--model` override puts agents above the cost-optimized per-agent matrix tiers, an advisory warning is printed at startup (does not block the run).
-- **Per-sprint token budget** — Optional `--sprint-token-budget` (input+output tokens per sprint) with soft warn at 80%, interactive/non-interactive pause at 100%, and full inert behavior when unset. Precedence: CLI flag > env var > default.
+- **Your tests run once per attempt, centrally** — the harness detects your project's test command, runs it a single time per attempt, and gives the result to both the generator (as a starting point) and the evaluator (as the authority), with both told not to run the suite again. Before, each agent ran the full suite repeatedly and paid to re-read that output on every later turn.
+- **Already-failing tests are recognised** — the harness records which tests were red before an attempt began, so agents don't spend turns working out which failures they caused versus ones that were already broken.
+- **An optional test gate** — `--test-gate` skips the paid review when an attempt introduces new test failures, saving that cost on a broken build (a counterpart to the existing `--lint-gate`).
+- **Agents read less** — the generator and evaluator are now guided to search first and read only the slice of a file they need, never re-read a file already shown to them, run only the relevant tests, and finish with a brief summary instead of a long recap.
+- **A turn limit for each agent** — `--planner-max-turns`, `--generator-max-turns`, `--evaluator-max-turns` and `--documenter-max-turns` (and the matching settings) cap how many turns each agent may take, replacing the single shared limit. Each defaults to 50, so nothing changes unless you set them.
+- **A ready-made map of your project** — once per run the harness builds a compact map of the project's layout and key definitions and gives it to the generator and the planner, so they don't spend turns rediscovering the codebase.
+- **Leaner spec refinement** — with `--refine-spec`, the planner now revises only the work still ahead instead of rewriting the entire spec each time; the parts already done are left as they are.
+- **Smaller scope-agreement steps** — when the harness and a reviewer settle the scope of a piece of work, the reviewer now returns only its verdict and a short note of any changes, rather than restating the whole agreement.
+- **Retiring outdated expectations** — a behaviour you deliberately change or drop can be retired from the accumulated set of regression checks, so an old expectation stops failing correct new work and won't quietly creep back later.
+- **A regression suite that stays lean** — accumulated behavioural checks are split into always-run and as-needed, with the as-needed ones run only when they're relevant to the parts the current work touches, so a large suite no longer slows and inflates every review.
+- **Control over each agent's tools** — agents that don't write code no longer pick up unrelated external tools (MCP servers) from your environment; `--disable-mcp` turns external tools off entirely, and `--mcp-servers` adds specific ones back.
+- **A heads-up when an override costs more** — if a single `--model` choice puts every agent on a pricier model than the cost-optimised per-agent defaults, the harness tells you at startup (and still runs).
+- **A spending limit per piece of work** — `--sprint-token-budget` sets a token budget for each unit of work: you're warned at 80%, and at 100% the harness pauses to ask whether to continue or stop (when running unattended it notes the overage and carries on). It does nothing unless you set it.
 
 ### Changed
-- Test results are now presented in a structured format (pass/fail, counts, failing test names) injected into evaluator and generator contexts, rather than as raw command output.
-- Contract reviewer responses now support a `{ verdict, changes, contract? }` envelope format in addition to legacy literal-`APPROVED` responses and bare-contract JSON.
-- Regression criteria now optionally carry `tier` ("core" | "optional") and `surfaces` fields, written by the accumulator on new criteria and backward compatible on read.
-- Spec refinement now injects the harness-generated codebase map into the Planner's context via the new `supplementaryContext` field on `RunPlannerOptions`.
-
-### Fixed
-- The Planner in `--refine-spec` mode no longer wastes tokens re-writing frozen completed sprint sections.
-- The Generator no longer pays to re-run the project's entire test suite on every turn; results are injected as read-only context.
-- The Evaluator no longer re-runs the full test suite; it receives a pre-run result with classification of which failures are new.
-- Large regression suites no longer inflate every subsequent evaluation; core and surface-relevant criteria are filtered and bounded.
+- Test results are shown to the agents as a structured summary — pass/fail counts and the names of failing tests — instead of raw command output.
 
 ## [v0.6.2] - 2026-06-05
 

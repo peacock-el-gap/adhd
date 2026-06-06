@@ -53,7 +53,9 @@ git fetch origin                                     # 2. read the version on ma
 git show origin/main:package.json | grep version     #    …and pick NEW above it (SemVer)
 NEW=0.x.y
 #    3. set "version" in package.json to $NEW
-#    4. move CHANGELOG [Unreleased] entries under "## [v$NEW] - YYYY-MM-DD"; leave [Unreleased] empty
+#    4. move CHANGELOG [Unreleased] entries under "## [v$NEW] - YYYY-MM-DD" (leave [Unreleased] empty),
+#       then REWRITE them for users — no sprint/phase refs, no internal symbol names (see CHANGELOG Format).
+#       If the harness drafted the entry, this rewrite is mandatory, not optional.
 git commit -am "chore(release): v$NEW"               # 5. on the branch (will be squashed)
 
 # Land it on main:
@@ -66,8 +68,9 @@ git commit                                                       #    squash; RE
 git tag -a v$NEW -m "v$NEW — <one-line theme>"       # 7. annotated; see Tag messages
 git push origin main && git push origin v$NEW        # 8. push commit + release tag
 
-gh release create v$NEW --title "v$NEW" \             # 9. GitHub release from the changelog
+gh release create v$NEW --title "v$NEW" \             # 9. release body = the [v$NEW] CHANGELOG section
   --notes-file <(awk '/^## \[v'$NEW'\]/{flag=1;next} /^## \[/{flag=0} flag' CHANGELOG.md)
+#       (verbatim — so that section MUST already be user-facing per step 4, no sprint/internal detail)
 #  10. ALWAYS archive the branch's commits locally, then delete the branch (see "After merging")
 ```
 
@@ -87,7 +90,16 @@ The squash-merge commit is the only record of a change that survives on `main`; 
 
 ## CHANGELOG Format
 
-We use a [Keep-a-Changelog](https://keepachangelog.com/)-style structure, written for the **user** — what changed for someone using the harness, not how it was built. No per-sprint detail, no internal symbol names.
+We use a [Keep-a-Changelog](https://keepachangelog.com/)-style structure, written for the **user** — what changed for someone using the harness, not how it was built. The same entry becomes the GitHub release body (step 9), so it is the most outward-facing prose we ship; write it accordingly.
+
+**Write for the reader, not the contributor.** Each entry describes a user-visible change and why it matters — never how the work was organised or built:
+
+- **No sprint or phase references.** Don't group entries by the development sprints that produced them (`#### Harness-Owned Verification (Sprints 1–3)`) or by roadmap phase (`Phase 2: …`). A user neither knows nor cares which sprint shipped what. (Plain "sprint" is fine only where it is a user-facing concept — e.g. the `--sprint-token-budget` flag, or `--sprint N`.)
+- **No internal names.** No type, function, field, or file names (`RunPlannerOptions`, `supplementaryContext`, `{ verdict, changes }`, `shared/…`). Describe the behaviour and name only what the user types — CLI flags and env vars.
+- **No build/process detail.** No attempt counts, byte/size limits, internal data shapes, or implementation notes.
+- Lead each entry with a plain-language headline of the capability, then a sentence on what it does and the flag that controls it. Match the house style of the previous releases — read a couple first with `gh release view vX`.
+
+**The harness drafts this section itself — treat it as raw material, not final copy.** When the harness develops a release, its documenter writes the `## [Unreleased]`/`## [vX]` entry, and that draft is organised by sprint and littered with internal symbol names. **Rewrite it for the user before tagging.** Shipping the documenter's draft verbatim is the single most common way developer detail leaks into a release — that is exactly what it is for, so never skip the rewrite.
 
 ```markdown
 # Changelog
@@ -112,6 +124,7 @@ Categories: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`. A 
 - ❌ **Don't tag without the matching `package.json` version.** They must agree.
 - ❌ **Never push a topic branch or an `archive/*` preservation tag to `origin`.** `origin` carries only `main` and release (`v*`) tags.
 - ❌ **Don't let `.adhd/` self-development files land on `main`.** They belong on the topic branch (and its local `archive/*` tag), never in `main`'s history.
+- ❌ **Never ship release notes or CHANGELOG entries that mention sprints, roadmap phases, or internal symbol names.** They are written for users, not contributors. The harness's documenter draft is dev-facing by default — rewrite it for the user before tagging (see **CHANGELOG Format**).
 
 ## When a Collaborator Joins
 
