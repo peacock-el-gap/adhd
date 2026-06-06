@@ -1073,7 +1073,760 @@
         }
       ],
       "totalCostUsd": 3.7875959999999997
+    },
+    {
+      "startedAt": "2026-06-06T10:23:24.377Z",
+      "stages": [
+        {
+          "stage": "sprint-1-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1202,
+          "cacheReadTokens": 0,
+          "costUsd": 0.11100900000000001,
+          "durationMs": 22808
+        },
+        {
+          "stage": "sprint-1-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2456,
+          "cacheReadTokens": 0,
+          "costUsd": 0.53689875,
+          "durationMs": 25252
+        },
+        {
+          "stage": "sprint-1-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 24,
+          "outputTokens": 15838,
+          "cacheReadTokens": 1223966,
+          "costUsd": 0.8607167999999998,
+          "durationMs": 271498
+        },
+        {
+          "stage": "sprint-1-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 10,
+          "outputTokens": 4430,
+          "cacheReadTokens": 175750,
+          "costUsd": 1.682625,
+          "durationMs": 61958
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 16573,
+          "cacheReadTokens": 246149,
+          "costUsd": 2.80731225,
+          "durationMs": 168460
+        },
+        {
+          "stage": "sprint-2-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1263,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.06554489999999999,
+          "durationMs": 26156
+        },
+        {
+          "stage": "sprint-2-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 4985,
+          "cacheReadTokens": 11991,
+          "costUsd": 0.5221665,
+          "durationMs": 53978
+        },
+        {
+          "stage": "sprint-2-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 45,
+          "outputTokens": 18332,
+          "cacheReadTokens": 2526171,
+          "costUsd": 1.2378588000000001,
+          "durationMs": 361366
+        },
+        {
+          "stage": "sprint-2-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 12,
+          "outputTokens": 5552,
+          "cacheReadTokens": 280278,
+          "costUsd": 1.4467095,
+          "durationMs": 70874
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 16659,
+          "cacheReadTokens": 246981,
+          "costUsd": 2.82176025,
+          "durationMs": 165786
+        },
+        {
+          "stage": "sprint-3-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1425,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.06990615,
+          "durationMs": 28814
+        },
+        {
+          "stage": "sprint-3-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3910,
+          "cacheReadTokens": 0,
+          "costUsd": 0.77629875,
+          "durationMs": 39437
+        },
+        {
+          "stage": "sprint-3-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 46,
+          "outputTokens": 17408,
+          "cacheReadTokens": 3144032,
+          "costUsd": 1.57106385,
+          "durationMs": 341471
+        },
+        {
+          "stage": "sprint-3-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 16,
+          "outputTokens": 7546,
+          "cacheReadTokens": 384827,
+          "costUsd": 1.7621805,
+          "durationMs": 98301
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 15882,
+          "cacheReadTokens": 249010,
+          "costUsd": 2.76941625,
+          "durationMs": 159924
+        },
+        {
+          "stage": "sprint-4-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1337,
+          "cacheReadTokens": 0,
+          "costUsd": 0.098139,
+          "durationMs": 26534
+        },
+        {
+          "stage": "sprint-4-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2938,
+          "cacheReadTokens": 11991,
+          "costUsd": 0.3708165,
+          "durationMs": 28759
+        },
+        {
+          "stage": "sprint-4-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 34,
+          "outputTokens": 18966,
+          "cacheReadTokens": 1851739,
+          "costUsd": 1.0554987000000002,
+          "durationMs": 378127
+        },
+        {
+          "stage": "sprint-4-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 12,
+          "outputTokens": 5195,
+          "cacheReadTokens": 288896,
+          "costUsd": 1.513374,
+          "durationMs": 69676
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 15445,
+          "cacheReadTokens": 207912,
+          "costUsd": 2.94806925,
+          "durationMs": 155204
+        },
+        {
+          "stage": "sprint-5-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1212,
+          "cacheReadTokens": 8839,
+          "costUsd": 0.0660432,
+          "durationMs": 21044
+        },
+        {
+          "stage": "sprint-5-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3564,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.42301124999999995,
+          "durationMs": 35929
+        },
+        {
+          "stage": "sprint-5-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 25,
+          "outputTokens": 6569,
+          "cacheReadTokens": 1066974,
+          "costUsd": 0.54661845,
+          "durationMs": 150252
+        },
+        {
+          "stage": "sprint-5-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 16,
+          "outputTokens": 6851,
+          "cacheReadTokens": 322301,
+          "costUsd": 1.38509775,
+          "durationMs": 88368
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 13842,
+          "cacheReadTokens": 221028,
+          "costUsd": 2.5429995,
+          "durationMs": 140368
+        },
+        {
+          "stage": "sprint-6-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1268,
+          "cacheReadTokens": 8839,
+          "costUsd": 0.0674607,
+          "durationMs": 23632
+        },
+        {
+          "stage": "sprint-6-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3245,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.40047374999999996,
+          "durationMs": 31797
+        },
+        {
+          "stage": "sprint-6-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 22,
+          "outputTokens": 12697,
+          "cacheReadTokens": 1200767,
+          "costUsd": 0.74402235,
+          "durationMs": 242466
+        },
+        {
+          "stage": "sprint-6-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 28,
+          "outputTokens": 9140,
+          "cacheReadTokens": 627827,
+          "costUsd": 2.146773,
+          "durationMs": 135906
+        },
+        {
+          "stage": "sprint-6-attempt-1-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 8,
+          "outputTokens": 3666,
+          "cacheReadTokens": 236379,
+          "costUsd": 0.22777395,
+          "durationMs": 63397
+        },
+        {
+          "stage": "sprint-6-attempt-1-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 10,
+          "outputTokens": 4642,
+          "cacheReadTokens": 176718,
+          "costUsd": 1.5570457500000001,
+          "durationMs": 64672
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 10,
+          "outputTokens": 15812,
+          "cacheReadTokens": 340990,
+          "costUsd": 3.0091725,
+          "durationMs": 176430
+        },
+        {
+          "stage": "sprint-7-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1430,
+          "cacheReadTokens": 8839,
+          "costUsd": 0.07115445000000001,
+          "durationMs": 24771
+        },
+        {
+          "stage": "sprint-7-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2643,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.36057375,
+          "durationMs": 25819
+        },
+        {
+          "stage": "sprint-7-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 1948,
+          "outputTokens": 6346,
+          "cacheReadTokens": 490582,
+          "costUsd": 0.34751610000000005,
+          "durationMs": 118385
+        },
+        {
+          "stage": "sprint-7-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 10,
+          "outputTokens": 6618,
+          "cacheReadTokens": 196291,
+          "costUsd": 1.18890525,
+          "durationMs": 75175
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 13398,
+          "cacheReadTokens": 222520,
+          "costUsd": 2.51548125,
+          "durationMs": 138401
+        },
+        {
+          "stage": "sprint-8-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 2971,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.09730365,
+          "durationMs": 47683
+        },
+        {
+          "stage": "sprint-8-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2334,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.33642375,
+          "durationMs": 24165
+        },
+        {
+          "stage": "sprint-8-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 51,
+          "outputTokens": 23950,
+          "cacheReadTokens": 4284852,
+          "costUsd": 1.9696873499999998,
+          "durationMs": 457864
+        },
+        {
+          "stage": "sprint-8-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 42,
+          "outputTokens": 11990,
+          "cacheReadTokens": 1219262,
+          "costUsd": 3.6348480000000007,
+          "durationMs": 185066
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 13103,
+          "cacheReadTokens": 224756,
+          "costUsd": 2.500254,
+          "durationMs": 136978
+        },
+        {
+          "stage": "sprint-9-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 2517,
+          "cacheReadTokens": 8839,
+          "costUsd": 0.09057945,
+          "durationMs": 47729
+        },
+        {
+          "stage": "sprint-9-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3122,
+          "cacheReadTokens": 0,
+          "costUsd": 0.6005925000000001,
+          "durationMs": 30783
+        },
+        {
+          "stage": "sprint-9-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 609,
+          "outputTokens": 23080,
+          "cacheReadTokens": 4221550,
+          "costUsd": 1.9682295,
+          "durationMs": 438036
+        },
+        {
+          "stage": "sprint-9-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 26,
+          "outputTokens": 9519,
+          "cacheReadTokens": 597273,
+          "costUsd": 2.32503075,
+          "durationMs": 132263
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 12,
+          "outputTokens": 14670,
+          "cacheReadTokens": 444428,
+          "costUsd": 3.2025345,
+          "durationMs": 168220
+        },
+        {
+          "stage": "sprint-10-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 2228,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.0905574,
+          "durationMs": 43365
+        },
+        {
+          "stage": "sprint-10-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 4621,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.51211125,
+          "durationMs": 48628
+        },
+        {
+          "stage": "sprint-10-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 21,
+          "outputTokens": 13476,
+          "cacheReadTokens": 1243059,
+          "costUsd": 0.8065556999999999,
+          "durationMs": 253065
+        },
+        {
+          "stage": "sprint-10-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 18,
+          "outputTokens": 7592,
+          "cacheReadTokens": 408660,
+          "costUsd": 1.74529125,
+          "durationMs": 104056
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 13532,
+          "cacheReadTokens": 258123,
+          "costUsd": 2.62266075,
+          "durationMs": 141194
+        },
+        {
+          "stage": "sprint-11-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 3511,
+          "cacheReadTokens": 8839,
+          "costUsd": 0.11015445,
+          "durationMs": 55512
+        },
+        {
+          "stage": "sprint-11-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2591,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.35397375,
+          "durationMs": 27589
+        },
+        {
+          "stage": "sprint-11-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 205,
+          "outputTokens": 17222,
+          "cacheReadTokens": 3052245,
+          "costUsd": 1.4493134999999997,
+          "durationMs": 340180
+        },
+        {
+          "stage": "sprint-11-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 22,
+          "outputTokens": 13165,
+          "cacheReadTokens": 567601,
+          "costUsd": 2.58507525,
+          "durationMs": 180270
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 10,
+          "outputTokens": 12455,
+          "cacheReadTokens": 354371,
+          "costUsd": 2.806269,
+          "durationMs": 143969
+        },
+        {
+          "stage": "sprint-12-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 2924,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.1050249,
+          "durationMs": 54998
+        },
+        {
+          "stage": "sprint-12-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3438,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.42408,
+          "durationMs": 37254
+        },
+        {
+          "stage": "sprint-12-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 29,
+          "outputTokens": 33089,
+          "cacheReadTokens": 2288033,
+          "costUsd": 1.5212393999999998,
+          "durationMs": 547643
+        },
+        {
+          "stage": "sprint-12-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 28,
+          "outputTokens": 8674,
+          "cacheReadTokens": 648907,
+          "costUsd": 2.4494617499999993,
+          "durationMs": 129933
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 14,
+          "outputTokens": 14581,
+          "cacheReadTokens": 564153,
+          "costUsd": 3.7763895,
+          "durationMs": 163945
+        },
+        {
+          "stage": "sprint-13-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1767,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.09139739999999999,
+          "durationMs": 29704
+        },
+        {
+          "stage": "sprint-13-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3135,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.40756125,
+          "durationMs": 31038
+        },
+        {
+          "stage": "sprint-13-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 45,
+          "outputTokens": 23106,
+          "cacheReadTokens": 2900613,
+          "costUsd": 1.4799263999999996,
+          "durationMs": 461290
+        },
+        {
+          "stage": "sprint-13-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 16,
+          "outputTokens": 10943,
+          "cacheReadTokens": 379327,
+          "costUsd": 2.24838675,
+          "durationMs": 145332
+        },
+        {
+          "stage": "sprint-13-attempt-1-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 34,
+          "outputTokens": 25798,
+          "cacheReadTokens": 2461185,
+          "costUsd": 1.4156775,
+          "durationMs": 441954
+        },
+        {
+          "stage": "sprint-13-attempt-1-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 16,
+          "outputTokens": 8875,
+          "cacheReadTokens": 358230,
+          "costUsd": 1.8390975,
+          "durationMs": 131881
+        },
+        {
+          "stage": "sprint-13-attempt-2-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 14,
+          "outputTokens": 1920,
+          "cacheReadTokens": 487389,
+          "costUsd": 0.28946745,
+          "durationMs": 53735
+        },
+        {
+          "stage": "sprint-13-attempt-2-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 10,
+          "outputTokens": 6508,
+          "cacheReadTokens": 230773,
+          "costUsd": 1.54010325,
+          "durationMs": 75860
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 10,
+          "outputTokens": 10774,
+          "cacheReadTokens": 374027,
+          "costUsd": 2.787603,
+          "durationMs": 125215
+        },
+        {
+          "stage": "sprint-14-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 1681,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.09178365,
+          "durationMs": 27571
+        },
+        {
+          "stage": "sprint-14-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3237,
+          "cacheReadTokens": 0,
+          "costUsd": 0.60738,
+          "durationMs": 31579
+        },
+        {
+          "stage": "sprint-14-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 2673,
+          "outputTokens": 19643,
+          "cacheReadTokens": 3689782,
+          "costUsd": 1.7099810999999994,
+          "durationMs": 377512
+        },
+        {
+          "stage": "sprint-14-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 16,
+          "outputTokens": 8085,
+          "cacheReadTokens": 423999,
+          "costUsd": 2.15054475,
+          "durationMs": 102629
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 8,
+          "outputTokens": 6770,
+          "cacheReadTokens": 261602,
+          "costUsd": 2.07336675,
+          "durationMs": 75779
+        },
+        {
+          "stage": "sprint-15-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 6159,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.16112115,
+          "durationMs": 89688
+        },
+        {
+          "stage": "sprint-15-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3652,
+          "cacheReadTokens": 18650,
+          "costUsd": 0.453855,
+          "durationMs": 38243
+        },
+        {
+          "stage": "sprint-15-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 1158,
+          "outputTokens": 22293,
+          "cacheReadTokens": 5462327,
+          "costUsd": 2.4202221,
+          "durationMs": 408098
+        },
+        {
+          "stage": "sprint-15-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 30,
+          "outputTokens": 12847,
+          "cacheReadTokens": 687375,
+          "costUsd": 2.6722875,
+          "durationMs": 171234
+        },
+        {
+          "stage": "sprint-15-attempt-1-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 25,
+          "outputTokens": 8241,
+          "cacheReadTokens": 1275913,
+          "costUsd": 0.6716701499999999,
+          "durationMs": 163621
+        },
+        {
+          "stage": "sprint-15-attempt-1-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 358,
+          "outputTokens": 6718,
+          "cacheReadTokens": 249537,
+          "costUsd": 1.2948255,
+          "durationMs": 90098
+        },
+        {
+          "stage": "documenter",
+          "model": "claude-haiku-4-5-20251001",
+          "inputTokens": 114,
+          "outputTokens": 15176,
+          "cacheReadTokens": 932560,
+          "costUsd": 0.28689375,
+          "durationMs": 191685
+        }
+      ],
+      "totalCostUsd": 107.40428084999998
     }
   ],
-  "runTotalCostUsd": 219.1611509
+  "runTotalCostUsd": 326.56543174999996
 }
