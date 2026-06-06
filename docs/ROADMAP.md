@@ -287,62 +287,39 @@ The harness sets each agent's tool and MCP exposure deliberately rather than let
 
 Two lightweight controls guard against silent overspend. At startup the harness prints an **advisory warning when a uniform `--model` override lifts agents above the cost-optimised per-agent default matrix** (§1.23) — the override stays in effect, but it becomes a deliberate choice rather than an accident that can triple a run's cost. And an optional **per-sprint token budget** (`--sprint-token-budget`, or `SPRINT_TOKEN_BUDGET`) sets a spend ceiling per sprint: a soft warning is logged once at 80%, and at 100% an interactive run pauses to ask whether to extend or abort while a non-interactive run logs and continues. The budget is inert when unset, and budget accounting never fails a run.
 
+### 1.32 Contract-Parse Separation
+
+`parseContractText` is now a **pure, side-effect-free function** that returns a discriminated union: `{ ok: true, contract }` on success, or `{ ok: false, fallback, rawText, preview }` on failure — zero console output, zero disk writes from the decision itself. A thin boundary wrapper (`parseContract`, unchanged signature) handles the boundary concern: on failure it logs a **warning** (amber, not red) with a clear sprint-scoped message and writes the diagnostic file. Parsing unit tests use the pure function and emit nothing; a fully green suite now passes with zero red lines. All code-fenced JSON, balanced-brace, unclosed-fence, and raw-text fallback strategies are exercised by the pure function and work as before.
+
+### 1.33 Per-Session Log Subdirectories
+
+Each run's conversation logs are grouped under `.adhd/logs/<YYYY.MM.DD-HH.MM.SS>/` instead of flat files. A single session-start timestamp is captured at the top of the run and threaded through the conversation logger, the per-session directory name, and run history — one canonical identity per run. When a contract parse fails (§1.3), the diagnostic file lands in the same session folder as that run's logs, never detached. A resume is a separate process invocation and writes into a fresh sibling directory. Legacy flat logs under `.adhd/logs/` are left untouched; `git add .adhd/logs/` (used by `--commit-adhd-logs`) recurses into subdirectories unchanged.
+
+### 1.34 Complete `--commit-adhd` Metadata Set
+
+Two data-loss gaps closed: (1) `.adhd/usage.json` (the cost ledger) is now included in the per-sprint `commitAdhdMetadata()` staging alongside contracts, feedback, and progress; (2) a final end-of-run metadata commit is written after the Documenter, capturing the terminal `progress.json` (status `"complete"`) and final `usage.json`. Both commits degrade to no-ops when nothing has changed, avoiding spurious empty commits. Without `--commit-adhd`, behaviour is unchanged.
+
+### 1.35 Default Topic-Branch Creation
+
+In existing-project mode, the harness now creates and switches to a dedicated topic branch (`adhd/<slug>-<timestamp>`) before the sprint loop. All generator commits land on that branch — never on `main`. The branch name is built by a **pure, never-throwing helper** in `shared/branch-name.ts` from the prompt/spec plus a session timestamp (collision-free by construction), announced in the startup banner, and recorded in `progress.json`. `--allow-main` is redefined to mean "skip auto-branching — run on the current branch" (covering both the old on-`main` case and any other current branch). `--branch <name>` still works as an explicit name override; `--resume` switches back to the recorded branch. Greenfield mode is unaffected. **Breaking change** (`feat!`): `--allow-main`'s meaning changed; no-flag runs now create a branch.
+
+### 1.36 Scout Agent (Semantic Codebase Priming)
+
+A new read-only agent (`--scout`) that runs **once before the sprint loop** on existing projects. It surfaces codebase idioms: naming conventions, error-handling patterns, testing style, and architectural layout — producing a bounded semantic digest that complements the structural codebase map (§1.26) without duplicating its body-free inventory. The digest is injected into the Generator's supplementary context under its own labelled section. Scout is read-only (Read, Bash, Glob, Grep — no Write/Edit), non-fatal (failures log at warning severity and the run proceeds), and skipped for greenfield projects. Cost is recorded as its own stage (`"scout"`) in `.adhd/usage.json`.
+
+### 1.37 Run History & Comparison
+
+Each run's terminal state (cost and progress) is **snapshot under `.adhd/runs/<session-stamp>/`** at end-of-run, regardless of `--commit-adhd`. The live `.adhd/usage.json` and `.adhd/progress.json` semantics are unchanged; preservation adds keyed snapshot copies without touching the live files. `adhd compare <run-a> <run-b>` prints a structured report of sprint pass/fail delta, cost delta (per-stage and per-model), and criteria score trends. With no run arguments it lists available runs newest first. Comparison logic is pure and never throws; degradations — missing records, malformed JSON — surface as warnings.
+
+### 1.38 Reviewer Agent (Code-Craft Review)
+
+A new read-only agent (`--review`) that runs **once per passing sprint**, focused exclusively on code craft: naming, duplication, maintainability, architectural fit, and security patterns. **Advisory only** — it never affects the pass/fail verdict. Reports are persisted per sprint to `.adhd/reviews/sprint-{n}.json` with stable key order and bounded to a character ceiling. Cost is recorded as its own stage (`"reviewer"`) with the Reviewer's resolved model, appearing in both the per-stage breakdown and the per-model rollup. The Reviewer's model defaults to the Evaluator tier and is configurable via `--model-reviewer`; turn cap via `--reviewer-max-turns`. Policy skills (security, accessibility, code-style) route to the Reviewer through the existing per-agent skills system. The Reviewer appears in the Langfuse trace hierarchy as a child span in the sprint-success phase; tracing failure is non-fatal.
+
 ---
 
 ## Part 2: What's Missing — Opportunities
 
-Each opportunity below is an open gap or enhancement. Opportunities are numbered with their original IDs for traceability in Part 3. Implemented opportunities have been removed from this section — they are documented as current capabilities in Part 1 (§1.12-1.31).
-
-### OPP-04: Generator Context Priming
-
-**Problem**: The Generator discovers the codebase through tool use during implementation, spending early turns on `Read`, `Glob`, and `Grep` to understand existing patterns. This burns tool-use turns and tokens on exploration rather than building.
-
-**Opportunity**: Before the Generator starts coding, provide a focused digest of key interfaces, existing patterns, and architectural conventions.
-
-- **Option A — Harness-generated digest**: The harness runs `tree`, reads key files (package.json, tsconfig, main entry point), and injects a summary into the Generator's prompt.
-  - Pros: Deterministic, cheap, no LLM cost
-  - Cons: May miss relevant patterns; hard to know which files matter without domain knowledge
-- **Option B — Skill-based priming**: A project-local skill (`.adhd/skills/local/codebase-context.md`) where the developer documents key patterns. Injected via the existing skills system.
-  - Pros: Uses existing architecture; developer controls what's included; zero new code needed
-  - Cons: Requires manual authoring; may become stale as codebase evolves
-- **Option C — Agent-generated digest**: Run a brief 4th agent ("Scout") that reads the codebase and produces a summary for the Generator.
-  - Pros: Adaptive, finds relevant patterns automatically
-  - Cons: Extra LLM cost; may be redundant for greenfield projects
-- **Recommended**: Option A has shipped as the harness-generated codebase map
-  (§1.26). The active next step is **Option C** — a semantic "Scout" pass that
-  surfaces conventions and patterns the deterministic map cannot (idioms,
-  error-handling style, where cross-cutting concerns live), scoped to *layer on
-  top of* the existing map rather than replace it. Option B remains available in
-  parallel as a zero-code content item (CS-2).
-- **Effort**: Option A has shipped (§1.26). Option C is Medium. Option B is zero
-  (content only — CS-2).
-- **Note**: Option C must complement, not duplicate, the structural codebase map
-  (§1.26): its value is *semantic*, and it adds an LLM call per run, so it is
-  skipped for greenfield projects (empty codebase).
-
-### OPP-06: Separate Code Review Agent
-
-A dedicated **Reviewer agent** (a new read-only agent) runs on passing sprints,
-focused exclusively on code craft — naming, duplication, maintainability,
-architectural fit, security patterns — separate from the Evaluator, which judges
-behaviour against the contract. This is the natural completion of the harness's
-core principle (§1.1) that generation and evaluation should never share one
-agent: today the Evaluator wears two hats (behavioural correctness via the
-contract, and code quality via §1.18's in-contract quality criteria), and when
-those compete, "does it work" tends to win over "is it clean". A separate
-Reviewer gives code craft its own prompt, budget, and voice.
-
-- **Pros**: clean separation of concerns; the Evaluator stays focused on
-  behaviour; the Reviewer has its own specialised prompt and can apply policy
-  skills (CS-1) directly.
-- **Cons**: extra LLM cost and latency on every passing sprint; the largest
-  architectural change in the near-term set (new agent type, new orchestration
-  path).
-- **Sequencing**: a legitimate planned capability, not a contingency — but it is
-  the most expensive item with the least certain marginal payoff over §1.18.
-  Build run analytics (OPP-12) first, so its scope and urgency are set by
-  evidence (do quality scores actually slip across runs?) rather than guesswork.
-- **Effort**: Large.
+Each opportunity below is an open gap or enhancement. Opportunities are numbered with their original IDs for traceability in Part 3. Implemented opportunities have been removed from this section — they are documented as current capabilities in Part 1 (§1.12-1.38).
 
 ### OPP-07: Policy Skills (Security, Accessibility, Style)
 
@@ -401,129 +378,6 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Recommended**: **Defer** to a future phase. The sequential model is simple and correct. Parallel execution is a performance optimization that adds substantial complexity.
 - **Effort**: Large
 
-### OPP-12: Run Analytics & Comparison
-
-**Problem**: After multiple harness runs, there's no easy way to compare outcomes, identify which sprints fail most, or tune configuration based on historical data.
-
-**Opportunity**: `adhd compare <run-a> <run-b>` reads `.adhd/` artifacts from two runs and reports spec diff, pass/fail delta, cost delta, criteria score trends.
-
-- **Pros**: Enables evidence-based prompt engineering and model selection; data already exists in `.adhd/usage.json` and `progress.json`
-- **Cons**: Requires run-ID or timestamp-based run identification; needs a storage convention for historical runs (currently each run overwrites the previous)
-- **Effort**: Medium
-
-### OPP-15: Complete the `--commit-adhd` Metadata Set
-
-**Problem**: The opt-in `--commit-adhd` flag (§1.13) commits `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, and `.adhd/spec.md` after each sprint — but it never commits `.adhd/usage.json`, and the final terminal state (the post-Documenter `status: "complete"` write and `docsGenerated`) is written *after* the last sprint's metadata commit. So even with `--commit-adhd` on, a run's full cost record and its completed checkpoint are left uncommitted and easily lost.
-
-**Opportunity**:
-1. Add `.adhd/usage.json` to the staged paths in `commitAdhdMetadata()`.
-2. Add a final end-of-run metadata commit (after the Documenter) capturing the terminal `progress.json` state plus the final `usage.json`.
-
-**Why it matters**: It is a prerequisite for run analytics & comparison (OPP-12), which reads `.adhd/usage.json` and `progress.json` per run — those have to be preserved before runs can be compared. Default behaviour is unchanged: nothing is committed without `--commit-adhd`.
-
-- **Pros**: Closes a real data-loss gap; tiny, contained change; unblocks OPP-12; keeps the audit-trail philosophy (still opt-in)
-- **Cons**: `usage.json` changes on every API call, so committing it adds some churn to the `[adhd]` commit stream (acceptable, and opt-in)
-- **Effort**: Small
-
-### OPP-23: Per-Session Log Subdirectories
-
-**Problem**: Conversation logs are written flat into `.adhd/logs/`, each file
-name-prefixed with its own write-time timestamp (`YYYY.MM.DD-HH.MM.SS`). Across a
-multi-invocation build — especially a crash followed by `--resume` — files from
-different runs interleave in one directory and one `ls`, making it hard to tell
-which logs belong to which run. The contract parse-error diagnostic
-(`sprint-N-contract-parse-error.txt`) lands in the same flat directory, detached
-from the run that produced it.
-
-**Opportunity**: Group each run's logs under a per-session subdirectory named by
-the session start: `.adhd/logs/<YYYY.MM.DD-HH.MM.SS>/<file>.md`. Capture one
-session-start timestamp at the top of the run (today only a numeric start time
-exists, used for duration), thread it into the conversation logger, and keep the
-per-file leading timestamps unchanged so in-directory chronological sort and
-Langfuse trace-name pairing still work. Route the parse-error diagnostic into the
-same folder.
-
-- **Resume policy**: a resume is a separate process invocation, so it takes a
-  fresh session stamp and writes into a new *sibling* directory. (Nesting
-  resumes under one parent would re-merge the very files worth separating and
-  needs extra plumbing to persist and re-read the original stamp.)
-- **Pros**: clean per-run forensics; nothing reads or globs `.adhd/logs/`, so no
-  downstream reader breaks; `git add .adhd/logs/` (used by `--commit-adhd-logs`)
-  recurses into subdirectories unchanged; legacy flat logs are left untouched.
-- **Cons**: a few tests hard-code flat log paths and need updating.
-- **Effort**: Small.
-
-### OPP-24: Default Topic-Branch Creation
-
-**Problem**: The documented policy is "always develop on a topic branch", but the
-harness never auto-creates one. Today it creates a branch only when `--branch
-<name>` is passed (an explicit name, and ignored on `--resume`/`--sprint`); a
-run-on-main guard merely *refuses* to start on `main`/`master` unless
-`--allow-main` is set, and `--allow-main` only disables that guard (so a run then
-commits straight to `main`). A no-flag run on a feature branch commits onto that
-branch, and the only way onto a fresh branch is to name one by hand.
-
-**Opportunity**: Make auto-creating a dedicated topic branch the default. Before
-the sprint loop, create `adhd/<slug>-<YYYYMMDD-HHMMSS>` (slug derived from the
-prompt/spec; the timestamp guarantees no collision) and switch to it. Redefine
-`--allow-main` to mean "do not create a branch — run on the current branch"
-(covering both the old on-`main` case and staying on any current branch). Keep
-`--branch <name>` as an explicit name override. On `--resume`, reuse the branch
-recorded in `progress.json` rather than creating a new one. Skip auto-branching
-in `--greenfield` (the generated `app/` is a brand-new repo — nothing to
-protect). Remove or repurpose the now-redundant run-on-`main` guard (and a
-duplicate guard call in the run setup), since the harness no longer needs to
-refuse `main` — it moves off it by default.
-
-- **Pros**: aligns behaviour with the documented topic-branch policy; removes the
-  commit-to-`main` footgun; isolates the harness's many `[auto-commit]` commits
-  for clean squash-merging.
-- **Cons**: behavioural **breaking change** — a no-flag run now moves `HEAD` onto
-  a new branch, and `--allow-main`'s meaning changes; existing branch tests need
-  rewriting.
-- **Effort**: Medium. Ship as `feat!` on `0.x` with a clear CHANGELOG note. (The
-  README/RELEASING wording is reconciled when this is *implemented*, not now.)
-
-### OPP-25: Decouple Contract-Parse Detection from Reporting
-
-**Problem**: `parseContract` both *decides* (parse the negotiated contract, or
-fall back to a generic default) and *reports* (a red error log plus a
-diagnostic-file write) in one function. Unit tests that verify the fallback must
-feed invalid input, which fires the side-effecting red log on every `bun test` —
-so a fully green suite prints alarming red `[HARNESS] Failed to parse contract
-JSON…` lines that look like real failures. This is harmless to correctness but
-erodes trust: it trains readers to ignore red output, and under output
-truncation (`tail`) the message gets separated from its test context.
-
-**Opportunity**:
-1. Split the **pure decision** (`parseContractResult` → `{ ok: true, contract }`
-   or `{ ok: false, fallback, rawText, preview }`, with no logging or I/O) from a
-   thin **boundary wrapper** (`parseContract`, unchanged signature) that — only
-   on failure — reports and returns the fallback. Parsing unit tests assert on
-   the pure result and emit nothing.
-2. Report a real fallback at **warning** severity (not error), worded as a
-   handled degradation ("Contract for sprint N wasn't valid JSON — using a
-   generic default contract"), so a genuine occurrence reads as an amber heads-up,
-   not a crash.
-3. In the few tests that exercise the live wrapper, **capture and assert** the
-   warning instead of printing it — turning "this message is expected" into a
-   verified assertion (truncation-proof) rather than console noise. Apply the
-   same capture-and-assert approach to the end-to-end harness test (intercept the
-   run's output and verify the warning is present), or move failure-path
-   verification — the warning *and* the diagnostic file — into a fast focused
-   wrapper test so the end-to-end test stays on the happy path. Do **not** use a
-   global quiet log level to hide the message: that suppresses everything the run
-   emits and verifies nothing.
-4. *(Diagnostic-file placement is owned by OPP-23, which creates the per-session
-   folders. OPP-25 ships independently and does not depend on OPP-23 — it leaves
-   the existing flat-`.adhd/logs/` diagnostic write untouched.)*
-
-- **Pros**: a green suite is genuinely silent; real failures stay visible and
-  clearly labelled; the parser gets a *stronger* test (structured outcome, not a
-  side effect); aligns with the project's pure-logic-vs-side-effects ethos.
-- **Cons**: touches one function's seam and a handful of tests.
-- **Effort**: Small.
-
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -555,28 +409,17 @@ These items use the existing skills system and contract negotiation prompts. The
 
 ### Phase 2: Extend — New Capabilities
 
-**Goal**: Near-term fixes and new capabilities, building on the Part 1 foundations.
+Items 2.1–2.7 shipped in this phase (§1.32–§1.38). Two items remain:
 
 | # | Feature | Source | Effort | Justification |
 |---|---------|--------|--------|---------------|
-| 2.1 | **Decouple contract-parse detection from reporting** | OPP-25 | S | Split the pure parse decision from its console/diagnostic reporting so the suite stops emitting false-alarm "Failed to parse contract JSON" lines, and real fallbacks log as a clearly-worded warning, not an error. Trust fix; tiny and contained. |
-| 2.2 | **Per-session log subdirectories** | OPP-23 | S | Group each run's logs under `.adhd/logs/<session-stamp>/`; resume writes a new sibling dir. Clean per-run forensics; co-locates the parse-error diagnostic. |
-| 2.3 | **Complete the `--commit-adhd` metadata set** | OPP-15 | S | Add `.adhd/usage.json` + a final end-of-run metadata commit so the full cost record and completed checkpoint are preserved. Closes a data-loss gap; prerequisite for run comparison (2.6). |
-| 2.4 | **Default topic-branch creation** | OPP-24 | M | Auto-create `adhd/<slug>-<timestamp>` by default; `--allow-main` redefined to "stay on current branch". Aligns behaviour with the documented topic-branch policy and removes the commit-to-main footgun. Behavioural breaking change (`feat!`). |
-| 2.5 | **Scout agent (semantic codebase priming)** | OPP-04 (Option C) | M | A pre-Generator agent that surfaces conventions/idioms/patterns the deterministic codebase map (§1.26) can't. Layers on top of the map; skipped for greenfield. |
-| 2.6 | **Run comparison** | OPP-12 | M | `adhd compare` for evidence-based tuning. Data already exists in `.adhd/usage.json` and `progress.json`. Also produces the evidence that scopes the Reviewer (2.7). |
-| 2.7 | **Code review agent** | OPP-06 | L | Separate read-only Reviewer for code craft — the natural completion of the generate/evaluate split. Sequenced after run analytics (2.6) so its scope is set by evidence, not guesswork. |
-| 2.8 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23); must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) addresses most retry causes. |
-| 2.9 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Valuable once Content Stream + community skills create an ecosystem worth managing. |
+| 2.1 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23); must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) and the Reviewer (§1.38) address most retry quality causes. |
+| 2.2 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Valuable once Content Stream + community skills create an ecosystem worth managing. The Reviewer (§1.38) is already wired to receive policy skills via the existing routing — the CLI makes installing them easier. |
 
-**Rationale**: The phase leads with two small, safe, high-trust items — the
-contract-parse reporting fix (2.1) and per-session logs (2.2) — then the
-`--commit-adhd` completion (2.3) that unblocks run comparison. The default
-topic-branch change (2.4) aligns behaviour with the documented policy. Scout
-(2.5) extends the already-validated codebase-priming idea (§1.26). Run analytics
-(2.6) is deliberately placed before the code-review agent (2.7): it is cheaper
-and produces the evidence that determines how much Reviewer to build. The
-remaining items (2.8–2.9) are retained at lower priority.
+**Rationale**: The high-impact Phase 2 items (trust, observability, workflow
+safety, Scout, run comparison, Reviewer) are complete. The remaining two are
+lower-priority quality-of-life improvements that benefit from the now-established
+ecosystem (run analytics, policy skills, Reviewer).
 
 ---
 
@@ -587,7 +430,7 @@ remaining items (2.8–2.9) are retained at lower priority.
 | # | Feature | Source | Effort | Justification & Prerequisite |
 |---|---------|--------|--------|------------------------------|
 | 3.1 | **Parallel sprint execution** | OPP-11 | L | Independent sprints in separate git worktrees, merged at completion. **Prerequisite**: Sprint dependency graph (Planner must declare dependencies) and evidence that sequential execution is too slow for target use cases. |
-| 3.2 | **Web dashboard** | OPP-12 | L | Visual UI over `.adhd/` data — run history, cost trends, sprint timelines. **Prerequisite**: CLI workflow stabilized; data formats frozen. |
+| 3.2 | **Web dashboard** | — | L | Visual UI over `.adhd/` data — run history (§1.37), cost trends, sprint timelines. **Prerequisite**: CLI workflow stabilized; data formats frozen. |
 
 ---
 
@@ -596,20 +439,13 @@ remaining items (2.8–2.9) are retained at lower priority.
 | Stream / Phase | # | Feature | Source | Notes |
 |---|---|---|---|---|
 | **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills + project-local template |
-| | CS-2 | Codebase context guidance | OPP-04 (B) | User guide; lead content item |
+| | CS-2 | Codebase context guidance | — | User guide for project-local skill authoring |
 | --- | --- | --- | --- | --- |
-| **Phase 2**<br/>*Extend (MEDIUM)* | 2.1 | Decouple contract-parse detection from reporting | OPP-25 | Trust fix — silence false-alarm logs |
-| | 2.2 | Per-session log subdirectories | OPP-23 | One folder per run; resume = sibling |
-| | 2.3 | Complete the `--commit-adhd` metadata set | OPP-15 | Preserve usage.json + final checkpoint |
-| | 2.4 | Default topic-branch creation | OPP-24 | `feat!`; `--allow-main` = stay put |
-| | 2.5 | Scout agent (semantic priming) | OPP-04 (C) | Complements the §1.26 map |
-| | 2.6 | Run comparison | OPP-12 | Evidence-based tuning; scopes 2.7 |
-| | 2.7 | Code review agent | OPP-06 | After analytics; not contingent |
-| | 2.8 | Adaptive retry (model escalation) | OPP-10 | Opt-in `--escalate` |
-| | 2.9 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
+| **Phase 2**<br/>*Extend (MEDIUM)*<br/>2.1–2.7 shipped (§1.32–§1.38) | 2.1 | Adaptive retry (model escalation) | OPP-10 | Opt-in `--escalate` |
+| | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
 | --- | --- | --- | --- | --- |
 | **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
-| | 3.2 | Web dashboard | OPP-12 | Requires stabilised CLI + data formats |
+| | 3.2 | Web dashboard | — | Requires stabilised CLI + data formats |
 
 ---
 
@@ -619,6 +455,6 @@ The harness's highest-leverage extension point is the **skills system**. It's a 
 
 The second insight is that **BDD scenarios are the natural regression mechanism**. They already exist as structured JSON in sprint contracts. They represent behavioral invariants, not implementation details. Accumulating them across sprints (§1.14) turns the contract system from a per-sprint checklist into a growing behavioral specification of the entire system — and pairs naturally with progressive spec refinement (§1.19) because the accumulated BDD criteria provide the stable contract floor that persists even as the spec evolves above them.
 
-The third insight: **dogfooding exposes operational issues that unit tests and design reviews miss**. Running the harness against its own codebase surfaced phantom sprints from regex false positives, log file overwrites destroying forensic evidence, and silent fallbacks masking contract parse failures — now hardened in §1.3, §1.9, §1.11, and §1.13. Running it against a separate 19-sprint project (CRIST) surfaced the systemic scope-inflation failure mode that the surface and contract-ceiling suite (§1.20–§1.22) now addresses. And a full-run cost analysis — itself a dogfooding finding — showed that run cost is dominated by cache-read traffic rather than code generation, which drove the cost-and-efficiency capabilities now folded into §1.25–§1.31. Neither set of gaps was visible from unit tests or design reviews alone.
+The third insight: **dogfooding exposes operational issues that unit tests and design reviews miss**. Running the harness against its own codebase surfaced phantom sprints from regex false positives, log file overwrites destroying forensic evidence, and silent fallbacks masking contract parse failures — now hardened in §1.3, §1.9, §1.11, and §1.13. Running it against a separate 19-sprint project (CRIST) surfaced the systemic scope-inflation failure mode that the surface and contract-ceiling suite (§1.20–§1.22) now addresses. A full-run cost analysis showed that run cost is dominated by cache-read traffic rather than code generation, driving the cost-and-efficiency capabilities in §1.25–§1.31. Fifteen Phase 2 sprints of self-development then added trust and observability improvements (§1.32–§1.38): contract-parse separation, per-session log subdirectories, the complete `--commit-adhd` metadata set, default topic-branch creation, the Scout agent, run history and comparison, and the Reviewer agent. Neither set of gaps was visible from unit tests or design reviews alone.
 
 The fourth insight: **the discriminator must never rank below the producer**. §1.1's adversarial asymmetry — the Evaluator can only report, not fix — has a model-tier corollary, now built into the harness as a startup invariant (§1.23): if the Evaluator's *capability* falls below the Generator's, it approves code it cannot out-reason and the gate silently fails open. This makes Evaluator tier ≥ Generator tier a design invariant rather than a tuning preference, and it identifies the judge as the cheapest place to spend capability — a Generator's mistakes are caught and retried, an Evaluator's are not.

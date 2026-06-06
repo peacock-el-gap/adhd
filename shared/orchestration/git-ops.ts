@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { gitDir } from "../files.ts";
+import { gitDir, USAGE_FILE } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { log, logError } from "../logger.ts";
 import { notify } from "../notifications.ts";
@@ -128,11 +128,49 @@ export function commitAdhdArtifacts(workDir: string, gDir: string, sprint: numbe
 }
 
 /**
+ * The canonical set of .adhd/ paths staged by every metadata commit.
+ * Shared by both the per-sprint and end-of-run commit helpers so the path set
+ * is defined once and never duplicated.
+ */
+const ADHD_METADATA_PATHS = [
+  ".adhd/contracts/",
+  ".adhd/feedback/",
+  ".adhd/progress.json",
+  ".adhd/spec.md",
+  USAGE_FILE,
+] as const;
+
+/**
+ * Stage all canonical .adhd/ metadata paths (plus optionally .adhd/logs/) and
+ * return true if anything ended up staged, false if the working tree is clean.
+ *
+ * This is the shared staging primitive called by both commitAdhdMetadata and
+ * commitFinalMetadata — the path set and add loop live here and nowhere else.
+ */
+function stageAdhdMetadataPaths(gDir: string, includeLogs: boolean): boolean {
+  const pathsToStage: string[] = [...ADHD_METADATA_PATHS];
+  if (includeLogs) {
+    pathsToStage.push(".adhd/logs/");
+  }
+
+  for (const p of pathsToStage) {
+    try {
+      execSync(`git add ${p}`, { cwd: gDir, stdio: "pipe" });
+    } catch {
+      // Path may not exist yet — skip silently
+    }
+  }
+
+  const stagedResult = execSync("git diff --cached --name-only", { cwd: gDir, encoding: "utf-8" });
+  return (stagedResult ?? "").toString().trim().length > 0;
+}
+
+/**
  * Commit .adhd/ metadata after a sprint passes evaluation.
  * Only invoked when --commit-adhd or --commit-adhd-logs is set.
  *
- * Commits .adhd/contracts/, .adhd/feedback/, .adhd/progress.json, and .adhd/spec.md.
- * When includeLogs is true, also commits .adhd/logs/.
+ * Commits .adhd/contracts/, .adhd/feedback/, .adhd/progress.json, .adhd/spec.md,
+ * and .adhd/usage.json. When includeLogs is true, also commits .adhd/logs/.
  *
  * @param workDir - Project root directory
  * @param gDir - Git working directory
@@ -144,29 +182,45 @@ export function commitAdhdMetadata(workDir: string, gDir: string, sprint: number
     const adhdPath = join(workDir, ".adhd");
     if (!existsSync(adhdPath)) return;
 
-    // Stage specific metadata paths
-    const pathsToStage = [".adhd/contracts/", ".adhd/feedback/", ".adhd/progress.json", ".adhd/spec.md"];
-    if (includeLogs) {
-      pathsToStage.push(".adhd/logs/");
-    }
-
-    for (const p of pathsToStage) {
-      try {
-        execSync(`git add ${p}`, { cwd: gDir, stdio: "pipe" });
-      } catch {
-        // Path may not exist yet — skip silently
-      }
-    }
-
-    // Check if there's anything staged
-    const stagedResult = execSync("git diff --cached --name-only", { cwd: gDir, encoding: "utf-8" });
-    const staged = (stagedResult ?? "").toString().trim();
-    if (!staged) return;
+    if (!stageAdhdMetadataPaths(gDir, includeLogs)) return;
 
     execSync(`git commit -m "[adhd] Sprint ${sprint}: contract + metadata"`, { cwd: gDir, stdio: "pipe" });
     log("HARNESS", `Committed .adhd/ metadata for sprint ${sprint}${includeLogs ? " (including logs)" : ""}`);
   } catch (err) {
     logError("HARNESS", `Failed to commit .adhd/ metadata: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Commit .adhd/ metadata after the entire run completes (final end-of-run checkpoint).
+ * Only invoked when --commit-adhd or --commit-adhd-logs is set.
+ *
+ * Captures the terminal progress.json (status complete/failed, docs-generated flag)
+ * and the final usage.json alongside the standard metadata paths. Uses a distinct
+ * "[adhd] Run complete: final metadata" commit message so the end-of-run checkpoint
+ * is clearly distinguishable from per-sprint metadata commits.
+ *
+ * No-op when nothing has changed since the last commit (avoids empty commits).
+ * Non-fatal: errors are caught and logged at warning severity.
+ *
+ * @param workDir - Project root directory
+ * @param gDir - Git working directory
+ * @param includeLogs - Whether to include .adhd/logs/ (from --commit-adhd-logs)
+ */
+export function commitFinalMetadata(workDir: string, gDir: string, includeLogs: boolean): void {
+  try {
+    const adhdPath = join(workDir, ".adhd");
+    if (!existsSync(adhdPath)) return;
+
+    if (!stageAdhdMetadataPaths(gDir, includeLogs)) return;
+
+    execSync('git commit -m "[adhd] Run complete: final metadata"', { cwd: gDir, stdio: "pipe" });
+    log("HARNESS", `Committed final .adhd/ metadata${includeLogs ? " (including logs)" : ""}`);
+  } catch (err) {
+    log(
+      "HARNESS",
+      `WARNING: Failed to commit final .adhd/ metadata: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -304,6 +358,67 @@ export function assertBranchAllowed(config: ResolvedConfig): void {
       `Refusing to run on '${branch}': ADHD commits to the checked-out branch. ` +
         `Create a topic branch (git switch -c dev/<name>) or pass --allow-main to override.`,
     );
+  }
+}
+
+/** Options for ensureTopicBranch. */
+export interface EnsureTopicBranchOptions {
+  /** The fully-formed branch name (e.g. `"adhd/my-task-20260606-143045"`). */
+  branchName: string;
+  /** The git working directory (the directory that contains `.git`). */
+  gitDir: string;
+  /**
+   * Injected subprocess runner — defaults to `execSync`.
+   * Tests inject a fake so the suite never touches a real git repository.
+   */
+  exec?: ExecLike;
+}
+
+/**
+ * Create and switch to a topic branch, or check out an existing one.
+ *
+ * - **New branch**: runs `git checkout -b <name>` from the current HEAD.
+ * - **Existing branch**: runs `git checkout <name>`, preserving its history.
+ *
+ * Encapsulates the branch-name derivation / creation / checkout /
+ * collision-handling logic in one place so no git command sequences are
+ * duplicated elsewhere.
+ *
+ * On any git failure this function throws a meaningful `Error` — never
+ * swallows or downgrades to a warning — because a pre-flight branch failure
+ * must halt the run before any sprint code executes.
+ */
+export function ensureTopicBranch(opts: EnsureTopicBranchOptions): void {
+  const exec = opts.exec ?? execSync;
+  const { branchName, gitDir: gDir } = opts;
+
+  // Determine whether the branch already exists locally.
+  let branchExists: boolean;
+  try {
+    const out = exec(`git branch --list ${JSON.stringify(branchName)}`, {
+      cwd: gDir,
+      encoding: "utf-8",
+    })
+      .toString()
+      .trim();
+    branchExists = out.length > 0;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Unable to list branches in '${gDir}': ${msg}`);
+  }
+
+  try {
+    if (branchExists) {
+      // Branch exists — check it out to reuse; existing commits are preserved.
+      exec(`git checkout ${JSON.stringify(branchName)}`, { cwd: gDir, stdio: "pipe" });
+    } else {
+      // Branch does not exist — create from HEAD and switch to it.
+      exec(`git checkout -b ${JSON.stringify(branchName)}`, { cwd: gDir, stdio: "pipe" });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const action = branchExists ? "check out existing" : "create";
+    throw new Error(`Failed to ${action} topic branch '${branchName}': ${msg}`);
   }
 }
 

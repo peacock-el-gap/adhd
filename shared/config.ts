@@ -8,6 +8,7 @@ import {
   DEFAULT_MODEL_EVALUATOR,
   DEFAULT_MODEL_GENERATOR,
   DEFAULT_MODEL_PLANNER,
+  DEFAULT_MODEL_REVIEWER,
   resolveAgentModel,
 } from "./models.ts";
 import type { HarnessConfig, LogLevel, ResolvedConfig } from "./types.ts";
@@ -88,6 +89,7 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--model-generator": "Model override for the Generator agent (default tier: Sonnet)",
   "--model-evaluator": "Model override for the Evaluator agent (default tier: Opus)",
   "--model-documenter": "Model override for the Documenter agent (default tier: Haiku)",
+  "--model-reviewer": "Model override for the Reviewer agent (default tier: Opus; env: MODEL_REVIEWER)",
   "--model-contract":
     "Single model for all contract-negotiation calls — proposal, review, and narrowing (env: MODEL_CONTRACT)",
   "--branch": "Create a git branch before the sprint loop",
@@ -105,7 +107,7 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--commit-adhd": "Commit .adhd/ metadata (contracts, feedback, progress) after each sprint",
   "--commit-adhd-logs": "Commit .adhd/ metadata + logs after each sprint (implies --commit-adhd)",
   "--allow-main":
-    "Allow running on the default branch (main/master); by default the harness refuses, since it commits to the checked-out branch",
+    "Skip auto-branching and run on the current branch (whatever it is). By default the harness creates a topic branch before the sprint loop so commits never land on main.",
   "--planner-max-turns":
     "Maximum turns for the Planner agent (env: PLANNER_MAX_TURNS; default: 50); invalid values degrade to default",
   "--generator-max-turns":
@@ -120,6 +122,10 @@ export const CLI_FLAG_HELP: Record<string, string> = {
     'JSON object of MCP server configs to inject into coding agents, e.g. \'{"my-server":{"command":"node","args":["server.js"]}}\' (env: MCP_SERVERS). Ignored when --disable-mcp is set.',
   "--sprint-token-budget":
     "Optional per-sprint token ceiling (input+output tokens). Soft warn at 80%; pause (interactive) or log (non-interactive) at 100% (env: SPRINT_TOKEN_BUDGET). Inert when not set.",
+  "--scout":
+    "Run a read-only Scout pass before the sprint loop to surface codebase conventions for the Generator. Skipped in greenfield mode (env: ADHD_SCOUT).",
+  "--review":
+    "Run a read-only Reviewer agent after each passing sprint to produce a code-craft report. Advisory only — does not affect pass/fail (env: ADHD_REVIEW).",
 };
 
 /**
@@ -177,6 +183,7 @@ interface ParsedCli {
   noTdd: boolean;
   noDocs: boolean;
   modelDocumenter?: string;
+  modelReviewer?: string;
   modelContract?: string;
   lintGate?: boolean;
   testGate?: boolean;
@@ -193,6 +200,8 @@ interface ParsedCli {
   disableMcp?: boolean;
   mcpServers?: string;
   sprintTokenBudget?: number;
+  useScout?: boolean;
+  useReview?: boolean;
   help?: boolean;
 }
 
@@ -236,6 +245,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "no-tdd": { type: "boolean", default: false },
       "no-docs": { type: "boolean", default: false },
       "model-documenter": { type: "string" },
+      "model-reviewer": { type: "string" },
       "model-contract": { type: "string" },
       "lint-gate": { type: "boolean", default: false },
       "test-gate": { type: "boolean", default: false },
@@ -252,6 +262,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "disable-mcp": { type: "boolean", default: false },
       "mcp-servers": { type: "string" },
       "sprint-token-budget": { type: "string" },
+      scout: { type: "boolean", default: false },
+      review: { type: "boolean", default: false },
     },
     allowPositionals: true,
     strict: true,
@@ -288,6 +300,7 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     noTdd: values["no-tdd"] as boolean,
     noDocs: values["no-docs"] as boolean,
     modelDocumenter: values["model-documenter"] as string | undefined,
+    modelReviewer: values["model-reviewer"] as string | undefined,
     modelContract: values["model-contract"] as string | undefined,
     lintGate: values["lint-gate"] as boolean,
     testGate: values["test-gate"] as boolean,
@@ -312,6 +325,8 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     sprintTokenBudget: values["sprint-token-budget"]
       ? parseInt(values["sprint-token-budget"] as string, 10)
       : undefined,
+    useScout: values.scout as boolean,
+    useReview: values.review as boolean,
     help: values.help as boolean,
   };
 }
@@ -523,6 +538,7 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
   const modelGenerator = blankToUndefined(cli.modelGenerator ?? process.env.MODEL_GENERATOR);
   const modelEvaluator = blankToUndefined(cli.modelEvaluator ?? process.env.MODEL_EVALUATOR);
   const modelDocumenter = blankToUndefined(cli.modelDocumenter ?? process.env.MODEL_DOCUMENTER);
+  const modelReviewer = blankToUndefined(cli.modelReviewer ?? process.env.MODEL_REVIEWER);
   // Optional single model for the whole contract negotiation (proposal, review,
   // narrowing). When unset, negotiation keeps the inherited Generator/Evaluator split.
   const modelContract = blankToUndefined(cli.modelContract ?? process.env.MODEL_CONTRACT);
@@ -558,6 +574,7 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     resolvedModelGenerator: resolveAgentModel(modelGenerator, userUniformModel, DEFAULT_MODEL_GENERATOR),
     resolvedModelEvaluator: resolveAgentModel(modelEvaluator, userUniformModel, DEFAULT_MODEL_EVALUATOR),
     resolvedModelDocumenter: resolveAgentModel(modelDocumenter, userUniformModel, DEFAULT_MODEL_DOCUMENTER),
+    resolvedModelReviewer: resolveAgentModel(modelReviewer, userUniformModel, DEFAULT_MODEL_REVIEWER),
     // Per-agent resolved turn caps. Invalid values degrade to defaults; never throw.
     resolvedMaxTurnsPlanner,
     resolvedMaxTurnsGenerator,
@@ -575,6 +592,7 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     modelGenerator,
     modelEvaluator,
     modelDocumenter,
+    modelReviewer,
     modelContract,
     branch: cli.branch,
     sprint: cli.sprint,
@@ -586,6 +604,8 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     addMcpServers,
     uniformModelOverride: userUniformModel,
     sprintTokenBudget,
+    useScout: (cli.useScout ?? false) || isTruthy(process.env.ADHD_SCOUT) || false,
+    useReview: (cli.useReview ?? false) || isTruthy(process.env.ADHD_REVIEW) || false,
   };
 
   // Validate

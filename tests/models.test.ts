@@ -108,8 +108,9 @@ describe("describeAgentModels", () => {
       resolvedModelGenerator: MODEL_SONNET,
       resolvedModelEvaluator: MODEL_OPUS,
       resolvedModelDocumenter: MODEL_HAIKU,
+      resolvedModelReviewer: MODEL_OPUS,
     });
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(5);
     expect(lines.some((l) => l.includes("Documenter") && l.includes(MODEL_HAIKU))).toBe(true);
     expect(lines.some((l) => l.includes("Generator") && l.includes(MODEL_SONNET))).toBe(true);
   });

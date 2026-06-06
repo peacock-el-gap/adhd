@@ -1,4 +1,5 @@
 import type { AgentIdentity } from "../agent-identity.ts";
+import type { ReviewReport } from "../review-report.ts";
 import type { AgentSkills, AllAgentSkills } from "../skills.ts";
 import type { Span, Tracer } from "../tracing.ts";
 import type {
@@ -95,6 +96,34 @@ export interface EnsureDocumenterCommitOptions {
 
 // --- AgentRunners: dependency-injected interface for SDK-specific agent implementations ---
 
+export interface RunScoutOptions {
+  config: ResolvedConfig;
+  identity: AgentIdentity;
+}
+
+export interface ScoutResult {
+  /** Bounded semantic digest of codebase conventions, or undefined on failure. */
+  digest?: string;
+  /** SDK result for cost recording; undefined when the Scout was skipped or failed. */
+  sdkResult?: SDKResultFields;
+}
+
+export interface RunReviewerOptions {
+  config: ResolvedConfig;
+  identity: AgentIdentity;
+  /** Sprint number currently under review. */
+  sprint: number;
+  /** Optional policy skills injected into the Reviewer system prompt. */
+  skills?: AgentSkills;
+}
+
+export interface ReviewerResult {
+  /** Structured review report on code craft; undefined on failure or skip. */
+  report?: ReviewReport;
+  /** SDK result for cost recording; undefined when the Reviewer was skipped or failed. */
+  sdkResult?: SDKResultFields;
+}
+
 export interface AgentRunners {
   initTracing(config: ResolvedConfig): Tracer;
   runPlanner(opts: RunPlannerOptions): Promise<PlannerResult>;
@@ -109,6 +138,20 @@ export interface AgentRunners {
   negotiateContract(opts: NegotiateContractOptions): Promise<SprintContract>;
   ensureGeneratorCommit(opts: EnsureCommitOptions): Promise<CommitSource>;
   ensureDocumenterCommit(opts: EnsureDocumenterCommitOptions): Promise<CommitSource>;
+  /**
+   * Optional Scout agent. Runs a read-only pre-Generator pass to produce a
+   * bounded semantic digest of codebase conventions. Absent in harnesses that
+   * do not support the Scout (treated as a no-op by the orchestrator).
+   * Gated behind --scout; skipped in greenfield mode.
+   */
+  runScout?: (opts: RunScoutOptions) => Promise<ScoutResult>;
+  /**
+   * Optional Reviewer agent. Runs a read-only code-craft review after each
+   * passing sprint. Absent in harnesses that do not support the Reviewer
+   * (treated as a no-op by the orchestrator).
+   * Gated behind --review; non-fatal and advisory only.
+   */
+  runReviewer?: (opts: RunReviewerOptions) => Promise<ReviewerResult>;
 }
 
 export interface NegotiateContractOptions {
@@ -142,6 +185,12 @@ export interface NegotiateContractOptions {
    * non-coding roles like contract negotiation).
    */
   addMcpServers?: Record<string, Record<string, unknown>>;
+  /**
+   * Session-start stamp for per-run log subdirectory routing.
+   * When set, the contract-negotiation conversation log is written under
+   * .adhd/logs/<sessionDir>/ rather than directly in .adhd/logs/.
+   */
+  sessionDir?: string;
 }
 
 /** Convenience type for the planner function signature, used by gates and spec-refinement. */

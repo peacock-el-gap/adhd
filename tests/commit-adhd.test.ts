@@ -85,4 +85,39 @@ describe("commitAdhdMetadata", () => {
     // No new commit should be created
     expect(afterSha).toBe(beforeSha);
   });
+
+  test("includes usage.json in the metadata commit when it has changed", () => {
+    writeFileSync(join(adhdDir, "contracts", "sprint-3.json"), '{"test": true}');
+    writeFileSync(join(adhdDir, "progress.json"), '{"status": "building"}');
+    writeFileSync(join(adhdDir, "spec.md"), "# Spec");
+    writeFileSync(join(adhdDir, "usage.json"), '{"sessions": [], "runTotalCostUsd": 0}');
+
+    commitAdhdMetadata(tmpDir, tmpDir, 3, false);
+
+    const committedFiles = execSync("git diff-tree --no-commit-id --name-only -r HEAD", {
+      cwd: tmpDir,
+      encoding: "utf-8",
+    }).trim();
+    expect(committedFiles).toContain(".adhd/usage.json");
+    expect(committedFiles).toContain(".adhd/contracts/sprint-3.json");
+    expect(committedFiles).toContain(".adhd/progress.json");
+    expect(committedFiles).toContain(".adhd/spec.md");
+  });
+
+  test("no empty commit when usage.json and all other staged paths are already up to date", () => {
+    // Commit all metadata files first so they are already up to date
+    writeFileSync(join(adhdDir, "contracts", "sprint-4.json"), '{"test": true}');
+    writeFileSync(join(adhdDir, "progress.json"), '{"status": "complete"}');
+    writeFileSync(join(adhdDir, "spec.md"), "# Spec");
+    writeFileSync(join(adhdDir, "usage.json"), '{"sessions": [], "runTotalCostUsd": 0.01}');
+    execSync("git add .adhd/", { cwd: tmpDir, stdio: "pipe" });
+    execSync("git commit -m 'pre-existing metadata'", { cwd: tmpDir, stdio: "pipe" });
+
+    const beforeSha = execSync("git rev-parse HEAD", { cwd: tmpDir, encoding: "utf-8" }).trim();
+    // Nothing has changed — commitAdhdMetadata should be a no-op
+    commitAdhdMetadata(tmpDir, tmpDir, 4, false);
+    const afterSha = execSync("git rev-parse HEAD", { cwd: tmpDir, encoding: "utf-8" }).trim();
+
+    expect(afterSha).toBe(beforeSha);
+  });
 });

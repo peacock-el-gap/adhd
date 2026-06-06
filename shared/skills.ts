@@ -4,7 +4,7 @@ import { log } from "./logger.ts";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type AgentRole = "planner" | "generator" | "evaluator" | "documenter";
+export type AgentRole = "planner" | "generator" | "evaluator" | "documenter" | "reviewer";
 export type SkillTier = "inject" | "reference" | "exclude";
 export type SkillSource = "harness" | "user" | "project-installed" | "project-local";
 
@@ -63,7 +63,7 @@ export function parseSkillYaml(yamlContent: string): SkillManifest {
   let currentAgent: AgentRole | null = null;
   let currentAgentData: { tier?: SkillTier; files?: string[] } = {};
 
-  const agents: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
+  const agents: AgentRole[] = ["planner", "generator", "evaluator", "documenter", "reviewer"];
 
   function flushAgent() {
     if (currentAgent && currentAgentData.tier) {
@@ -181,7 +181,7 @@ export function parseLocalSkill(mdContent: string, filePath: string): ResolvedSk
     name = filename.replace(/\.md$/, "");
   }
 
-  const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
+  const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter", "reviewer"];
   const routing = {} as Record<AgentRole, SkillRouting>;
 
   for (const agent of allAgents) {
@@ -206,7 +206,7 @@ function resolveExternalSkill(skillDir: string, yamlPath: string, source: SkillS
     const yamlContent = readFileSync(yamlPath, "utf-8");
     const manifest = parseSkillYaml(yamlContent);
 
-    const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
+    const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter", "reviewer"];
     const routing = {} as Record<AgentRole, SkillRouting>;
 
     for (const agent of allAgents) {
@@ -346,7 +346,7 @@ export function resolveSkills(
   }
 
   // Load inject-tier file contents
-  const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter"];
+  const allAgents: AgentRole[] = ["planner", "generator", "evaluator", "documenter", "reviewer"];
   for (const skill of skills) {
     for (const agent of allAgents) {
       const routing = skill.routing[agent];
@@ -422,6 +422,7 @@ export interface AllAgentSkills {
   generator: AgentSkills;
   evaluator: AgentSkills;
   documenter: AgentSkills;
+  reviewer: AgentSkills;
 }
 
 /**
@@ -438,15 +439,17 @@ export function resolveAllAgentSkills(workDir: string, harnessBaseDir: string, f
   const generator = routeSkillsForAgent(resolvedSkills, "generator");
   const evaluator = routeSkillsForAgent(resolvedSkills, "evaluator");
   const documenter = routeSkillsForAgent(resolvedSkills, "documenter");
+  const reviewer = routeSkillsForAgent(resolvedSkills, "reviewer");
 
   warnIfOversized(planner, "planner");
   warnIfOversized(generator, "generator");
   warnIfOversized(evaluator, "evaluator");
   warnIfOversized(documenter, "documenter");
+  warnIfOversized(reviewer, "reviewer");
 
   if (resolvedSkills.length > 0) {
     log("HARNESS", `Skills loaded: ${resolvedSkills.length} (${resolvedSkills.map((s) => s.name).join(", ")})`);
   }
 
-  return { planner, generator, evaluator, documenter };
+  return { planner, generator, evaluator, documenter, reviewer };
 }

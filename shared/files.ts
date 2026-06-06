@@ -12,6 +12,12 @@ export function harnessDir(workDir: string): string {
   return join(workDir, ".adhd");
 }
 
+/**
+ * Well-known artifact path for the cost ledger, relative to the project root.
+ * Used both as a git-staging path and (joined with workDir) as a filesystem path.
+ */
+export const USAGE_FILE = ".adhd/usage.json";
+
 /** Resolve the git working directory. In greenfield mode, code lives under app/. */
 export function gitDir(workDir: string, isGreenfield: boolean): string {
   return isGreenfield ? join(workDir, "app") : workDir;

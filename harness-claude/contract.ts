@@ -2,9 +2,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { makeIdentity } from "../shared/agent-identity.ts";
 import { type ContractLimits, exceedsContractLimits, trimContractToLimits } from "../shared/contract-limits.ts";
+import { parseContractText } from "../shared/contract-parse.ts";
 import { type ConversationLogger, createConversationLog } from "../shared/conversation-logger.ts";
 import { harnessDir } from "../shared/files.ts";
-import { log, logError } from "../shared/logger.ts";
+import { log, logError, logVerbose, logWarn } from "../shared/logger.ts";
 import type { NegotiateContractOptions } from "../shared/orchestration/types.ts";
 import { buildContractReviewPrompt, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
 import { parseReviewEnvelope } from "../shared/review-envelope.ts";
@@ -48,7 +49,12 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
     timestamp: negotiationIdentity.timestamp,
   });
 
-  const convLog = createConversationLog(workDir, negotiationIdentity, { model: proposalModel, startTime });
+  const convLog = createConversationLog(
+    workDir,
+    negotiationIdentity,
+    { model: proposalModel, startTime },
+    opts.sessionDir,
+  );
 
   const proposalResult = await runAgent({
     identity: proposalIdentity,
@@ -95,7 +101,7 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
   let parsed: SprintContract;
   if (reviewEnvelope.verdict === "approved") {
     // Reviewer accepted the proposal unchanged — use the proposal text.
-    parsed = parseContract(proposalText, sprintNumber, workDir);
+    parsed = parseContract(proposalText, sprintNumber, workDir, opts.sessionDir);
   } else if (reviewEnvelope.contract !== null) {
     // Reviewer returned a structured revised contract — use it directly.
     parsed = { ...reviewEnvelope.contract, sprintNumber };
@@ -103,7 +109,7 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
   } else {
     // Unrecognised or unparseable revision — fall back to parseContract on
     // the raw review text (legacy bare-contract or malformed output).
-    parsed = parseContract(reviewText, sprintNumber, workDir);
+    parsed = parseContract(reviewText, sprintNumber, workDir, opts.sessionDir);
   }
 
   const finalContract = await enforceContractCeiling(parsed, limits, {
@@ -114,6 +120,7 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
     usage,
     convLog,
     timestamp: negotiationIdentity.timestamp,
+    sessionDir: opts.sessionDir,
   });
 
   await convLog.finalize(Date.now() - startTime.getTime());
@@ -129,6 +136,8 @@ interface CeilingEnforcementContext {
   usage?: UsageTracker;
   convLog: ConversationLogger;
   timestamp: string;
+  /** Session-start stamp for routing the diagnostic file into the run's log subdirectory. */
+  sessionDir?: string;
 }
 
 /** Compact "F<features> C<criteria> S<surfaces>" size summary for logging. */
@@ -226,162 +235,81 @@ async function runNarrowingRound(contract: SprintContract, ctx: CeilingEnforceme
     return narrowed;
   }
   // Fall back to parseContract on the raw text (legacy bare-contract path).
-  return parseContract(result.response, ctx.sprintNumber, ctx.workDir);
+  return parseContract(result.response, ctx.sprintNumber, ctx.workDir, ctx.sessionDir);
 }
 
 /**
- * Extract a balanced {...} block from text that contains the required key.
+ * Re-exports of the extraction helpers from shared/contract-parse.ts.
  *
- * Default: forward scan, returns the first balanced block containing the key.
- *
- * With `{ fromEnd: true }`: scans backward from the last `}`, returning the
- * innermost-to-outermost balanced block. This is the right strategy for
- * verdict-shaped responses where the real JSON is always the trailing balanced
- * block and earlier text may contain JSX/Python braces from Read tool output.
+ * These are preserved here so existing callers and tests that import from
+ * harness-claude/contract.ts continue to work unchanged.
  */
-export function extractBalancedJson(text: string, requiredKey: string, opts?: { fromEnd?: boolean }): string | null {
-  if (opts?.fromEnd) {
-    let end = -1;
-    let depth = 0;
-    for (let i = text.length - 1; i >= 0; i--) {
-      if (text[i] === "}") {
-        if (depth === 0) end = i;
-        depth++;
-      } else if (text[i] === "{") {
-        depth--;
-        if (depth === 0 && end >= 0) {
-          const candidate = text.slice(i, end + 1);
-          if (candidate.includes(`"${requiredKey}"`)) {
-            return candidate;
-          }
-          end = -1;
-        }
-      }
-    }
-    return null;
-  }
-
-  let start = -1;
-  let depth = 0;
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === "{") {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (text[i] === "}") {
-      depth--;
-      if (depth === 0 && start >= 0) {
-        const candidate = text.slice(start, i + 1);
-        if (candidate.includes(`"${requiredKey}"`)) {
-          return candidate;
-        }
-        start = -1;
-      }
-    }
-  }
-  return null;
-}
+export {
+  extractBalancedJson,
+  extractUnclosedFence,
+} from "../shared/contract-parse.ts";
 
 /**
- * If `text` contains an opening ``` ```json ``` or ``` ``` ``` fence with no
- * matching closing fence (truncation case), return everything from the opener
- * to end-of-text. Returns null if fences are balanced or no opener exists.
+ * Parse raw LLM text into a SprintContract, handling all side effects.
+ *
+ * Delegates the pure parse decision to {@link parseContractText} from
+ * `shared/contract-parse.ts`. On failure this wrapper:
+ * - Logs a human-readable warning (handled degradation — run continues)
+ * - Optionally writes the full raw text to a diagnostic file
+ *
+ * When `sessionDir` is provided the diagnostic is written under
+ * `.adhd/logs/<sessionDir>/` so it sits alongside that run's conversation
+ * logs. When absent it falls back to the flat `.adhd/logs/` root.
+ *
+ * Returns either the successfully parsed contract or the generic default.
  */
-export function extractUnclosedFence(text: string): string | null {
-  const fenceRegex = /```(?:json)?\s*\n/g;
-  const openers: number[] = [];
-  for (const m of text.matchAll(fenceRegex)) {
-    if (m.index !== undefined) openers.push(m.index + m[0].length);
-  }
-  if (openers.length === 0) return null;
-  // Count all fences (opening or closing) to see if the last opener has a closer
-  const allFences = [...text.matchAll(/```/g)];
-  if (allFences.length % 2 === 0) return null; // balanced
-  const lastOpener = openers[openers.length - 1] ?? 0;
-  return text.slice(lastOpener).trim();
-}
-
-/** Maximum characters to show in the console preview on parse failure. */
-const PARSE_ERROR_PREVIEW_LENGTH = 500;
-
-export function parseContract(text: string, sprintNumber: number, workDir?: string): SprintContract {
-  // Try multiple extraction strategies
-  const candidates: string[] = [];
-  const codeBlocks = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
-  for (const match of codeBlocks.reverse()) {
-    if (match[1]) candidates.push(match[1].trim());
-  }
-  const balancedFromEnd = extractBalancedJson(text, "criteria", { fromEnd: true });
-  if (balancedFromEnd) candidates.push(balancedFromEnd);
-  const balanced = extractBalancedJson(text, "criteria");
-  if (balanced && balanced !== balancedFromEnd) candidates.push(balanced);
-  const unclosed = extractUnclosedFence(text);
-  if (unclosed) candidates.push(unclosed);
-  candidates.push(text.trim());
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate) as SprintContract;
-      if (parsed.criteria && Array.isArray(parsed.criteria)) {
-        parsed.sprintNumber = sprintNumber;
-        // Filter surfaces to the allowed vocabulary; malformed input degrades
-        // gracefully rather than propagating unknown tokens downstream.
-        parsed.surfaces = normalizeSurfaces(parsed.surfaces);
-        return parsed;
-      }
-    } catch {
-      // Try next candidate
-    }
+export function parseContract(
+  text: string,
+  sprintNumber: number,
+  workDir?: string,
+  sessionDir?: string,
+): SprintContract {
+  const result = parseContractText(text, sprintNumber);
+  if (result.ok) {
+    return result.contract;
   }
 
-  // Parse failure — log truncated preview and write diagnostic file
-  const preview =
-    text.length > PARSE_ERROR_PREVIEW_LENGTH
-      ? `${text.slice(0, PARSE_ERROR_PREVIEW_LENGTH)}... (truncated, ${text.length} chars total)`
-      : text;
-  logError(
-    "HARNESS",
-    `Failed to parse contract JSON for sprint ${sprintNumber}, creating default. Raw text preview:\n${preview}`,
-  );
+  // Parse failure — emit an amber warning and write the diagnostic file.
+  // This is a handled degradation, not a crash: the run continues with the
+  // generic default contract, so warning severity is correct here.
+  logWarn("HARNESS", `Contract for sprint ${sprintNumber} wasn't valid JSON — using a generic default contract`);
 
   if (workDir) {
-    writeParseErrorDiagnostic(workDir, sprintNumber, text);
+    writeParseErrorDiagnostic(workDir, sprintNumber, text, sessionDir);
   }
 
-  return {
-    sprintNumber,
-    features: [`Sprint ${sprintNumber} features`],
-    criteria: [
-      {
-        name: "basic_functionality",
-        description: "Core features for this sprint are implemented and working",
-        threshold: 7,
-      },
-      {
-        name: "code_quality",
-        description: "Code is clean, well-structured, and follows best practices",
-        threshold: 7,
-      },
-      {
-        name: "error_handling",
-        description: "Errors are handled gracefully with appropriate user feedback",
-        threshold: 7,
-      },
-    ],
-  };
+  return result.contract;
 }
 
 /**
  * Write the full raw text from a failed contract parse to a diagnostic file.
- * Errors during writing are logged but never mask the original parse failure.
+ *
+ * The file lands under `.adhd/logs/<sessionDir>/` when a session stamp is
+ * provided, or under the flat `.adhd/logs/` root when it is absent. This
+ * keeps the diagnostic co-located with the run's conversation logs.
+ *
+ * I/O failures are caught and logged at warning severity so they never mask
+ * the original parse failure or crash the run.
  */
-async function writeParseErrorDiagnostic(workDir: string, sprintNumber: number, rawText: string): Promise<void> {
+async function writeParseErrorDiagnostic(
+  workDir: string,
+  sprintNumber: number,
+  rawText: string,
+  sessionDir?: string,
+): Promise<void> {
   try {
-    const logsDir = join(harnessDir(workDir), "logs");
-    await mkdir(logsDir, { recursive: true });
-    const diagnosticPath = join(logsDir, `sprint-${sprintNumber}-contract-parse-error.txt`);
+    const logsBase = join(harnessDir(workDir), "logs");
+    const logDir = sessionDir ? join(logsBase, sessionDir) : logsBase;
+    await mkdir(logDir, { recursive: true });
+    const diagnosticPath = join(logDir, `sprint-${sprintNumber}-contract-parse-error.txt`);
     await writeFile(diagnosticPath, rawText, "utf-8");
-    log("HARNESS", `Wrote contract parse error diagnostic to ${diagnosticPath}`);
+    logVerbose("HARNESS", `Wrote contract parse diagnostic to ${diagnosticPath}`);
   } catch (err) {
-    logError("HARNESS", `Failed to write contract parse error diagnostic: ${err}`);
+    logWarn("HARNESS", `Failed to write contract parse diagnostic: ${err}`);
   }
 }

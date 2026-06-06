@@ -7,6 +7,7 @@ import {
   assertBranchAllowed,
   commitAdhdArtifacts,
   currentGitBranch,
+  ensureTopicBranch,
   revertToCheckpoint,
   shouldRefuseOnDefaultBranch,
 } from "../shared/orchestration/git-ops.ts";
@@ -357,6 +358,57 @@ describe("assertBranchAllowed", () => {
       initGitRepo(dir);
       execSync("git branch -M main", { cwd: dir, stdio: "pipe" });
       expect(() => assertBranchAllowed(cfg(dir, { isGreenfield: true }))).not.toThrow();
+    });
+  });
+});
+
+// =====================================================
+// Feature: ensureTopicBranch — collision-reuse & real git
+// =====================================================
+
+describe("ensureTopicBranch (real git)", () => {
+  test("creates a new branch and switches to it", () => {
+    withTmpDir((dir) => {
+      initGitRepo(dir);
+      execSync("git branch -M main", { cwd: dir, stdio: "pipe" });
+
+      ensureTopicBranch({ branchName: "adhd/my-feature-20260606-143045", gitDir: dir });
+
+      const current = execSync("git branch --show-current", { cwd: dir, encoding: "utf-8" }).trim();
+      expect(current).toBe("adhd/my-feature-20260606-143045");
+    });
+  });
+
+  test("reuses an existing branch (collision) rather than failing", () => {
+    withTmpDir((dir) => {
+      initGitRepo(dir);
+      execSync("git branch -M main", { cwd: dir, stdio: "pipe" });
+      // Pre-create the branch
+      execSync("git checkout -b adhd/existing-20260606-000000", { cwd: dir, stdio: "pipe" });
+      // Add a commit on it so we can verify it's preserved
+      writeFileSync(join(dir, "feature.txt"), "work");
+      execSync("git add feature.txt && git commit -m 'feature work'", { cwd: dir, stdio: "pipe" });
+      const branchHead = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf-8" }).trim();
+      // Go back to main
+      execSync("git checkout main", { cwd: dir, stdio: "pipe" });
+
+      // ensureTopicBranch should check out the existing branch without failing
+      ensureTopicBranch({ branchName: "adhd/existing-20260606-000000", gitDir: dir });
+
+      const current = execSync("git branch --show-current", { cwd: dir, encoding: "utf-8" }).trim();
+      expect(current).toBe("adhd/existing-20260606-000000");
+      // Existing commits are preserved
+      const head = execSync("git rev-parse HEAD", { cwd: dir, encoding: "utf-8" }).trim();
+      expect(head).toBe(branchHead);
+    });
+  });
+
+  test("throws a hard error when git is unavailable or repo is invalid", () => {
+    withTmpDir((dir) => {
+      // dir is not a git repo — git branch --list should fail
+      expect(() =>
+        ensureTopicBranch({ branchName: "adhd/task-20260606-000000", gitDir: dir }),
+      ).toThrow();
     });
   });
 });

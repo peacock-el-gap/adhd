@@ -68,6 +68,18 @@ export interface HarnessConfig {
    * CLI: --sprint-token-budget / env: SPRINT_TOKEN_BUDGET
    */
   sprintTokenBudget?: number;
+  /**
+   * When true, run a read-only Scout pass before the sprint loop to produce
+   * a semantic digest of codebase conventions. Skipped in greenfield mode.
+   * CLI: --scout / env: ADHD_SCOUT
+   */
+  useScout?: boolean;
+  /**
+   * When true, run a read-only Reviewer agent after each passing sprint to
+   * produce a code-craft report. Advisory only — does not affect pass/fail.
+   * CLI: --review / env: ADHD_REVIEW
+   */
+  useReview?: boolean;
 }
 
 /** Fully resolved config with all defaults applied. Used internally by the harness. */
@@ -100,6 +112,7 @@ export interface ResolvedConfig {
   resolvedModelGenerator: string;
   resolvedModelEvaluator: string;
   resolvedModelDocumenter: string;
+  resolvedModelReviewer: string;
   // Per-agent resolved turn caps — always a positive integer
   resolvedMaxTurnsPlanner: number;
   resolvedMaxTurnsGenerator: number;
@@ -117,6 +130,7 @@ export interface ResolvedConfig {
   modelGenerator?: string;
   modelEvaluator?: string;
   modelDocumenter?: string;
+  modelReviewer?: string;
   /** Optional single model for ALL contract-negotiation SDK calls (F6). */
   modelContract?: string;
   branch?: string;
@@ -145,11 +159,30 @@ export interface ResolvedConfig {
    */
   uniformModelOverride?: string;
   /**
+   * Session-start timestamp for per-run log subdirectories.
+   * Captured once at the top of a run and threaded through to all agents so
+   * their conversation logs land under .adhd/logs/<sessionDir>/.
+   * Matches the YYYY.MM.DD-HH.MM.SS format from fileTimestamp().
+   */
+  sessionDir?: string;
+  /**
    * Optional per-sprint token budget. When set, the harness warns at 80% and
    * pauses/logs at 100%. Inert (no checks) when absent or zero.
    * Set via --sprint-token-budget / SPRINT_TOKEN_BUDGET.
    */
   sprintTokenBudget?: number;
+  /**
+   * When true, run a read-only Scout pass before the sprint loop to produce
+   * a semantic digest of codebase conventions. Skipped in greenfield mode.
+   * Set via --scout / ADHD_SCOUT.
+   */
+  useScout?: boolean;
+  /**
+   * When true, run a read-only Reviewer agent after each passing sprint to
+   * produce a code-craft report. Advisory only — does not affect pass/fail.
+   * Set via --review / ADHD_REVIEW.
+   */
+  useReview?: boolean;
 }
 
 export interface SprintContract {

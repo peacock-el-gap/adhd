@@ -19,7 +19,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { parseContract } from "../harness-claude/contract.ts";
 import { parseReviewEnvelope } from "../shared/review-envelope.ts";
 import type { SprintContract } from "../shared/types.ts";
@@ -144,7 +144,13 @@ describe("narrowing_round_uses_envelope_parser — parity with old APPROVED guar
     expect(envelope.verdict).toBe("revised");
     expect(envelope.contract).toBeNull();
     // Caller falls back: parseContract(response, sprintNumber) → default contract
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
     const fallback = parseContract(response, 5);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const call = warnSpy.mock.calls[0]?.[0] as string;
+    expect(call).toContain("sprint 5");
+    expect(call).toContain("generic default contract");
+    warnSpy.mockRestore();
     expect(fallback.sprintNumber).toBe(5);
     expect(fallback.criteria).toHaveLength(3); // default criteria
   });

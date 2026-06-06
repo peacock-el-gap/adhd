@@ -54,6 +54,7 @@ Read the codebase in ${isGreenfield ? "the `app/` directory" : "the project root
     logLevel: config.logLevel,
     additionalDirectories: skills?.additionalDirs,
     toolPolicy,
+    sessionDir: config.sessionDir,
     callbacks: {
       onResult: () => log("DOCUMENTER", "Documentation generation complete"),
     },

@@ -1,7 +1,7 @@
-import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { makeIdentity, timedName } from "../agent-identity.ts";
+import { buildTopicBranchName } from "../branch-name.ts";
 import {
   DEFAULT_MAX_TURNS_DOCUMENTER,
   DEFAULT_MAX_TURNS_EVALUATOR,
@@ -23,6 +23,7 @@ import { promptGate } from "../interaction.ts";
 import { fileTimestamp, log, logDebug, logDivider, logError, setDisplayTimezone } from "../logger.ts";
 import { describeAgentCaps, describeAgentModels, evaluatorInvariantWarning } from "../models.ts";
 import { notify } from "../notifications.ts";
+import { readLiveUsage, writeRunRecord } from "../run-history.ts";
 import { resolveAllAgentSkills } from "../skills.ts";
 import { countSprintHeadings } from "../sprint-count.ts";
 import type { Tracer } from "../tracing.ts";
@@ -30,7 +31,7 @@ import type { HarnessProgress, HarnessResult, ResolvedConfig, SprintContract, Sp
 import { createUsageTracker, type UsageTracker } from "../usage.ts";
 import { handleFatalError, UserAbortError, withTransientRetry } from "./error-handling.ts";
 import { specApprovalGate } from "./gates.ts";
-import { assertBranchAllowed, checkDirtyTree, revertToCheckpoint } from "./git-ops.ts";
+import { checkDirtyTree, commitFinalMetadata, ensureTopicBranch, revertToCheckpoint } from "./git-ops.ts";
 import { runSprintAttempts } from "./sprint-attempts.ts";
 import { handleSprintSuccess, runDocumenterPhase } from "./sprint-success.ts";
 import type { AgentRunners, SprintLoopContext } from "./types.ts";
@@ -83,18 +84,14 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
   if (activeGates.length > 0) {
     log("HARNESS", `Active gates: ${activeGates.join(", ")}`);
   }
-
-  // Run-on-main guard: ADHD commits to the checked-out branch, so refuse to run
-  // on the default branch (main/master) unless --allow-main. Throws before any
-  // commit happens, and applies to every non-greenfield path (resume, sprint
-  // selection, and fresh runs alike). Greenfield uses its own app/ repo.
-  assertBranchAllowed(config);
-
-  // Run-on-main guard: ADHD commits to the checked-out branch, so refuse to run
-  // on the default branch (main/master) unless --allow-main. Throws before any
-  // commit happens, and applies to every non-greenfield path (resume, sprint
-  // selection, and fresh runs alike). Greenfield uses its own app/ repo.
-  assertBranchAllowed(config);
+  // Announce Scout pass when enabled (it adds cost, so the banner must be honest).
+  if (config.useScout) {
+    log("HARNESS", `Scout pass: enabled (model: ${config.resolvedModelEvaluator}) — skipped in greenfield mode`);
+  }
+  // Announce Reviewer when enabled (it adds cost per passing sprint, so the banner must be honest).
+  if (config.useReview) {
+    log("HARNESS", `Reviewer: enabled (model: ${config.resolvedModelReviewer}) — runs after each passing sprint`);
+  }
 
   // --- Resume path ---
   if (config.isResume) {
@@ -180,12 +177,34 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
         return { success: true, sprints: [], totalDurationMs: Date.now() - startTime };
       }
 
-      if (config.branch) {
+      // Auto-branch: in existing-project mode, move off main by default before
+      // the sprint loop so all [auto-commit] commits land on a topic branch.
+      // --allow-main skips this entirely (run on whatever the current branch is).
+      // --greenfield uses its own app/ repo — no host-repo branching needed.
+      if (!isGreenfield && !config.allowMain) {
         const gDir = gitDir(config.workDir, isGreenfield);
-        execSync(`git checkout -b ${config.branch}`, { cwd: gDir, stdio: "pipe" });
-        log("HARNESS", `Created branch: ${config.branch}`);
-        progress.branch = config.branch;
+        // Explicit --branch <name> takes precedence over the auto-generated name.
+        const sessionStamp = config.sessionDir ?? fileTimestamp();
+        const branchName = config.branch ?? buildTopicBranchName(config.userPrompt, sessionStamp);
+        // ensureTopicBranch creates the branch or reuses an existing one.
+        // On git failure it throws a hard Error — halts before the sprint loop.
+        ensureTopicBranch({ branchName, gitDir: gDir });
+        log("HARNESS", `Topic branch: ${branchName}`);
+        progress.branch = branchName;
         await writeProgress(config.workDir, progress);
+      }
+
+      // Scout pass: read-only pre-Generator codebase analysis.
+      // Skipped in greenfield (empty codebase) and when --scout flag is absent.
+      if (config.useScout && !isGreenfield && agents.runScout) {
+        logDivider();
+        log("HARNESS", "PHASE 1b: SCOUT (codebase analysis)");
+        logDivider();
+        const scoutIdentity = makeIdentity({ role: "scout" });
+        const scoutResult = await agents.runScout({ config, identity: scoutIdentity });
+        if (scoutResult.sdkResult) {
+          usage.recordStage("scout", config.resolvedModelEvaluator, scoutResult.sdkResult);
+        }
       }
 
       // Count sprints from the (possibly edited) spec
@@ -276,6 +295,23 @@ async function resumeHarness(
         const totalDuration = Date.now() - startTime;
         usage.printSummary();
         await usage.save();
+
+        // Preserve run history after docs-only resume completes.
+        if (config.sessionDir) {
+          try {
+            const savedUsage = readLiveUsage(config.workDir);
+            await writeRunRecord(config.workDir, config.sessionDir, savedUsage, progress);
+          } catch {
+            // Non-fatal.
+          }
+        }
+
+        // Final end-of-run metadata commit after docs-only resume
+        if (config.commitAdhd) {
+          const gDir = gitDir(config.workDir, isGreenfield);
+          commitFinalMetadata(config.workDir, gDir, config.commitAdhdLogs);
+        }
+
         harnessSpan.end();
         return { success: true, sprints: results, totalDurationMs: totalDuration };
       });
@@ -307,18 +343,22 @@ async function resumeHarness(
   // Guards against dry-run runs that persisted specApproved without a sprint count, and picks up manual spec edits.
   progress.totalSprints = Math.min(countSprintHeadings(spec) || config.maxSprints, config.maxSprints);
 
-  // Resume branch check — warn if HEAD is on a different branch
-  if (progress.branch) {
-    const gDir = gitDir(config.workDir, isGreenfield);
-    try {
-      const currentBranch = execSync("git branch --show-current", { cwd: gDir, encoding: "utf-8" }).trim();
-      if (currentBranch !== progress.branch) {
-        log("HARNESS", `Warning: previous run used branch "${progress.branch}" but HEAD is on "${currentBranch}".`);
-        log("HARNESS", `Consider: git checkout ${progress.branch}`);
-      }
-    } catch {
-      // Not a git repo — skip
+  // Branch handling on resume: reuse the branch recorded in progress.json.
+  // --allow-main skips this entirely (run on whatever the current branch is).
+  // --greenfield uses its own app/ repo — no host-repo branching needed.
+  if (!isGreenfield && !config.allowMain) {
+    if (!progress.branch) {
+      // No branch was recorded — this progress file predates auto-branching.
+      // A clear, actionable error is better than silently generating a fresh branch.
+      throw new Error(
+        "Cannot resume: no branch was recorded in progress.json. " +
+          "This run may have been started before auto-branching was introduced. " +
+          "Pass --allow-main to resume on the current branch instead.",
+      );
     }
+    const gDir = gitDir(config.workDir, isGreenfield);
+    ensureTopicBranch({ branchName: progress.branch, gitDir: gDir });
+    log("HARNESS", `Resuming on branch: ${progress.branch}`);
   }
 
   // Restore prior sprint results
@@ -504,6 +544,7 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
                 maxCriteria: config.maxCriteria,
                 maxSurfaces: config.maxSurfaces,
                 modelContract: config.modelContract,
+                sessionDir: config.sessionDir,
               }),
             "contract negotiation",
           ),
@@ -632,6 +673,25 @@ async function runSprintLoop(ctx: SprintLoopContext): Promise<HarnessResult> {
     await usage.save();
   } catch {
     // Non-critical — don't fail the run if usage save fails
+  }
+
+  // Preserve run history: snapshot usage.json and progress.json under
+  // .adhd/runs/<sessionStamp>/ for later comparison via `adhd compare`.
+  // Runs regardless of --commit-adhd — no git operation is performed.
+  if (config.sessionDir) {
+    try {
+      const savedUsage = readLiveUsage(workDir);
+      await writeRunRecord(workDir, config.sessionDir, savedUsage, progress);
+    } catch {
+      // Non-fatal: history preservation must never disrupt the run.
+    }
+  }
+
+  // Final end-of-run metadata commit: captures the terminal progress.json
+  // (status complete/failed, docs-generated flag) and the fully-accumulated
+  // usage.json. Only runs when --commit-adhd is set; non-fatal.
+  if (config.commitAdhd && allPassed) {
+    commitFinalMetadata(workDir, gDir, config.commitAdhdLogs);
   }
 
   return { success: allPassed, sprints: results, totalDurationMs: totalDuration };

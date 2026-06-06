@@ -38,6 +38,7 @@ function makeSkill(overrides: Partial<ResolvedSkill> & { name: string }): Resolv
       generator: { tier: "exclude", files: [] },
       evaluator: { tier: "exclude", files: [] },
       documenter: { tier: "exclude", files: [] },
+      reviewer: { tier: "exclude", files: [] },
     },
     ...overrides,
   };
@@ -229,6 +230,7 @@ describe("routeSkillsForAgent for documenter", () => {
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "exclude", files: [] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -248,6 +250,7 @@ describe("routeSkillsForAgent for documenter", () => {
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "inject", files: ["/a.md"], content: ["Doc style A"] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
       makeSkill({
@@ -257,6 +260,7 @@ describe("routeSkillsForAgent for documenter", () => {
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "inject", files: ["/b.md"], content: ["Doc style B"] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -274,6 +278,7 @@ describe("routeSkillsForAgent for documenter", () => {
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "reference", files: ["/skills/docs/template.md"] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
     ];

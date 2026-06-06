@@ -34,6 +34,7 @@ const baseConfig: ResolvedConfig = {
   resolvedModelGenerator: "claude-opus-4-6",
   resolvedModelEvaluator: "claude-opus-4-6",
   resolvedModelDocumenter: "claude-opus-4-6",
+  resolvedModelReviewer: "claude-opus-4-6",
   resolvedMaxTurnsPlanner: 50,
   resolvedMaxTurnsGenerator: 50,
   resolvedMaxTurnsEvaluator: 50,

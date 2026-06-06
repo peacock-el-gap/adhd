@@ -33,11 +33,13 @@ export const DEFAULT_MODEL = MODEL_OPUS;
  * - Generator → Sonnet (cost-dominant; mistakes are recoverable via feedback).
  * - Evaluator → Opus   (the sole gate; must out-judge the Generator).
  * - Documenter→ Haiku  (lowest stakes; advisory-only output).
+ * - Reviewer  → Opus   (code-craft judge; evaluator-class so it is never weaker than the Generator).
  */
 export const DEFAULT_MODEL_PLANNER = MODEL_OPUS;
 export const DEFAULT_MODEL_GENERATOR = MODEL_SONNET;
 export const DEFAULT_MODEL_EVALUATOR = MODEL_OPUS;
 export const DEFAULT_MODEL_DOCUMENTER = MODEL_HAIKU;
+export const DEFAULT_MODEL_REVIEWER = MODEL_OPUS;
 
 /** Known model tiers, plus `unknown` for IDs we cannot rank (custom overrides). */
 export type ModelTier = "opus" | "sonnet" | "haiku" | "unknown";
@@ -95,19 +97,19 @@ export function resolveAgentModel(
   return blankToUndefined(agentOverride) ?? blankToUndefined(uniformModel) ?? tierDefault;
 }
 
-/** The four resolved per-agent models the startup log and invariant check read. */
+/** The resolved per-agent models the startup log and invariant check read. */
 export interface ResolvedAgentModels {
   resolvedModelPlanner: string;
   resolvedModelGenerator: string;
   resolvedModelEvaluator: string;
   resolvedModelDocumenter: string;
+  resolvedModelReviewer: string;
 }
 
 /**
  * Build the per-agent startup log lines — one per agent, each standing alone so
- * it is readable without the others. The Documenter is included (it used to be
- * silently omitted), so the printed configuration is honest now that the matrix
- * makes the agents differ by default.
+ * it is readable without the others. All agents including Reviewer are included
+ * so the printed configuration is honest.
  */
 export function describeAgentModels(models: ResolvedAgentModels): string[] {
   return [
@@ -115,6 +117,7 @@ export function describeAgentModels(models: ResolvedAgentModels): string[] {
     `Generator model: ${models.resolvedModelGenerator}`,
     `Evaluator model: ${models.resolvedModelEvaluator}`,
     `Documenter model: ${models.resolvedModelDocumenter}`,
+    `Reviewer model: ${models.resolvedModelReviewer}`,
   ];
 }
 

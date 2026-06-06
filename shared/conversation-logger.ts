@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type AgentIdentity, bareName, displayTitle, timedName } from "./agent-identity.ts";
 
@@ -24,11 +24,17 @@ interface LogEntry {
  *
  * The filename is `<timestamp>-<bareName>.md`, derived from the identity.
  * The markdown body's title comes from the identity's display form.
+ *
+ * When `sessionDir` is provided (a YYYY.MM.DD-HH.MM.SS session-start stamp),
+ * the file is written under `.adhd/logs/<sessionDir>/` rather than directly
+ * in `.adhd/logs/`. The per-file leading timestamp is always kept in the
+ * filename regardless of whether a sessionDir is used.
  */
 export function createConversationLog(
   workDir: string,
   identity: AgentIdentity,
   metadata?: { model: string; startTime: Date },
+  sessionDir?: string,
 ): ConversationLogger {
   const entries: LogEntry[] = [];
   const timestampedNameValue = timedName(identity);
@@ -159,7 +165,10 @@ export function createConversationLog(
       }
 
       const filename = `${timestampedNameValue}.md`;
-      const logPath = join(workDir, ".adhd", "logs", filename);
+      const logsBase = join(workDir, ".adhd", "logs");
+      const logDir = sessionDir ? join(logsBase, sessionDir) : logsBase;
+      await mkdir(logDir, { recursive: true });
+      const logPath = join(logDir, filename);
       await writeFile(logPath, lines.join("\n"), "utf-8");
     },
   };

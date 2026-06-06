@@ -76,6 +76,7 @@ export async function runPlanner(opts: RunPlannerOptions): Promise<PlannerResult
     additionalDirectories: skills?.additionalDirs,
     canUseTool: interactive ? makePlannerInteractiveBridge() : undefined,
     toolPolicy,
+    sessionDir: config.sessionDir,
     callbacks: {
       onResult: (r) => log("PLANNER", `Planning complete (session: ${r.session_id?.slice(0, 8)}...)`),
     },

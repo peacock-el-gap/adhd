@@ -70,6 +70,12 @@ export interface RunAgentRequest {
    * no settingSources or mcpServers override is applied.
    */
   toolPolicy?: AgentToolPolicy;
+  /**
+   * Session-start stamp for per-run log subdirectory routing.
+   * When set, the conversation log is written under .adhd/logs/<sessionDir>/
+   * rather than directly in .adhd/logs/.
+   */
+  sessionDir?: string;
 }
 
 export interface RunAgentResult extends StreamResult {
@@ -101,7 +107,8 @@ export async function runAgent(req: RunAgentRequest): Promise<RunAgentResult> {
   const startTime = new Date();
   const ownsLog = !req.inheritConvLog;
   const convLog =
-    req.inheritConvLog ?? createConversationLog(req.workDir, req.identity, { model: req.model, startTime });
+    req.inheritConvLog ??
+    createConversationLog(req.workDir, req.identity, { model: req.model, startTime }, req.sessionDir);
 
   try {
     const stream = await processAgentStream(req.prompt, options, req.role, req.logLevel, convLog, req.callbacks);

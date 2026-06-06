@@ -348,6 +348,7 @@ describe("routeSkillsForAgent", () => {
         generator: { tier: "exclude", files: [] },
         evaluator: { tier: "exclude", files: [] },
         documenter: { tier: "exclude", files: [] },
+        reviewer: { tier: "exclude", files: [] },
       },
       ...overrides,
     };
@@ -362,6 +363,7 @@ describe("routeSkillsForAgent", () => {
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "exclude", files: [] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
       makeSkill({
@@ -371,6 +373,7 @@ describe("routeSkillsForAgent", () => {
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "exclude", files: [] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -388,6 +391,7 @@ describe("routeSkillsForAgent", () => {
           generator: { tier: "reference", files: ["/skills/ref/guide.md", "/skills/ref/examples.md"] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "exclude", files: [] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -410,6 +414,7 @@ describe("routeSkillsForAgent", () => {
             files: ["/skills/eval/a.md", "/skills/eval/b.md", "/skills/other/c.md"],
           },
           documenter: { tier: "exclude", files: [] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -427,6 +432,7 @@ describe("routeSkillsForAgent", () => {
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "exclude", files: [] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
     ];
@@ -446,6 +452,7 @@ describe("routeSkillsForAgent", () => {
           generator: { tier: "exclude", files: [] },
           evaluator: { tier: "exclude", files: [] },
           documenter: { tier: "exclude", files: [] },
+          reviewer: { tier: "exclude", files: [] },
         },
       }),
     ];

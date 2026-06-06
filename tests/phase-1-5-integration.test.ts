@@ -15,7 +15,7 @@
  * - Consistent naming conventions
  * - No code duplication
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -348,7 +348,14 @@ describe("contract_parse_error_diagnostics", () => {
 		setupAdhdDir(dir);
 		const rawText = "This is completely unparseable text with no JSON";
 
+		const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
 		parseContract(rawText, 3, dir);
+		expect(warnSpy).toHaveBeenCalledTimes(1);
+		const call = warnSpy.mock.calls[0]?.[0] as string;
+		expect(call).toContain("sprint 3");
+		expect(call).toContain("generic default contract");
+		warnSpy.mockRestore();
+
 		await Bun.sleep(100);
 
 		const diagnosticPath = join(dir, ".adhd", "logs", "sprint-3-contract-parse-error.txt");
@@ -380,7 +387,14 @@ describe("contract_parse_error_diagnostics", () => {
 		setupAdhdDir(dir);
 		const longText = "x".repeat(5000);
 
+		const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
 		parseContract(longText, 4, dir);
+		expect(warnSpy).toHaveBeenCalledTimes(1);
+		const call = warnSpy.mock.calls[0]?.[0] as string;
+		expect(call).toContain("sprint 4");
+		expect(call).toContain("generic default contract");
+		warnSpy.mockRestore();
+
 		await Bun.sleep(100);
 
 		const diagnosticPath = join(dir, ".adhd", "logs", "sprint-4-contract-parse-error.txt");
@@ -390,7 +404,13 @@ describe("contract_parse_error_diagnostics", () => {
 	});
 
 	test("parse failure returns default contract (3 criteria)", () => {
+		const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
 		const result = parseContract("not json at all", 5);
+		expect(warnSpy).toHaveBeenCalledTimes(1);
+		const call = warnSpy.mock.calls[0]?.[0] as string;
+		expect(call).toContain("sprint 5");
+		expect(call).toContain("generic default contract");
+		warnSpy.mockRestore();
 		expect(result.sprintNumber).toBe(5);
 		expect(result.criteria.length).toBe(3);
 		expect(result.criteria[0]!.name).toBe("basic_functionality");

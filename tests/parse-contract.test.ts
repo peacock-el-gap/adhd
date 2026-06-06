@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { parseContract } from "../harness-claude/contract.ts";
 
 describe("parseContract", () => {
@@ -48,14 +48,26 @@ describe("parseContract", () => {
   });
 
   test("returns default contract when parsing fails", () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
     const result = parseContract("This is not JSON at all.", 5);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const call = warnSpy.mock.calls[0]?.[0] as string;
+    expect(call).toContain("sprint 5");
+    expect(call).toContain("generic default contract");
+    warnSpy.mockRestore();
     expect(result.sprintNumber).toBe(5);
     expect(result.criteria).toHaveLength(3);
     expect(result.criteria[0]!.name).toBe("basic_functionality");
   });
 
   test("returns default for JSON without criteria array", () => {
+    const warnSpy = spyOn(console, "warn").mockImplementation(() => {});
     const result = parseContract('{"features": ["x"]}', 1);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const call = warnSpy.mock.calls[0]?.[0] as string;
+    expect(call).toContain("sprint 1");
+    expect(call).toContain("generic default contract");
+    warnSpy.mockRestore();
     expect(result.criteria).toHaveLength(3);
     expect(result.criteria[0]!.name).toBe("basic_functionality");
   });

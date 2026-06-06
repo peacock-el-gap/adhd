@@ -51,6 +51,7 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
     logLevel: level,
     additionalDirectories: skills?.additionalDirs,
     toolPolicy,
+    sessionDir: config.sessionDir,
     callbacks: {
       onResult: () => log("EVALUATOR", `Evaluation complete for sprint ${sprint}`),
     },

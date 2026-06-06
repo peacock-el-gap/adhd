@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { USAGE_FILE } from "./files.ts";
 import { log } from "./logger.ts";
 import type { RunUsage, SessionUsage, StageUsage } from "./types.ts";
 
@@ -207,7 +208,7 @@ export function createUsageTracker(workDir: string): UsageTracker {
     },
 
     async save(): Promise<void> {
-      const usagePath = join(workDir, ".adhd", "usage.json");
+      const usagePath = join(workDir, USAGE_FILE);
 
       // Load existing run data if present, deserializing legacy entries
       let run: RunUsage = { sessions: [], runTotalCostUsd: 0 };

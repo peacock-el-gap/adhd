@@ -1,4 +1,5 @@
 import { gitDir, harnessDir } from "../shared/files.ts";
+import { composeGeneratorContext } from "../shared/generator-context.ts";
 import { log, shouldLog } from "../shared/logger.ts";
 import { type ExecLike, ensureAgentCommit } from "../shared/orchestration/git-ops.ts";
 import type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions } from "../shared/orchestration/types.ts";
@@ -7,13 +8,17 @@ import { buildToolPolicyInput, resolveToolPolicy } from "../shared/tool-policy.t
 import type { CommitSource } from "../shared/types.ts";
 import type { QueryFn } from "./agent-stream.ts";
 import { type RunAgentRequest, type RunAgentResult, resumeAgent, runAgent } from "./run-agent.ts";
+import { readScoutDigest } from "./scout.ts";
 
 export type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions };
 
 /** Optional test-only seam. Pass `runAgentFn` to capture RunAgentRequest values
- *  without mock.module(). Mirrors the `deps` pattern in ensureGeneratorCommit. */
+ *  without mock.module(). Mirrors the `deps` pattern in ensureGeneratorCommit.
+ *  `readScoutDigestFn` overrides the real readScoutDigest so tests can exercise
+ *  the injection path without writing to disk. */
 export interface RunGeneratorDeps {
   runAgentFn?: (req: RunAgentRequest) => Promise<RunAgentResult>;
+  readScoutDigestFn?: (workDir: string) => Promise<string | null>;
 }
 
 export async function runGenerator(opts: RunGeneratorOptions, _deps?: RunGeneratorDeps): Promise<GeneratorResult> {
@@ -43,9 +48,14 @@ export async function runGenerator(opts: RunGeneratorOptions, _deps?: RunGenerat
     }
   }
 
-  // Inject supplementary context (e.g. verification baseline) after the main prompt sections.
-  if (supplementaryContext) {
-    prompt += `\n\n${supplementaryContext}`;
+  // Inject supplementary context (codebase map, verification baseline, Scout digest)
+  // after the main prompt sections. readScoutDigest never throws — it returns null
+  // on any failure, so we rely on that contract rather than a redundant try/catch.
+  const _readScoutDigest = _deps?.readScoutDigestFn ?? readScoutDigest;
+  const scoutDigest = await _readScoutDigest(workDir);
+  const composedContext = composeGeneratorContext(supplementaryContext, scoutDigest);
+  if (composedContext) {
+    prompt += `\n\n${composedContext}`;
   }
 
   const toolPolicy = resolveToolPolicy("GENERATOR", buildToolPolicyInput(config));
@@ -64,6 +74,7 @@ export async function runGenerator(opts: RunGeneratorOptions, _deps?: RunGenerat
     logLevel: level,
     additionalDirectories: skills?.additionalDirs,
     toolPolicy,
+    sessionDir: config.sessionDir,
     callbacks: {
       onToolUse(_name, input) {
         if (shouldLog("verbose", level) && input) {

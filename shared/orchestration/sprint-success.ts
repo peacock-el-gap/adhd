@@ -5,7 +5,7 @@ import { bareName, makeIdentity, timedName } from "../agent-identity.ts";
 import { validateDocumentation } from "../doc-validation.ts";
 import { gitDir, harnessDir, writeProgress } from "../files.ts";
 import { promptGate } from "../interaction.ts";
-import { log, logError } from "../logger.ts";
+import { log, logError, logWarn } from "../logger.ts";
 import { notify } from "../notifications.ts";
 import { accumulateRegressionCriteria } from "../regression.ts";
 import { countSprintHeadings } from "../sprint-count.ts";
@@ -48,6 +48,28 @@ export async function handleSprintSuccess(ctx: SprintSuccessContext): Promise<Sp
   // Commit .adhd/ metadata if --commit-adhd or --commit-adhd-logs is set
   if (config.commitAdhd) {
     commitAdhdMetadata(config.workDir, gDir, sprint, config.commitAdhdLogs);
+  }
+
+  // Reviewer: run once per passing sprint when --review is set and the runner is present.
+  // Advisory only — does not affect pass/fail. Non-fatal: any failure is caught here.
+  if (config.useReview && agents.runReviewer) {
+    try {
+      const reviewerIdentity = makeIdentity({ role: "reviewer" });
+      const reviewerResult = await agents.runReviewer({
+        config,
+        identity: reviewerIdentity,
+        sprint,
+        skills: skills?.reviewer,
+      });
+      if (reviewerResult.sdkResult) {
+        usage.recordStage("reviewer", config.resolvedModelReviewer, reviewerResult.sdkResult);
+      }
+    } catch (err) {
+      logWarn(
+        "HARNESS",
+        `Reviewer failed for sprint ${sprint} — run will continue: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // Progressive Spec Refinement (only when --refine-spec is set and not last sprint)

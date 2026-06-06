@@ -1,6 +1,14 @@
 import type { LogLevel } from "./types.ts";
 
-export type AgentRole = "HARNESS" | "PLANNER" | "GENERATOR" | "EVALUATOR" | "DOCUMENTER" | "TRACING";
+export type AgentRole =
+  | "HARNESS"
+  | "PLANNER"
+  | "GENERATOR"
+  | "EVALUATOR"
+  | "DOCUMENTER"
+  | "TRACING"
+  | "SCOUT"
+  | "REVIEWER";
 
 const COLORS: Record<AgentRole, string> = {
   HARNESS: "\x1b[36m", // cyan
@@ -9,11 +17,14 @@ const COLORS: Record<AgentRole, string> = {
   EVALUATOR: "\x1b[33m", // yellow
   DOCUMENTER: "\x1b[34m", // blue
   TRACING: "\x1b[90m", // gray
+  SCOUT: "\x1b[96m", // bright cyan
+  REVIEWER: "\x1b[94m", // bright blue
 };
 
 const RESET = "\x1b[0m";
 const GRAY = "\x1b[90m";
 const RED = "\x1b[31m";
+const AMBER = "\x1b[33m";
 
 let configuredTimezone: string | undefined;
 let configuredLogLevel: LogLevel = "normal";
@@ -99,6 +110,15 @@ export function log(role: AgentRole, message: string): void {
 
 export function logError(role: AgentRole, message: string): void {
   console.error(formatMessage(role, RED, `${RED}${message}${RESET}`));
+}
+
+/**
+ * Warning-severity log (amber). Use for handled degradations the operator
+ * should know about — a fallback that works, but is worth noticing.
+ * Never use for genuine failures; use {@link logError} for those.
+ */
+export function logWarn(role: AgentRole, message: string): void {
+  console.warn(formatMessage(role, AMBER, `${AMBER}${message}${RESET}`));
 }
 
 /** Verbose-level log. Only emits when log level is "verbose" or "debug". Gray timestamp and message, colored role tag. */
