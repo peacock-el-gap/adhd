@@ -378,6 +378,39 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Recommended**: **Defer** to a future phase. The sequential model is simple and correct. Parallel execution is a performance optimization that adds substantial complexity.
 - **Effort**: Large
 
+### OPP-26: Remote Notification Dispatch (Pluggable Channels)
+
+**Problem**: Notifications today (§1.13) are local-only — a terminal bell on every HITL gate, plus `--notify` desktop popups via `notify-send`/`osascript`. These assume the developer is at the machine running the harness, making them useless for headless/`--no-interactive`/CI runs, `bypassPermissions` runs in remote environments, and long multi-sprint sessions where the developer has stepped away. There is no way to reach the developer on a channel they already monitor when a run finishes, stalls on a gate, blows a token budget, or dies.
+
+**Opportunity**: Add a notification dispatch layer that emits a normalised event envelope (`{ event, run, sprint?, status, detail, url? }`) to one or more configured channels at key lifecycle moments — run start/complete, sprint PASS/FAIL, HITL gate waiting, token-budget threshold (80%/100%), and fatal error. Config in `.adhd/notify.json`; secrets/endpoints via env, never committed. The first concrete channel adapter is **Microsoft Teams** via a Power Automate Workflows webhook ("When a Teams webhook request is received"), wrapping the envelope as an Adaptive Card. Classic Office 365 Connector webhooks must not be used — those are being retired (rollout May 2026).
+
+- **Option A — Claude Code native hooks** (`Notification`/`Stop`): user wires a `command`/`http` hook in `settings.json`. Pros: zero harness code; works today. Cons: only Claude Code lifecycle, not harness-level — cannot distinguish sprint PASS/FAIL, budget thresholds, or which gate is waiting; per-developer setup, not shippable behaviour.
+- **Option B — Harness-native dispatcher + adapter interface**: a `NotificationChannel` interface plus normalised envelope; each channel is a thin adapter. Pros: full event vocabulary; one config drives all channels; new channels are small follow-on adapters. Cons: new module + per-channel payload mapping.
+- **Option C — Single normalised webhook + external fan-out**: harness POSTs to one endpoint; routing/secrets/formatting live in an external relay (e.g. Power Automate flow). Pros: harness stays channel-unaware; centralises routing for team/fleet use. Cons: requires standing infra; over-engineered for a single developer.
+- **Recommended**: **Option B** as the harness capability (rich events, shippable defaults), with **Option A** documented as the zero-code path for users who need only Claude-Code-level "done / needs input", and **Option C** as the scale-out pattern for multi-developer or fleet deployment. Adapter rollout: Teams first, Slack next.
+- **Interaction**: remote extension of §1.13 — local bell/desktop and remote channels share the same event triggers and are independently composable. Per-event filtering keeps noisy per-attempt notifications opt-in.
+- **Effort**: Medium (dispatcher + envelope + Teams adapter). Small per additional adapter.
+
+### OPP-27: Error and Limit Condition Console Visibility
+
+**Problem**: When the harness stops due to a structured condition — too many sprints planned, token budget exhausted, max retries consumed — the reason is written to `.adhd/logs/` but not surfaced in the console output. A developer watching the terminal sees the run stop without knowing why; finding the cause requires digging into log files. This was observed in practice: a "too many sprints" stop produced no actionable console output, yet the explanation was present in the session log.
+
+**Opportunity**: Emit a concise, human-readable line to the console at the moment the limit or error condition is detected — not just in the end-of-run summary. The information already exists in the code at the detection point; this is surfacing it at the right level. Example: `[HARNESS] Sprint count (15) exceeds --max-sprints cap (10) — replan with smaller scope or raise --max-sprints`.
+
+- **Option A — Inline WARN at detection point**: emit a log line at the exact location each limit is enforced, with a pointer to the relevant log file.
+- **Option B — Structured "failure reason" field in session summary**: append a brief reason line to the end-of-run cost/status block already printed.
+- **Recommended**: **Option A** for immediacy (developer knows the moment the limit fires), combined with **Option B** for completeness in the summary. Detection points are already in the code; this adds a targeted `log()` call at each.
+- **Effort**: Small.
+
+### OPP-28: Cost Persistence Without `--commit-adhd`
+
+**Problem**: Without `--commit-adhd`, `.adhd/usage.json` is written only at end-of-run. A fatal error or unexpected process death during a long session loses all cost data for that run. §1.34 mitigates this for `--commit-adhd` users by staging the cost ledger after each sprint; the default (no flag) case is not covered. §1.37's run snapshot captures terminal state, but only if the process reaches teardown.
+
+**Opportunity**: Write `.adhd/usage.json` after each sprint stage regardless of the `--commit-adhd` flag, so a crash mid-run preserves whatever cost was accumulated up to that point.
+
+- **Note**: Validate first whether §1.34 + §1.37 together already close the meaningful gap. If most long runs use `--commit-adhd`, the residual risk is low and this can remain deferred. The gap is highest for users running long sessions without the flag.
+- **Effort**: Small (add a `writeUsage()` call after each sprint stage rather than only at teardown).
+
 ---
 
 ## Part 3: Proposed Roadmap with Priorities
@@ -409,17 +442,23 @@ These items use the existing skills system and contract negotiation prompts. The
 
 ### Phase 2: Extend — New Capabilities
 
-Items 2.1–2.7 shipped in this phase (§1.32–§1.38). Two items remain:
+Items 2.1–2.7 shipped in this phase (§1.32–§1.38). Five items remain:
 
 | # | Feature | Source | Effort | Justification |
 |---|---------|--------|--------|---------------|
-| 2.1 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23); must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) and the Reviewer (§1.38) address most retry quality causes. |
-| 2.2 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Valuable once Content Stream + community skills create an ecosystem worth managing. The Reviewer (§1.38) is already wired to receive policy skills via the existing routing — the CLI makes installing them easier. |
+| 2.1 | **Error/limit condition console visibility** | OPP-27 | S | Surface "too many sprints", budget-exhausted, and similar structured conditions in terminal output at the moment of detection, not just in log files. High usability return for small effort; found via dogfooding. |
+| 2.2 | **Remote notification dispatch (Teams first)** | OPP-26 | M | Pluggable channel adapter interface; Teams Adaptive Cards via Power Automate Workflows webhook. Unblocks headless, CI, and remote-environment use cases where local desktop notifications don't reach the developer. |
+| 2.3 | **Adaptive retry (model escalation)** | OPP-10 | M | Opt-in `--escalate` flag. Builds on the per-agent model baseline (§1.23); must keep the Evaluator ≥ Generator. Lower priority now that sprint scope control (§1.20–§1.22) and the Reviewer (§1.38) address most retry quality causes. |
+| 2.4 | **`adhd skill` CLI** | OPP-07 (tooling) | M | `adhd skill add/list/remove` — UX sugar over manual git clone. Valuable once Content Stream + community skills create an ecosystem worth managing. The Reviewer (§1.38) is already wired to receive policy skills via the existing routing — the CLI makes installing them easier. |
+| 2.5 | **Cost persistence without `--commit-adhd`** | OPP-28 | S | Write `usage.json` after each sprint regardless of flag. Validate first whether §1.34 + §1.37 already close the meaningful gap — if most long runs use `--commit-adhd`, this can remain deferred. |
 
 **Rationale**: The high-impact Phase 2 items (trust, observability, workflow
-safety, Scout, run comparison, Reviewer) are complete. The remaining two are
-lower-priority quality-of-life improvements that benefit from the now-established
-ecosystem (run analytics, policy skills, Reviewer).
+safety, Scout, run comparison, Reviewer) are complete. Three new items surface
+from dogfooding: a usability gap in error reporting (2.1, small), remote
+notification support for headless/CI use (2.2, medium), and a cost-data
+durability gap (2.5, small with a validation prerequisite). The pre-existing
+items (adaptive retry, skill CLI) move to 2.3–2.4 as they require the now-
+established ecosystem to be most valuable.
 
 ---
 
@@ -441,8 +480,11 @@ ecosystem (run analytics, policy skills, Reviewer).
 | **Content Stream**<br/>*(parallel, HIGH)* | CS-1 | Policy skills + code-style template | OPP-07 | Universal skills + project-local template |
 | | CS-2 | Codebase context guidance | — | User guide for project-local skill authoring |
 | --- | --- | --- | --- | --- |
-| **Phase 2**<br/>*Extend (MEDIUM)*<br/>2.1–2.7 shipped (§1.32–§1.38) | 2.1 | Adaptive retry (model escalation) | OPP-10 | Opt-in `--escalate` |
-| | 2.2 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
+| **Phase 2**<br/>*Extend (MEDIUM)*<br/>2.1–2.7 shipped (§1.32–§1.38) | 2.1 | Error/limit console visibility | OPP-27 | Surface "too many sprints" etc. at detection point |
+| | 2.2 | Remote notification dispatch | OPP-26 | Teams first; harness-native dispatcher + adapter interface |
+| | 2.3 | Adaptive retry (model escalation) | OPP-10 | Opt-in `--escalate` |
+| | 2.4 | `adhd skill` CLI | OPP-07 (tooling) | UX sugar over manual install |
+| | 2.5 | Cost persistence without `--commit-adhd` | OPP-28 | Validate gap first; small if confirmed |
 | --- | --- | --- | --- | --- |
 | **Phase 3**<br/>*Transform (LOW)* | 3.1 | Parallel sprint execution | OPP-11 | Requires sprint dependency graph |
 | | 3.2 | Web dashboard | — | Requires stabilised CLI + data formats |
