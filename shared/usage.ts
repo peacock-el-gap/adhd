@@ -33,6 +33,12 @@ export interface UsageTracker {
   recordStage(stage: string, model: string, result: SDKResultFields): void;
   printSummary(): void;
   save(): Promise<void>;
+  /**
+   * Returns a snapshot of the current session's recorded stages.
+   * Used by the per-sprint budget check (F12) to sum sprint-specific token usage.
+   * The returned array is a copy — safe to read but not mutate.
+   */
+  getStages(): readonly StageUsage[];
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +200,10 @@ export function createUsageTracker(workDir: string): UsageTracker {
       for (const line of formatModelRollup(rollupRows)) {
         log("HARNESS", line);
       }
+    },
+
+    getStages(): readonly StageUsage[] {
+      return [...session.stages];
     },
 
     async save(): Promise<void> {

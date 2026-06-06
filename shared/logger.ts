@@ -101,6 +101,12 @@ export function logError(role: AgentRole, message: string): void {
   console.error(formatMessage(role, RED, `${RED}${message}${RESET}`));
 }
 
+/** Verbose-level log. Only emits when log level is "verbose" or "debug". Gray timestamp and message, colored role tag. */
+export function logVerbose(role: AgentRole, message: string): void {
+  if (!shouldLog("verbose", configuredLogLevel)) return;
+  console.error(formatMessage(role, GRAY, `${GRAY}${message}${RESET}`));
+}
+
 /** Debug-level log. Only emits when log level is "debug". Gray timestamp and message, colored role tag. */
 export function logDebug(role: AgentRole, message: string): void {
   if (!shouldLog("debug", configuredLogLevel)) return;

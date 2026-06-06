@@ -1,10 +1,10 @@
 import { buildArtifactDigest } from "../shared/artifact-digest.ts";
-import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { gitDir, harnessDir } from "../shared/files.ts";
 import { log } from "../shared/logger.ts";
 import { ensureAgentCommit } from "../shared/orchestration/git-ops.ts";
 import type { EnsureDocumenterCommitOptions, RunDocumenterOptions } from "../shared/orchestration/types.ts";
 import { buildDocumenterPrompt } from "../shared/prompts.ts";
+import { buildToolPolicyInput, resolveToolPolicy } from "../shared/tool-policy.ts";
 import type { CommitSource } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 import { resumeAgent, runAgent } from "./run-agent.ts";
@@ -37,6 +37,8 @@ ${artifactDigest}
 
 Read the codebase in ${isGreenfield ? "the `app/` directory" : "the project root"}, cross-reference with the artifacts above, and produce documentation files (README.md, CHANGELOG.md, and optionally API docs). Commit your work with a \`[docs]\` prefixed message when done.`;
 
+  const toolPolicy = resolveToolPolicy("DOCUMENTER", buildToolPolicyInput(config));
+
   const result = await runAgent({
     identity,
     role: "DOCUMENTER",
@@ -45,12 +47,13 @@ Read the codebase in ${isGreenfield ? "the `app/` directory" : "the project root
     systemPrompt,
     model,
     tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-    maxTurns: CLAUDE_MAX_TURNS,
+    maxTurns: config.resolvedMaxTurnsDocumenter,
     // persistSession: true so ensureDocumenterCommit can resume this session
     // if the documenter leaves uncommitted changes.
     persistSession: true,
     logLevel: config.logLevel,
     additionalDirectories: skills?.additionalDirs,
+    toolPolicy,
     callbacks: {
       onResult: () => log("DOCUMENTER", "Documentation generation complete"),
     },
@@ -69,7 +72,7 @@ export async function ensureDocumenterCommit(opts: EnsureDocumenterCommitOptions
 
   const featureSummary =
     sprintResults.length > 0 ? `sprints ${sprintResults.map((s) => s.sprintNumber).join(", ")}` : "completed work";
-  const sprintLabel = sprintResults.length > 0 ? sprintResults[sprintResults.length - 1]!.sprintNumber : 0;
+  const sprintLabel = sprintResults.length > 0 ? (sprintResults[sprintResults.length - 1]?.sprintNumber ?? 0) : 0;
   const fallbackMessage = `[docs] Sprint ${sprintLabel}: project documentation for ${featureSummary} (documenter did not commit)`;
 
   const resumePrompt =

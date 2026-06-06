@@ -839,7 +839,226 @@
         }
       ],
       "totalCostUsd": 98.98310609999997
+    },
+    {
+      "startedAt": "2026-06-05T13:10:00.392Z",
+      "stages": [
+        {
+          "stage": "planner",
+          "model": "claude-opus-4-8",
+          "inputTokens": 12,
+          "outputTokens": 16368,
+          "cacheReadTokens": 306240,
+          "costUsd": 3.5168774999999997,
+          "durationMs": 214686
+        }
+      ],
+      "totalCostUsd": 3.5168774999999997
+    },
+    {
+      "startedAt": "2026-06-06T04:14:43.034Z",
+      "stages": [
+        {
+          "stage": "sprint-7-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 4654,
+          "cacheReadTokens": 0,
+          "costUsd": 0.17652525,
+          "durationMs": 75066
+        },
+        {
+          "stage": "sprint-7-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 4104,
+          "cacheReadTokens": 0,
+          "costUsd": 0.59314875,
+          "durationMs": 43994
+        },
+        {
+          "stage": "sprint-7-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 40,
+          "outputTokens": 24413,
+          "cacheReadTokens": 2598903,
+          "costUsd": 1.4891033999999999,
+          "durationMs": 454745
+        },
+        {
+          "stage": "sprint-7-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 9290,
+          "outputTokens": 8304,
+          "cacheReadTokens": 389576,
+          "costUsd": 2.87495775,
+          "durationMs": 119637
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 12,
+          "outputTokens": 47826,
+          "cacheReadTokens": 456320,
+          "costUsd": 6.77916,
+          "durationMs": 457237
+        },
+        {
+          "stage": "sprint-8-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 5324,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.13058114999999998,
+          "durationMs": 79659
+        },
+        {
+          "stage": "sprint-8-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 2658,
+          "cacheReadTokens": 11991,
+          "costUsd": 0.2809665,
+          "durationMs": 25081
+        },
+        {
+          "stage": "sprint-8-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 234,
+          "outputTokens": 18382,
+          "cacheReadTokens": 1695292,
+          "costUsd": 0.98372085,
+          "durationMs": 372201
+        },
+        {
+          "stage": "sprint-8-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 16,
+          "outputTokens": 8590,
+          "cacheReadTokens": 405149,
+          "costUsd": 2.51808225,
+          "durationMs": 115491
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 14,
+          "outputTokens": 35338,
+          "cacheReadTokens": 599227,
+          "costUsd": 5.93033175,
+          "durationMs": 383905
+        },
+        {
+          "stage": "sprint-9-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 4409,
+          "cacheReadTokens": 0,
+          "costUsd": 0.15704025,
+          "durationMs": 82332
+        },
+        {
+          "stage": "sprint-9-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 5789,
+          "cacheReadTokens": 0,
+          "costUsd": 0.8569424999999999,
+          "durationMs": 62980
+        },
+        {
+          "stage": "sprint-9-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 124,
+          "outputTokens": 36337,
+          "cacheReadTokens": 2449835,
+          "costUsd": 1.6729462500000003,
+          "durationMs": 581532
+        },
+        {
+          "stage": "sprint-9-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 24,
+          "outputTokens": 6538,
+          "cacheReadTokens": 685819,
+          "costUsd": 2.5009635,
+          "durationMs": 115664
+        },
+        {
+          "stage": "planner-refinement",
+          "model": "claude-opus-4-8",
+          "inputTokens": 14,
+          "outputTokens": 58236,
+          "cacheReadTokens": 570474,
+          "costUsd": 7.69230225,
+          "durationMs": 556670
+        },
+        {
+          "stage": "sprint-10-contract-proposal",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 3,
+          "outputTokens": 4532,
+          "cacheReadTokens": 13728,
+          "costUsd": 0.14349615,
+          "durationMs": 81355
+        },
+        {
+          "stage": "sprint-10-contract-review",
+          "model": "claude-opus-4-8",
+          "inputTokens": 2,
+          "outputTokens": 3766,
+          "cacheReadTokens": 11991,
+          "costUsd": 0.37025399999999997,
+          "durationMs": 38220
+        },
+        {
+          "stage": "sprint-10-attempt-0-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 52,
+          "outputTokens": 32861,
+          "cacheReadTokens": 5710060,
+          "costUsd": 2.6852452499999995,
+          "durationMs": 602684
+        },
+        {
+          "stage": "sprint-10-attempt-0-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 30,
+          "outputTokens": 13875,
+          "cacheReadTokens": 859336,
+          "costUsd": 3.2806664999999997,
+          "durationMs": 210161
+        },
+        {
+          "stage": "sprint-10-attempt-1-generator",
+          "model": "claude-sonnet-4-6",
+          "inputTokens": 51,
+          "outputTokens": 33566,
+          "cacheReadTokens": 5094002,
+          "costUsd": 2.4385123500000003,
+          "durationMs": 639168
+        },
+        {
+          "stage": "sprint-10-attempt-1-evaluator",
+          "model": "claude-opus-4-8",
+          "inputTokens": 60,
+          "outputTokens": 11788,
+          "cacheReadTokens": 1967129,
+          "costUsd": 5.05082475,
+          "durationMs": 206961
+        },
+        {
+          "stage": "documenter",
+          "model": "claude-haiku-4-5-20251001",
+          "inputTokens": 2815,
+          "outputTokens": 12977,
+          "cacheReadTokens": 1513393,
+          "costUsd": 0.31140055,
+          "durationMs": 183492
+        }
+      ],
+      "totalCostUsd": 48.91717195000001
     }
   ],
-  "runTotalCostUsd": 162.93950544999998
+  "runTotalCostUsd": 215.3735549
 }

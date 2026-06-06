@@ -30,6 +30,24 @@ export type { StreamCallbacks, StreamResult };
  * log and does NOT finalize it. Used by `negotiateContract` so the proposal
  * and review calls share one log file.
  */
+/**
+ * Resolved tool/MCP policy for one agent run. Populated by the caller
+ * from `shared/tool-policy.ts` and mapped onto SDK Options here.
+ * Fields mirror `Options.settingSources` and `Options.mcpServers`; see the
+ * SDK type definitions for their semantics. Absent fields are not forwarded
+ * (SDK defaults apply).
+ */
+export interface AgentToolPolicy {
+  /** Settings layers to load (controls which filesystem settings apply). */
+  settingSources?: Array<"user" | "project" | "local">;
+  /**
+   * MCP server map. An empty object (`{}`) means "no MCP servers".
+   * When absent, the SDK default applies (which today is also no MCP,
+   * since settingSources is otherwise unset).
+   */
+  mcpServers?: Record<string, Record<string, unknown>>;
+}
+
 export interface RunAgentRequest {
   identity: AgentIdentity;
   role: AgentRole;
@@ -46,6 +64,12 @@ export interface RunAgentRequest {
   canUseTool?: Options["canUseTool"];
   callbacks?: StreamCallbacks;
   inheritConvLog?: ConversationLogger;
+  /**
+   * Per-agent tool and MCP policy (F11). When present, controls which
+   * settings layers and MCP servers the SDK Options receive. When absent,
+   * no settingSources or mcpServers override is applied.
+   */
+  toolPolicy?: AgentToolPolicy;
 }
 
 export interface RunAgentResult extends StreamResult {
@@ -65,6 +89,13 @@ export async function runAgent(req: RunAgentRequest): Promise<RunAgentResult> {
     persistSession: req.persistSession,
     ...(req.additionalDirectories?.length ? { additionalDirectories: [...req.additionalDirectories] } : {}),
     ...(req.canUseTool ? { canUseTool: req.canUseTool } : {}),
+    // Tool/MCP policy (F11): forward settingSources and mcpServers from the
+    // resolved per-agent policy when they are explicitly set. Absent fields
+    // are not forwarded so the SDK default (isolation mode) applies.
+    ...(req.toolPolicy?.settingSources ? { settingSources: req.toolPolicy.settingSources } : {}),
+    ...(req.toolPolicy?.mcpServers !== undefined
+      ? { mcpServers: req.toolPolicy.mcpServers as Options["mcpServers"] }
+      : {}),
   };
 
   const startTime = new Date();

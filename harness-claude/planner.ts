@@ -1,16 +1,16 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { harnessDir } from "../shared/files.ts";
 import { log, logError } from "../shared/logger.ts";
 import type { PlannerResult, RunPlannerOptions } from "../shared/orchestration/types.ts";
 import { buildPlannerPrompt } from "../shared/prompts.ts";
+import { buildToolPolicyInput, resolveToolPolicy } from "../shared/tool-policy.ts";
 import { runAgent } from "./run-agent.ts";
 import type { Options } from "./tracing-claude.ts";
 
 export async function runPlanner(opts: RunPlannerOptions): Promise<PlannerResult> {
-  const { config, identity, reviseFeedback, skills } = opts;
+  const { config, identity, reviseFeedback, skills, supplementaryContext } = opts;
   const { userPrompt, workDir, isGreenfield, interactive, logLevel } = config;
 
   log("PLANNER", `Starting planning for: "${userPrompt.slice(0, 100)}${userPrompt.length > 100 ? "..." : ""}"`);
@@ -54,6 +54,14 @@ export async function runPlanner(opts: RunPlannerOptions): Promise<PlannerResult
     fullPrompt += `\n\n## Revision Feedback\n\nThe user reviewed your spec and requests changes:\n\n${reviseFeedback}\n\nRewrite the spec incorporating this feedback.`;
   }
 
+  // Inject supplementary context (e.g. harness-generated codebase map) after
+  // the main prompt sections so the Planner does not re-explore from scratch.
+  if (supplementaryContext) {
+    fullPrompt += `\n\n${supplementaryContext}`;
+  }
+
+  const toolPolicy = resolveToolPolicy("PLANNER", buildToolPolicyInput(config));
+
   const result = await runAgent({
     identity,
     role: "PLANNER",
@@ -62,11 +70,12 @@ export async function runPlanner(opts: RunPlannerOptions): Promise<PlannerResult
     systemPrompt,
     model,
     tools,
-    maxTurns: CLAUDE_MAX_TURNS,
+    maxTurns: config.resolvedMaxTurnsPlanner,
     persistSession: false,
     logLevel,
     additionalDirectories: skills?.additionalDirs,
     canUseTool: interactive ? makePlannerInteractiveBridge() : undefined,
+    toolPolicy,
     callbacks: {
       onResult: (r) => log("PLANNER", `Planning complete (session: ${r.session_id?.slice(0, 8)}...)`),
     },

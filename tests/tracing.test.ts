@@ -24,6 +24,7 @@ const baseConfig: ResolvedConfig = {
   noTdd: false,
   noDocs: false,
   lintGate: false,
+  testGate: false,
   refineSpec: false,
   notify: false,
   commitAdhd: false,
@@ -33,6 +34,12 @@ const baseConfig: ResolvedConfig = {
   resolvedModelGenerator: "claude-opus-4-6",
   resolvedModelEvaluator: "claude-opus-4-6",
   resolvedModelDocumenter: "claude-opus-4-6",
+  resolvedMaxTurnsPlanner: 50,
+  resolvedMaxTurnsGenerator: 50,
+  resolvedMaxTurnsEvaluator: 50,
+  resolvedMaxTurnsDocumenter: 50,
+  disableMcp: false,
+  addMcpServers: {},
 };
 
 describe("initTracing — noop when disabled", () => {

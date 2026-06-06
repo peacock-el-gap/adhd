@@ -7,7 +7,9 @@ import { harnessDir } from "../shared/files.ts";
 import { log, logError } from "../shared/logger.ts";
 import type { NegotiateContractOptions } from "../shared/orchestration/types.ts";
 import { buildContractReviewPrompt, CONTRACT_NEGOTIATION_GENERATOR_PROMPT } from "../shared/prompts.ts";
+import { parseReviewEnvelope } from "../shared/review-envelope.ts";
 import { normalizeSurfaces } from "../shared/surfaces.ts";
+import { buildToolPolicyInput, resolveToolPolicy } from "../shared/tool-policy.ts";
 import type { SprintContract } from "../shared/types.ts";
 import type { UsageTracker } from "../shared/usage.ts";
 import { runAgent } from "./run-agent.ts";
@@ -22,6 +24,12 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
   const limits: ContractLimits = { maxFeatures, maxCriteria, maxSurfaces };
   const reviewPrompt = buildContractReviewPrompt(limits);
   const startTime = new Date();
+
+  // Contract negotiation is a non-coding role → no MCP, project settings only.
+  const contractToolPolicy = resolveToolPolicy(
+    "HARNESS",
+    buildToolPolicyInput({ disableMcp: opts.disableMcp, addMcpServers: opts.addMcpServers }),
+  );
 
   // Three identities at play:
   //   - one for the shared conversation log (negotiation as a whole)
@@ -54,6 +62,7 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
     persistSession: false,
     logLevel: "quiet",
     inheritConvLog: convLog,
+    toolPolicy: contractToolPolicy,
   });
   if (proposalResult.sdkResult) {
     usage?.recordStage(`sprint-${sprintNumber}-contract-proposal`, proposalModel, proposalResult.sdkResult);
@@ -72,6 +81,7 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
     persistSession: false,
     logLevel: "quiet",
     inheritConvLog: convLog,
+    toolPolicy: contractToolPolicy,
   });
   if (reviewResult.sdkResult) {
     usage?.recordStage(`sprint-${sprintNumber}-contract-review`, reviewModel, reviewResult.sdkResult);
@@ -81,8 +91,20 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
   // Parse the final contract (either the proposal if approved, or the revised
   // version). Enforcement runs AFTER this selection so an oversized proposal the
   // reviewer returned "APPROVED" on is still caught.
-  const contractSource = reviewText.trim() === "APPROVED" ? proposalText : reviewText;
-  const parsed = parseContract(contractSource, sprintNumber, workDir);
+  const reviewEnvelope = parseReviewEnvelope(reviewText);
+  let parsed: SprintContract;
+  if (reviewEnvelope.verdict === "approved") {
+    // Reviewer accepted the proposal unchanged — use the proposal text.
+    parsed = parseContract(proposalText, sprintNumber, workDir);
+  } else if (reviewEnvelope.contract !== null) {
+    // Reviewer returned a structured revised contract — use it directly.
+    parsed = { ...reviewEnvelope.contract, sprintNumber };
+    parsed.surfaces = normalizeSurfaces(parsed.surfaces);
+  } else {
+    // Unrecognised or unparseable revision — fall back to parseContract on
+    // the raw review text (legacy bare-contract or malformed output).
+    parsed = parseContract(reviewText, sprintNumber, workDir);
+  }
 
   const finalContract = await enforceContractCeiling(parsed, limits, {
     workDir,
@@ -189,11 +211,21 @@ async function runNarrowingRound(contract: SprintContract, ctx: CeilingEnforceme
     ctx.usage?.recordStage(`sprint-${ctx.sprintNumber}-contract-narrowing`, ctx.reviewModel, result.sdkResult);
   }
 
-  // "APPROVED" means the reviewer declined to narrow; keep the current contract
-  // and let the deterministic trim handle it.
-  if (result.response.trim() === "APPROVED") {
+  // Parse the narrowing-round response via the envelope parser so both legacy
+  // and structured responses are handled uniformly.
+  const narrowEnvelope = parseReviewEnvelope(result.response);
+  if (narrowEnvelope.verdict === "approved") {
+    // Reviewer declined to narrow — keep the current (over-budget) contract
+    // and let the deterministic trim handle it.
     return contract;
   }
+  if (narrowEnvelope.contract !== null) {
+    // Reviewer returned a structured narrowed contract — use it directly.
+    const narrowed = { ...narrowEnvelope.contract, sprintNumber: ctx.sprintNumber };
+    narrowed.surfaces = normalizeSurfaces(narrowed.surfaces);
+    return narrowed;
+  }
+  // Fall back to parseContract on the raw text (legacy bare-contract path).
   return parseContract(result.response, ctx.sprintNumber, ctx.workDir);
 }
 
@@ -264,7 +296,7 @@ export function extractUnclosedFence(text: string): string | null {
   // Count all fences (opening or closing) to see if the last opener has a closer
   const allFences = [...text.matchAll(/```/g)];
   if (allFences.length % 2 === 0) return null; // balanced
-  const lastOpener = openers[openers.length - 1]!;
+  const lastOpener = openers[openers.length - 1] ?? 0;
   return text.slice(lastOpener).trim();
 }
 

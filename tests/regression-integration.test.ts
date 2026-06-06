@@ -48,23 +48,23 @@ describe("regression accumulation integration", () => {
     await accumulateRegressionCriteria(TMP_DIR, sprint1);
     await accumulateRegressionCriteria(TMP_DIR, sprint2);
 
-    const data: RegressionCriterion[] = JSON.parse(readFileSync(regressionPath(TMP_DIR), "utf-8"));
+    const criteria: RegressionCriterion[] = await readRegressionCriteria(TMP_DIR);
 
     // Should have exactly 3 behavioral criteria, no implementation ones
-    expect(data).toHaveLength(3);
-    const names = data.map((d) => d.name).sort();
+    expect(criteria).toHaveLength(3);
+    const names = criteria.map((d) => d.name).sort();
     expect(names).toEqual(["dashboard_loads", "login_works", "session_persists"]);
 
     // Verify sprintNumber fields
-    const login = data.find((d) => d.name === "login_works");
+    const login = criteria.find((d) => d.name === "login_works");
     expect(login).toBeDefined();
     expect(login?.sprintNumber).toBe(1);
-    const dashboard = data.find((d) => d.name === "dashboard_loads");
+    const dashboard = criteria.find((d) => d.name === "dashboard_loads");
     expect(dashboard).toBeDefined();
     expect(dashboard?.sprintNumber).toBe(2);
 
     // Verify no implementation criterion is present
-    expect(data.find((d) => d.name === "clean_code")).toBeUndefined();
+    expect(criteria.find((d) => d.name === "clean_code")).toBeUndefined();
   });
 
   test("buildRegressionSection output includes all 3 accumulated entries", async () => {
@@ -93,6 +93,25 @@ describe("regression accumulation integration", () => {
     expect(section).toContain("session_persists");
     expect(section).toContain("dashboard_loads");
     expect(section).toContain("## Regression Criteria");
+  });
+
+  test("on-disk store uses {criteria, retiredNames} format after Sprint-9 accumulation", async () => {
+    const sprint1: SprintContract = {
+      sprintNumber: 1,
+      features: ["Feature A"],
+      criteria: [{ name: "api_responds", description: "API returns 200", threshold: 7, type: "behavioral" }],
+    };
+
+    await accumulateRegressionCriteria(TMP_DIR, sprint1);
+
+    // The file should now use the Sprint-9 object format
+    const raw = JSON.parse(readFileSync(regressionPath(TMP_DIR), "utf-8"));
+    expect(raw).toHaveProperty("criteria");
+    expect(raw).toHaveProperty("retiredNames");
+    expect(Array.isArray(raw.criteria)).toBe(true);
+    expect(Array.isArray(raw.retiredNames)).toBe(true);
+    expect(raw.criteria).toHaveLength(1);
+    expect(raw.criteria[0].name).toBe("api_responds");
   });
 });
 

@@ -694,5 +694,389 @@
     "description": "The project typechecks (bun run typecheck), lints (bun run lint), and passes the full test suite (bun test) with no errors. The harness starts end-to-end with the new per-agent defaults and reaches normal operation without runtime errors.",
     "threshold": 8,
     "sprintNumber": 6
+  },
+  {
+    "name": "test_command_detected_from_package_json",
+    "description": "Given a project whose package.json scripts include a recognizable test entry (e.g. 'test', 'test:unit', 'bun test'), the detector identifies and returns the canonical test command string without throwing",
+    "threshold": 8,
+    "sprintNumber": 1
+  },
+  {
+    "name": "test_command_detection_coexists_with_lint_typecheck",
+    "description": "The test-command detection integrates into the same static-analysis detection path used for lint and typecheck; calling the detection function returns all three (lint, typecheck, test) when all are present, and any subset when only some are present",
+    "threshold": 8,
+    "sprintNumber": 1
+  },
+  {
+    "name": "test_command_runs_exactly_once_per_attempt",
+    "description": "For a given attempt, the central command-runner executes the detected test command exactly one time; subsequent accesses to the result within the same attempt reuse the captured result rather than re-executing",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "structured_result_shape_is_complete",
+    "description": "The captured result object contains all required fields: overall pass/fail boolean, total test count, passing count, failing count, an array of failing test name strings, and the (possibly truncated) raw output string; numeric counts are non-negative and total equals pass plus fail",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "no_test_command_degrades_to_noop",
+    "description": "Given a project with no detectable test script in package.json (or no package.json at all), the runner returns a no-op result (pass/fail null or skipped, counts zero, empty failing list) and the attempt continues without error",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "test_command_spawn_failure_degrades_gracefully",
+    "description": "When the test command cannot be spawned (e.g. command not found), exits non-zero with malformed output, or throws an unhandled exception, the runner records a failed result with the error captured in the output field and does not throw or crash the enclosing attempt",
+    "threshold": 9,
+    "sprintNumber": 1
+  },
+  {
+    "name": "lint_and_typecheck_pass",
+    "description": "bun run lint and bun run typecheck both exit 0 with no new errors or warnings introduced by this sprint's changes",
+    "threshold": 10,
+    "sprintNumber": 1
+  },
+  {
+    "name": "baseline_captured_before_generator",
+    "description": "When a sprint attempt begins and a test command is detectable, a baseline VerificationResult is produced before the Generator agent is invoked. It must contain at minimum: passed, failingTests[], passCount, failCount, and output fields. The baseline must be captured strictly before any Generator-driven code change.",
+    "threshold": 8,
+    "sprintNumber": 2
+  },
+  {
+    "name": "classifier_labels_pre_existing_failures",
+    "description": "Given a baseline with failingTests: ['test-A', 'test-B'] and a post-Generator result with failingTests: ['test-A', 'test-B', 'test-C'], classifyFailures() returns { preExisting: ['test-A', 'test-B'], newlyIntroduced: ['test-C'] }. Tests present in both sets are always labelled pre-existing.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "classifier_green_baseline_marks_all_new",
+    "description": "Given a baseline with an empty failingTests array (all tests passing) and a post-Generator result with one or more failing tests, classifyFailures() labels every failing test as newly-introduced and none as pre-existing.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "null_baseline_degrades_gracefully",
+    "description": "When the baseline VerificationResult has passed: null (i.e. equals VERIFICATION_NO_OP, meaning no test command was found or the baseline run errored), classifyFailures() returns { preExisting: [], newlyIntroduced: [], classified: false } without throwing. The sprint attempt proceeds identically to a run with no Sprint 2 feature present.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "classifier_is_order_independent",
+    "description": "classifyFailures() produces identical output regardless of the order of test names in the baseline's failingTests array and the post-Generator failingTests array. A test present in baseline but absent from the post-run result (i.e. it was fixed) does not appear in either output set.",
+    "threshold": 8,
+    "sprintNumber": 2
+  },
+  {
+    "name": "classifier_never_throws",
+    "description": "classifyFailures() does not throw under any input: null or undefined baseline, null or undefined post-run result, malformed or empty failingTests arrays, or mismatched types. It returns a safe default classification result (classified: false, empty arrays) in all error cases, mirroring the never-throwing style of classifySurfaces() and buildErrorVerificationResult().",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "classifier_lives_in_shared_with_no_sdk_imports",
+    "description": "The classifyFailures() function and its return type (FailureClassification or equivalent) are defined in shared/verification.ts (or a new shared/ file). The file has zero imports from @anthropic-ai/claude-agent-sdk or any harness-claude/ module. tsc --noEmit passes with no new type errors.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "unit_tests_cover_classifier_branches",
+    "description": "tests/ contains unit tests for classifyFailures() covering at minimum: (1) pre-existing + newly-introduced split, (2) empty baseline (all-new), (3) null/VERIFICATION_NO_OP baseline, (4) post-run result with no failures, (5) order-independence, and (6) a malformed input that must not throw. All tests pass under bun test.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "backward_compatibility_with_sprint1_artifacts",
+    "description": "Existing Sprint 1 exports from shared/verification.ts (VerificationResult, VERIFICATION_NO_OP, parseTestOutput, buildVerificationResult, buildErrorVerificationResult) and shared/static-analysis.ts (detectTestCommand, TEST_SCRIPT_KEYS, truncateStaticAnalysisOutput) remain importable and behaviorally unchanged. No Sprint 1 test regressions under bun test.",
+    "threshold": 9,
+    "sprintNumber": 2
+  },
+  {
+    "name": "post_generator_verification_run_executes",
+    "description": "After the Generator completes and before the Evaluator is invoked, the attempt loop calls the verification runner (via createVerificationRunner) exactly once per attempt and captures a VerificationResult. The run must occur on every attempt regardless of whether --test-gate is set.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "verification_runner_error_degrades_gracefully",
+    "description": "If the post-Generator verification runner throws, exits with a spawn error, or returns an error result, the harness records the failure as a VerificationResult with passed: false and a descriptive error output, does not crash the attempt loop, and proceeds to the Evaluator. An error result must NOT set classified: true and must NOT be treated as a newly-introduced failure even when --test-gate is set.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "classify_failures_called_with_baseline",
+    "description": "On every attempt where both a Sprint 2 pre-Generator baseline and a post-Generator VerificationResult are available, classifyFailures is invoked with those two inputs and its output (preExisting and newlyIntroduced sets, classified flag) is attached to the result before injection. When the baseline is absent or passed === null, classifyFailures is not called and the FailureClassification carries classified: false.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "unclassified_baseline_does_not_trigger_gate",
+    "description": "When classifyFailures returns classified: false (baseline absent, baseline passed === null, or any error in the classification path), the test gate does not trigger a skip regardless of whether --test-gate is set. The attempt proceeds to the Evaluator normally and no exception propagates out of the classification or gate-check path.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "test_gate_skips_evaluator_on_new_failures",
+    "description": "When --test-gate (or TEST_GATE env var) is set and classifyFailures reports at least one newly-introduced failure, the Evaluator is skipped using buildSkippedEvaluatorResult, the attempt is recorded as failed, and the feedback payload includes the names of the newly-failing tests. The Evaluator must not be invoked in this path.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "test_gate_off_by_default_evaluator_still_runs",
+    "description": "When --test-gate is not set (the default), a post-Generator verification result containing newly-introduced failures does NOT skip the Evaluator. The Evaluator runs and serves as the sole pass/fail gate, preserving the Evaluator-tier >= Generator-tier invariant.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "test_gate_cost_log_message",
+    "description": "Whenever the test gate causes the Evaluator to be skipped, the harness emits exactly one log line at normal level in plain English stating both what it did (skipped the Evaluator) and the cost consequence (e.g. 'Skipped Evaluator — N newly-introduced test failure(s) detected; evaluation token cost avoided.'). The count N must equal the number of newly-introduced failures, and the message style/grammar must match the existing surface-coverage and lint-gate messages in sprint-attempts.ts.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "gate_ordering_surface_then_lint_then_test",
+    "description": "The test gate is evaluated only after the surface-coverage gate and the lint gate have both passed. If either earlier gate triggers a skip, the test gate code is not reached. The ordering must be observable from the code structure in sprint-attempts.ts and documented in an inline comment.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "test_gate_config_precedence",
+    "description": "The testGate flag resolves with standard precedence: CLI --test-gate > env TEST_GATE > .adhd/.env TEST_GATE > default (false/off). The resolved value is visible in the startup config summary alongside the existing lintGate display.",
+    "threshold": 1,
+    "sprintNumber": 3
+  },
+  {
+    "name": "default_caps_preserve_existing_behavior",
+    "description": "When no per-agent turn-cap flags or env vars are set, each agent's resolved turn cap equals or exceeds the previous single global ceiling of 50 turns (no agent's effective capability is reduced versus today's defaults). The Generator must resolve to exactly 50 turns by default to match prior behavior.",
+    "threshold": 10,
+    "sprintNumber": 5
+  },
+  {
+    "name": "per_agent_cap_isolation",
+    "description": "When a turn cap is overridden for one agent (e.g. --generator-max-turns 30), only that agent's resolved cap changes; all other agents' resolved caps remain at their defaults and are unaffected.",
+    "threshold": 10,
+    "sprintNumber": 5
+  },
+  {
+    "name": "invalid_cap_degrades_to_default",
+    "description": "When a per-agent cap is set to a non-numeric string, zero, or a negative integer (e.g. GENERATOR_MAX_TURNS=abc or --planner-max-turns -5), resolveConfig/validateConfig replaces it with the agent's default cap and does not throw, crash the run, or emit an unhandled rejection — mirroring the safeCap pattern in shared/contract-limits.ts.",
+    "threshold": 10,
+    "sprintNumber": 5
+  },
+  {
+    "name": "caps_wired_to_sdk_maxturns",
+    "description": "The resolved per-agent turn cap for each role is passed as the maxTurns field in the RunAgentRequest handed to runAgent/resumeAgent in harness-claude/run-agent.ts, so the SDK actually enforces the cap. Verified by inspecting the value passed at the call site (unit test with a spy/mock on runAgent).",
+    "threshold": 10,
+    "sprintNumber": 5
+  },
+  {
+    "name": "standard_precedence_respected",
+    "description": "For each per-agent cap, the resolution order CLI flag > env var > .adhd/.env > default is enforced: a CLI flag beats a matching env var, an env var beats .adhd/.env, and .adhd/.env beats the hardcoded default. Verified by unit-testing resolveConfig with combinations of sources.",
+    "threshold": 10,
+    "sprintNumber": 5
+  },
+  {
+    "name": "unit_tests_cover_resolution_paths",
+    "description": "Unit tests in tests/ cover: (a) default resolution for all four agents, (b) valid CLI/env overrides for at least two agents, (c) invalid values (non-numeric, negative, zero) degrading to defaults for at least two agents, and (d) precedence ordering (CLI beats env). All tests pass under bun test with no skips.",
+    "threshold": 10,
+    "sprintNumber": 5
+  },
+  {
+    "name": "harness_starts_cleanly",
+    "description": "After the sprint's changes, the harness starts without TypeScript errors (tsc --noEmit passes), without Biome lint errors (bun run lint passes), and the existing test suite passes (bun test green). No previously passing test is broken by the sprint.",
+    "threshold": 10,
+    "sprintNumber": 5
+  },
+  {
+    "name": "prompt_requests_partial_output",
+    "description": "buildRefinementPrompt explicitly instructs the Planner to emit only the revised remaining-sprint sections and must NOT re-emit any completed sprint sections; the full current spec is still provided in-memory as reference context, and the instruction is present every time --refine-spec is active",
+    "threshold": 8,
+    "sprintNumber": 7
+  },
+  {
+    "name": "splice_preserves_completed_sections_verbatim",
+    "description": "The spec assembled by spliceRefinementSections contains every completed-sprint section byte-for-byte identical to its source in the original spec, as verified by string comparison of the extracted sections before and after assembly",
+    "threshold": 9,
+    "sprintNumber": 7
+  },
+  {
+    "name": "splice_inserts_revised_sections_in_order",
+    "description": "When the Planner returns revised remaining-sprint sections, the assembled spec places those sections in correct ordinal position after the completed sections, and countSprintHeadings returns the same sprint count as the original spec",
+    "threshold": 9,
+    "sprintNumber": 7
+  },
+  {
+    "name": "splice_falls_back_to_original_without_throwing",
+    "description": "spliceRefinementSections never throws under any input (empty string, blank Planner response, no recognisable ## Sprint N markers, or fewer sections than expected); in any unresolvable case it returns the original spec unchanged and logs exactly one line at normal level explaining what happened, matching the never-throwing contract of shared/contract-limits.ts and shared/codebase-map.ts",
+    "threshold": 9,
+    "sprintNumber": 7
+  },
+  {
+    "name": "diff_display_preserved",
+    "description": "After patch-based assembly, computeSpecDiff is still called against the original spec and the assembled result, and the diff is displayed to the operator before the HITL accept/reject gate — identical to pre-Sprint-7 behavior",
+    "threshold": 8,
+    "sprintNumber": 7
+  },
+  {
+    "name": "hitl_and_noninteractive_auto_accept_preserved",
+    "description": "The HITL accept/reject gate fires unchanged in interactive sessions; non-interactive sessions still auto-accept (or auto-abort per existing policy) without requiring operator input — neither code path is broken by the patch-based assembly",
+    "threshold": 9,
+    "sprintNumber": 7
+  },
+  {
+    "name": "regression_preservation_preserved",
+    "description": "The regression-restore call (restoreRegressionData or equivalent) still executes after refinement completes regardless of whether the spec was assembled via splice or fallback, so no accumulated regression criteria are silently lost",
+    "threshold": 9,
+    "sprintNumber": 7
+  },
+  {
+    "name": "default_behavior_unchanged_without_flag",
+    "description": "Without --refine-spec, the new spliceRefinementSections helper and updated buildRefinementPrompt are never invoked; a run without that flag produces output byte-for-byte identical to pre-Sprint-7 behavior",
+    "threshold": 10,
+    "sprintNumber": 7
+  },
+  {
+    "name": "unit_tests_cover_splice_logic",
+    "description": "tests/ contains unit tests for spliceRefinementSections that pass under bun test, covering at minimum: correct assembly from completed + revised sections, byte-exact completed-section preservation, the sprint-count-preserving ordinal insertion, and the fallback path returning the original spec unchanged on missing/unresolvable headers without throwing",
+    "threshold": 8,
+    "sprintNumber": 7
+  },
+  {
+    "name": "parse_approved_envelope",
+    "description": "parseReviewEnvelope given { verdict: 'APPROVED', changes: '' } returns a result indicating approval with no contract override, so the caller uses the proposal text as the contract source — identical outcome to the former APPROVED string branch",
+    "threshold": 8,
+    "sprintNumber": 8
+  },
+  {
+    "name": "parse_revised_envelope",
+    "description": "parseReviewEnvelope given { verdict: 'REVISED', changes: 'Changed threshold for foo from 6 to 8', contract: { ... } } returns verdict=revised and the contract object from the envelope as the selected contract source",
+    "threshold": 8,
+    "sprintNumber": 8
+  },
+  {
+    "name": "parse_legacy_approved_string",
+    "description": "parseReviewEnvelope given the trimmed literal string 'APPROVED' returns verdict=approved — preserving backward compatibility with existing reviewer responses that predate the envelope format",
+    "threshold": 8,
+    "sprintNumber": 8
+  },
+  {
+    "name": "parse_legacy_bare_contract",
+    "description": "parseReviewEnvelope given a raw contract JSON string with no verdict field returns verdict=revised and the parsed contract object, preserving backward compatibility with the existing raw-contract path that feeds parseContract in negotiateContract",
+    "threshold": 8,
+    "sprintNumber": 8
+  },
+  {
+    "name": "parse_envelope_never_throws",
+    "description": "parseReviewEnvelope returns a defined fallback result (treating the input as a bare contract or signaling parse failure) for any malformed, empty, non-JSON, or structurally unexpected input — it never throws and never crashes the run, matching the never-throwing style of shared/contract-limits.ts and shared/verification.ts",
+    "threshold": 9,
+    "sprintNumber": 8
+  },
+  {
+    "name": "negotiate_contract_uses_envelope_parser",
+    "description": "negotiateContract selects the contract source via parseReviewEnvelope rather than the former literal string comparison (contractSource = reviewText.trim() === 'APPROVED' ? proposalText : reviewText); for both legacy input forms and the new envelope, the selected contract is identical to what the old branch would have chosen",
+    "threshold": 8,
+    "sprintNumber": 8
+  },
+  {
+    "name": "narrowing_round_uses_envelope_parser",
+    "description": "runNarrowingRound detects reviewer approval via parseReviewEnvelope rather than the former result.response.trim() === 'APPROVED' literal guard; the loop exits correctly on a { verdict: 'APPROVED' } envelope, on the legacy 'APPROVED' string, and continues correctly on a REVISED envelope",
+    "threshold": 8,
+    "sprintNumber": 8
+  },
+  {
+    "name": "contract_marker_retirement_removes_criterion",
+    "description": "Given a passing sprint whose contract names a prior criterion in a retire list, when `accumulateRegressionCriteria` runs, then that criterion's name is absent from the returned criteria array and from the file written to `regression.json`.",
+    "threshold": 9,
+    "sprintNumber": 9
+  },
+  {
+    "name": "retirement_durability_blocks_resurrection",
+    "description": "Given a criterion that was retired in sprint N, when a subsequent sprint N+1 accumulates a new behavioral criterion with the exact same name, then the durable retired-names set prevents that name from appearing in the persisted suite — the newer criterion is silently dropped rather than resurrecting the retired entry.",
+    "threshold": 9,
+    "sprintNumber": 9
+  },
+  {
+    "name": "retired_criteria_absent_from_evaluator_section",
+    "description": "Given a suite that contains a retired criterion, when `buildRegressionSection` is called for any later sprint, then the retired criterion's name and description do not appear anywhere in the returned section string.",
+    "threshold": 9,
+    "sprintNumber": 9
+  },
+  {
+    "name": "legacy_bare_array_loads_without_error",
+    "description": "Given an existing `regression.json` file whose content is a bare JSON array of `{ name, description, threshold, sprintNumber }` objects with no tier, surfaces, or retired-names fields, when `readRegressionCriteria` reads it, then it returns a valid array of criteria with no thrown exception and no loss of existing entries.",
+    "threshold": 9,
+    "sprintNumber": 9
+  },
+  {
+    "name": "new_fields_round_trip_correctly",
+    "description": "Given criteria accumulated with tier and surfaces fields plus a non-empty retired-names set, when the store is written to `regression.json` and then read back by `readRegressionCriteria`, then the tier, surfaces, and retired-names values are byte-for-byte identical to what was written — no field is dropped, coerced, reordered, or silently defaulted.",
+    "threshold": 9,
+    "sprintNumber": 9
+  },
+  {
+    "name": "legacy_criteria_always_checked",
+    "description": "Given criteria in the suite that have no tier or surfaces field (legacy shape), when `buildRegressionSection` is called for a sprint touching any surface set, then all such criteria are included in the returned section regardless of surface matching — they are never omitted by the relevance filter.",
+    "threshold": 9,
+    "sprintNumber": 9
+  },
+  {
+    "name": "core_criteria_always_checked",
+    "description": "Given criteria tagged with tier 'core', when `buildRegressionSection` is called for any sprint regardless of which surfaces that sprint touches, then every core criterion appears in the returned section — core membership overrides the surface-relevance filter.",
+    "threshold": 9,
+    "sprintNumber": 9
+  },
+  {
+    "name": "surface_relevance_filter_excludes_non_matching",
+    "description": "Given a suite of 20 'optional' criteria all tagged with a surface that does NOT intersect the current contract's declared surfaces, when `buildRegressionSection` is called, then fewer than 20 of those criteria appear in the returned section; and given an 'optional' criterion whose surfaces DO intersect the contract surfaces, it is always present — confirming the intersection test is exact, not substring-based.",
+    "threshold": 8,
+    "sprintNumber": 9
+  },
+  {
+    "name": "regression_section_size_bounded",
+    "description": "Given a suite of 50 behavioral criteria all tagged 'optional' with surfaces disjoint from the current sprint, when `buildRegressionSection` is called, then the returned string's character count is less than or equal to its character count when called with 100 such criteria, and that count stays under a fixed documented upper bound — the section size does not grow linearly with suite count.",
+    "threshold": 8,
+    "sprintNumber": 9
+  },
+  {
+    "name": "non_coding_agent_no_mcp",
+    "description": "When a non-coding agent (Planner, refinement Planner, or contract-negotiation runner) is launched via runAgent/resumeAgent, the SDK Options passed to the Claude Agent SDK contain no mcpServers entries (the field is absent or an empty array), regardless of any project/user/machine MCP configuration that may be present on disk.",
+    "threshold": 8,
+    "sprintNumber": 10
+  },
+  {
+    "name": "coding_agent_tool_retention",
+    "description": "When a coding agent (Generator, Evaluator, or Documenter) launches with no tool-governance overrides set, the SDK Options it receives include at least the same tool and settings-source configuration as today — no built-in tool or MCP server that was available before Sprint 10 is silently removed, and the agent can execute its work without capability regression.",
+    "threshold": 8,
+    "sprintNumber": 10
+  },
+  {
+    "name": "mcp_disable_override_precedence",
+    "description": "When MCP is disabled via the CLI flag, env var, or .adhd/.env entry (in that precedence order), every agent — including coding agents — launches with no mcpServers in its SDK Options. When a specific server is added back via override, only that server appears in the affected agent's options. Precedence follows CLI flag > env var > .adhd/.env > default, matching all existing option resolution.",
+    "threshold": 7,
+    "sprintNumber": 10
+  },
+  {
+    "name": "budget_80pct_single_warning",
+    "description": "When a per-sprint token budget is configured and the running total of the current sprint's stage input+output tokens (summed from StageUsage records) crosses 80% of the budget, exactly one soft warning is logged stating the current token spend and the remaining budget headroom. A subsequent call to the check function after the threshold is already crossed does not emit a second warning for the same sprint.",
+    "threshold": 7,
+    "sprintNumber": 10
+  },
+  {
+    "name": "budget_100pct_interactive_pause",
+    "description": "When a per-sprint token budget is reached (cumulative sprint tokens ≥ 100% of budget) during an interactive run (TTY detected), the harness calls promptGate from shared/interaction.ts and waits for the operator to choose extend or abort before continuing. Choosing abort stops the run; choosing extend resumes it and suppresses further budget gates for the remainder of that sprint.",
+    "threshold": 8,
+    "sprintNumber": 10
+  },
+  {
+    "name": "budget_100pct_noninteractive_continue",
+    "description": "When a per-sprint token budget is reached in non-interactive mode (no TTY / CI environment), the harness does not pause or call promptGate; instead it logs a single one-line HARNESS warning stating the overage and auto-continues — matching the non-interactive policy already established by other gates.",
+    "threshold": 7,
+    "sprintNumber": 10
+  },
+  {
+    "name": "budget_inert_when_unset",
+    "description": "When neither --sprint-token-budget nor SPRINT_TOKEN_BUDGET is configured, no budget checks, threshold comparisons, warnings, or pauses occur during sprint execution. Behavior is identical to the pre-Sprint-10 run path.",
+    "threshold": 8,
+    "sprintNumber": 10
   }
 ]

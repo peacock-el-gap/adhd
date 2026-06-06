@@ -22,6 +22,12 @@ export interface RunPlannerOptions {
    *  log filename, and span name reflect that. */
   reviseFeedback?: string;
   skills?: AgentSkills;
+  /**
+   * Optional supplementary context injected after the main prompt sections.
+   * Used to pass the harness-generated codebase map (Sprint 6) so the Planner
+   * does not need to re-explore the project from scratch during refinement.
+   */
+  supplementaryContext?: string;
 }
 
 export interface PlannerResult {
@@ -38,6 +44,12 @@ export interface RunGeneratorOptions {
   previousFeedback?: EvalResult;
   attempt?: number;
   skills?: AgentSkills;
+  /**
+   * Optional supplementary context injected after the sprint contract and
+   * feedback sections. Used to pass the pre-sprint verification baseline so
+   * the Generator knows which tests were already failing before it ran.
+   */
+  supplementaryContext?: string;
 }
 
 export interface GeneratorResult {
@@ -119,6 +131,17 @@ export interface NegotiateContractOptions {
    * Generator-propose / Evaluator-review split is used.
    */
   modelContract?: string;
+  /**
+   * When true, MCP servers are disabled for the contract-negotiation calls.
+   * Contract negotiation is a non-coding role and already receives no MCP by
+   * default; this field is present for policy completeness.
+   */
+  disableMcp?: boolean;
+  /**
+   * Additional MCP server entries (for policy completeness; not used for
+   * non-coding roles like contract negotiation).
+   */
+  addMcpServers?: Record<string, Record<string, unknown>>;
 }
 
 /** Convenience type for the planner function signature, used by gates and spec-refinement. */

@@ -1,17 +1,23 @@
-import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { gitDir, harnessDir } from "../shared/files.ts";
 import { log, shouldLog } from "../shared/logger.ts";
 import { type ExecLike, ensureAgentCommit } from "../shared/orchestration/git-ops.ts";
 import type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions } from "../shared/orchestration/types.ts";
 import { buildGeneratorPrompt } from "../shared/prompts.ts";
+import { buildToolPolicyInput, resolveToolPolicy } from "../shared/tool-policy.ts";
 import type { CommitSource } from "../shared/types.ts";
 import type { QueryFn } from "./agent-stream.ts";
-import { resumeAgent, runAgent } from "./run-agent.ts";
+import { type RunAgentRequest, type RunAgentResult, resumeAgent, runAgent } from "./run-agent.ts";
 
 export type { EnsureCommitOptions, GeneratorResult, RunGeneratorOptions };
 
-export async function runGenerator(opts: RunGeneratorOptions): Promise<GeneratorResult> {
-  const { config, identity, spec, contract, previousFeedback, skills } = opts;
+/** Optional test-only seam. Pass `runAgentFn` to capture RunAgentRequest values
+ *  without mock.module(). Mirrors the `deps` pattern in ensureGeneratorCommit. */
+export interface RunGeneratorDeps {
+  runAgentFn?: (req: RunAgentRequest) => Promise<RunAgentResult>;
+}
+
+export async function runGenerator(opts: RunGeneratorOptions, _deps?: RunGeneratorDeps): Promise<GeneratorResult> {
+  const { config, identity, spec, contract, previousFeedback, skills, supplementaryContext } = opts;
   const { workDir, isGreenfield, noTdd, sourceDir, testDir } = config;
   const model = config.resolvedModelGenerator;
   const level = config.logLevel;
@@ -37,7 +43,15 @@ export async function runGenerator(opts: RunGeneratorOptions): Promise<Generator
     }
   }
 
-  const result = await runAgent({
+  // Inject supplementary context (e.g. verification baseline) after the main prompt sections.
+  if (supplementaryContext) {
+    prompt += `\n\n${supplementaryContext}`;
+  }
+
+  const toolPolicy = resolveToolPolicy("GENERATOR", buildToolPolicyInput(config));
+
+  const _runAgent = _deps?.runAgentFn ?? runAgent;
+  const result = await _runAgent({
     identity,
     role: "GENERATOR",
     workDir,
@@ -45,10 +59,11 @@ export async function runGenerator(opts: RunGeneratorOptions): Promise<Generator
     systemPrompt,
     model,
     tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-    maxTurns: CLAUDE_MAX_TURNS,
+    maxTurns: config.resolvedMaxTurnsGenerator,
     persistSession: true,
     logLevel: level,
     additionalDirectories: skills?.additionalDirs,
+    toolPolicy,
     callbacks: {
       onToolUse(_name, input) {
         if (shouldLog("verbose", level) && input) {

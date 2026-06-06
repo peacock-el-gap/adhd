@@ -7,7 +7,9 @@ import {
   extractCompletedSprintSections,
   extractSprintSection,
   freezeCompletedSprints,
+  spliceRefinementSections,
 } from "../shared/refinement.ts";
+import { countSprintHeadings } from "../shared/sprint-count.ts";
 
 // --- CLI flag parsing ---
 
@@ -239,10 +241,10 @@ describe("no-op without --refine-spec", () => {
   });
 });
 
-// --- Refinement prompt ---
+// --- Refinement prompt (Sprint 7: partial-output instructions) ---
 
 describe("buildRefinementPrompt", () => {
-  test("includes current spec content", () => {
+  test("includes current spec content as reference", () => {
     const prompt = buildRefinementPrompt(SAMPLE_SPEC, [1, 2], [3]);
     expect(prompt).toContain(SAMPLE_SPEC);
   });
@@ -257,20 +259,201 @@ describe("buildRefinementPrompt", () => {
     expect(prompt).toContain("Remaining sprints: 3");
   });
 
-  test("instructs to read codebase", () => {
-    const prompt = buildRefinementPrompt(SAMPLE_SPEC, [1], [2, 3]);
-    expect(prompt).toContain("Read the actual codebase");
+  test("instructs to emit only remaining-sprint sections", () => {
+    const prompt = buildRefinementPrompt(SAMPLE_SPEC, [1, 2], [3]);
+    expect(prompt).toContain("Output only the revised remaining-sprint sections");
   });
 
-  test("instructs to preserve completed sprints", () => {
+  test("explicitly forbids re-emitting completed sprint sections", () => {
     const prompt = buildRefinementPrompt(SAMPLE_SPEC, [1, 2], [3]);
-    expect(prompt).toContain("preserve all completed sprint sections");
+    expect(prompt).toContain("Do NOT re-emit any completed sprint sections");
     expect(prompt).toContain("## Sprint 1");
     expect(prompt).toContain("## Sprint 2");
   });
 
-  test("instructs to only modify remaining sprints", () => {
+  test("instructs output to start with the first remaining sprint heading", () => {
+    const prompt = buildRefinementPrompt(SAMPLE_SPEC, [1, 2], [3]);
+    expect(prompt).toContain("## Sprint 3");
+    // Output should start with the first remaining sprint
+    expect(prompt).toContain("starting with `## Sprint 3`");
+  });
+
+  test("instructs to propose adjustments to remaining sprints", () => {
     const prompt = buildRefinementPrompt(SAMPLE_SPEC, [1], [2, 3]);
-    expect(prompt).toContain("Only modify not-yet-started sprint sections");
+    expect(prompt).toContain("Propose adjustments to the REMAINING sprints");
+  });
+
+  test("does NOT instruct to re-read the codebase (map is injected via supplementaryContext)", () => {
+    const prompt = buildRefinementPrompt(SAMPLE_SPEC, [1], [2, 3]);
+    expect(prompt).not.toContain("Read the actual codebase");
+  });
+
+  test("does NOT instruct to write a complete revised spec including all sections", () => {
+    const prompt = buildRefinementPrompt(SAMPLE_SPEC, [1], [2, 3]);
+    expect(prompt).not.toContain("Include ALL sections");
+  });
+});
+
+// --- spliceRefinementSections ---
+
+describe("spliceRefinementSections", () => {
+  // Happy path: Planner returns only the remaining sections (Sprint 3 onward)
+  const REVISED_SPRINT_3 = `## Sprint 3
+
+**Theme: Revised Polish**
+
+Updated final polish with better testing.`;
+
+  test("assembles full spec from completed sections + revised remaining", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, REVISED_SPRINT_3, 2);
+
+    expect(result).toContain("## Sprint 1");
+    expect(result).toContain("## Sprint 2");
+    expect(result).toContain("## Sprint 3");
+    expect(result).toContain("Revised Polish");
+  });
+
+  test("completed sections are preserved byte-for-byte", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, REVISED_SPRINT_3, 2);
+
+    // Extract the completed sections from the result and compare verbatim
+    const resultSections = extractCompletedSprintSections(result, 2);
+    for (const [n, original] of completedSections) {
+      expect(resultSections.get(n)).toBe(original);
+    }
+  });
+
+  test("revised section replaces original remaining content", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, REVISED_SPRINT_3, 2);
+
+    expect(result).not.toContain("Final polish and testing.");
+    expect(result).toContain("Updated final polish with better testing.");
+  });
+
+  test("sprint count is preserved when Planner returns the same number of remaining sprints", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, REVISED_SPRINT_3, 2);
+
+    expect(countSprintHeadings(result)).toBe(countSprintHeadings(SAMPLE_SPEC));
+  });
+
+  test("sections appear in correct ordinal order (completed before remaining)", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, REVISED_SPRINT_3, 2);
+
+    const pos1 = result.indexOf("## Sprint 1");
+    const pos2 = result.indexOf("## Sprint 2");
+    const pos3 = result.indexOf("## Sprint 3");
+    expect(pos1).toBeLessThan(pos2);
+    expect(pos2).toBeLessThan(pos3);
+  });
+
+  test("preamble (non-sprint content) is preserved from original spec", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, REVISED_SPRINT_3, 2);
+
+    expect(result).toContain("# Product Spec");
+    expect(result).toContain("## Overview");
+    expect(result).toContain("A great product.");
+  });
+
+  // Fallback: empty Planner response
+  test("falls back to original spec on empty revised content", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, "", 2);
+    expect(result).toBe(SAMPLE_SPEC);
+  });
+
+  test("falls back to original spec on blank revised content", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, "   \n  \n", 2);
+    expect(result).toBe(SAMPLE_SPEC);
+  });
+
+  // Fallback: no recognisable ## Sprint N in the Planner output
+  test("falls back to original spec when no ## Sprint N heading is in Planner output", () => {
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, "Some prose without headings.", 2);
+    expect(result).toBe(SAMPLE_SPEC);
+  });
+
+  test("falls back to original spec when Planner output only contains completed sprint headings", () => {
+    // Sprint 1 and 2 are completed; the Planner output contains only completed sprints
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 2);
+    const onlyCompleted = "## Sprint 1\n\nSome content.\n\n## Sprint 2\n\nMore content.";
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, onlyCompleted, 2);
+    expect(result).toBe(SAMPLE_SPEC);
+  });
+
+  // Never-throwing contract
+  test("never throws on empty originalSpec", () => {
+    const completedSections = new Map<number, string>();
+    expect(() => spliceRefinementSections("", completedSections, REVISED_SPRINT_3, 0)).not.toThrow();
+  });
+
+  test("never throws on empty completed sections map", () => {
+    const completedSections = new Map<number, string>();
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, REVISED_SPRINT_3, 0);
+    // With no completed sections and completedSprint=0, firstRemaining=1
+    // REVISED_SPRINT_3 starts with ## Sprint 3, which is > 0, so fuzzy fallback finds it
+    expect(() =>
+      spliceRefinementSections(SAMPLE_SPEC, completedSections, REVISED_SPRINT_3, 0),
+    ).not.toThrow();
+    expect(result).toContain("## Sprint 3");
+  });
+
+  test("never throws on completely invalid input", () => {
+    const completedSections = new Map<number, string>();
+    expect(() => spliceRefinementSections("", completedSections, "", 0)).not.toThrow();
+  });
+
+  // Fuzzy fallback: Planner returns full spec (heading drift scenario)
+  test("handles case where Planner returns full spec by finding first remaining sprint heading", () => {
+    // completedSprint=1, firstRemaining=2
+    // Planner returns the full spec (which includes ## Sprint 1 and ## Sprint 2)
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 1);
+    const fullSpecFromPlanner = SAMPLE_SPEC; // full spec
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, fullSpecFromPlanner, 1);
+
+    // Should find ## Sprint 2 and use it as the start of remaining content
+    // Result: preamble + ## Sprint 1 (verbatim) + ## Sprint 2 onward (from planner)
+    expect(result).toContain("## Sprint 1");
+    expect(result).toContain("## Sprint 2");
+    expect(result).toContain("## Sprint 3");
+    // Sprint 1 should be verbatim from original
+    const sprint1From = extractSprintSection(result, 1);
+    const sprint1Original = extractSprintSection(SAMPLE_SPEC, 1);
+    expect(sprint1From).toBe(sprint1Original);
+  });
+
+  // Multiple remaining sprints
+  test("assembles multiple revised remaining sprints correctly", () => {
+    const multiRemaining = `## Sprint 2
+
+**Theme: Revised Features**
+
+Revised user-facing features.
+
+## Sprint 3
+
+**Theme: Revised Polish**
+
+Revised final polish.`;
+
+    const completedSections = extractCompletedSprintSections(SAMPLE_SPEC, 1);
+    const result = spliceRefinementSections(SAMPLE_SPEC, completedSections, multiRemaining, 1);
+
+    expect(result).toContain("## Sprint 1");
+    expect(result).toContain("## Sprint 2");
+    expect(result).toContain("Revised user-facing features.");
+    expect(result).toContain("## Sprint 3");
+    expect(result).toContain("Revised final polish.");
+    // Sprint 1 verbatim
+    const sprint1From = extractSprintSection(result, 1);
+    const sprint1Original = extractSprintSection(SAMPLE_SPEC, 1);
+    expect(sprint1From).toBe(sprint1Original);
   });
 });

@@ -1,8 +1,8 @@
-import { CLAUDE_MAX_TURNS } from "../shared/config.ts";
 import { gitDir } from "../shared/files.ts";
 import { log, logError, shouldLog } from "../shared/logger.ts";
 import type { RunEvaluatorOptions } from "../shared/orchestration/types.ts";
 import { buildEvaluatorPrompt } from "../shared/prompts.ts";
+import { buildToolPolicyInput, resolveToolPolicy } from "../shared/tool-policy.ts";
 import type { EvalResult, SprintContract } from "../shared/types.ts";
 import type { SDKResultFields } from "../shared/usage.ts";
 import { extractBalancedJson, extractUnclosedFence } from "./contract.ts";
@@ -36,6 +36,8 @@ ${supplementaryContext ?? ""}
 
 Examine the application in ${isGreenfield ? "the `app/` directory" : "the project root"}. Read the code, run it if possible, and score each criterion. Output ONLY the JSON evaluation object.`;
 
+  const toolPolicy = resolveToolPolicy("EVALUATOR", buildToolPolicyInput(config));
+
   const streamResult = await runAgent({
     identity,
     role: "EVALUATOR",
@@ -44,10 +46,11 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
     systemPrompt,
     model,
     tools: ["Read", "Bash", "Glob", "Grep"],
-    maxTurns: CLAUDE_MAX_TURNS,
+    maxTurns: config.resolvedMaxTurnsEvaluator,
     persistSession: false,
     logLevel: level,
     additionalDirectories: skills?.additionalDirs,
+    toolPolicy,
     callbacks: {
       onResult: () => log("EVALUATOR", `Evaluation complete for sprint ${sprint}`),
     },

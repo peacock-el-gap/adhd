@@ -1,5 +1,5 @@
 import { gitDir } from "../files.ts";
-import { detectStaticAnalysisCommands, truncateStaticAnalysisOutput } from "../static-analysis.ts";
+import { detectStaticAnalysisCommands, TEST_SCRIPT_KEYS, truncateStaticAnalysisOutput } from "../static-analysis.ts";
 import type { ResolvedConfig } from "../types.ts";
 
 export interface StaticAnalysisResult {
@@ -16,14 +16,18 @@ export async function runStaticAnalysis(config: ResolvedConfig): Promise<StaticA
     return { output: "", failed: false };
   }
 
-  if (commands.length === 0) {
+  // Test commands are handled by the verification runner — exclude them here
+  // so the static analysis runner only runs lint/typecheck as before.
+  const lintTypecheckCommands = commands.filter((cmd) => !TEST_SCRIPT_KEYS.includes(cmd.name));
+
+  if (lintTypecheckCommands.length === 0) {
     return { output: "", failed: false };
   }
 
   let combinedOutput = "";
   let anyFailed = false;
 
-  for (const cmd of commands) {
+  for (const cmd of lintTypecheckCommands) {
     try {
       const result = Bun.spawnSync(["sh", "-c", cmd.script], {
         cwd: projectDir,

@@ -2,6 +2,54 @@
 
 import type { AgentSkills } from "./skills.ts";
 
+// ---------------------------------------------------------------------------
+// Read-discipline rules (Sprint 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum character length for any agent system prompt.
+ * Used as a guardrail to catch accidental prompt bloat.
+ */
+export const MAX_SYSTEM_PROMPT_CHARS = 50_000;
+
+/**
+ * Build the read-discipline section for an agent system prompt.
+ *
+ * Three rules apply to coding agents (Generator, Evaluator):
+ *   1. Locate-then-read: use grep/search first, then read only the needed range.
+ *   2. No re-reads: do not open a file already in the current session.
+ *   3. Scoped tests: run only the relevant test file(s), not the full suite.
+ *
+ * For non-coding agents (Planner) pass `includeTestRule = false` to emit only
+ * rules 1 and 2. Rule 3 is omitted because the Planner does not run tests, and
+ * the section must not contradict the per-injection no-rerun guidance used by
+ * the Generator and Evaluator when a verification result is available.
+ *
+ * The returned string is the same every call — never throws.
+ */
+export function buildReadDisciplineSection(includeTestRule: boolean): string {
+  const lines: string[] = [
+    "## Read Discipline",
+    "",
+    "Keep your context small by following these rules on every turn:",
+    "",
+    "1. **Locate, then read**: Use grep or search to find the relevant region before",
+    "   opening a file. Read only the needed bounded range — not the whole file.",
+    "2. **No re-reads**: Do not open a file again if it has already appeared in the",
+    "   current session. Work from the content already in your context.",
+  ];
+
+  if (includeTestRule) {
+    lines.push(
+      "3. **Scoped tests only**: Run only the relevant test file(s) when verifying a",
+      "   change. Do not run the full test suite mid-session — the harness handles",
+      "   full-suite verification separately.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
 /** Append skills content (injected + reference manifest) to a prompt. */
 function appendSkills(prompt: string, skills?: AgentSkills): string {
   if (!skills) return prompt;
@@ -25,6 +73,7 @@ interface PromptContext {
 }
 
 export function buildPlannerPrompt(ctx: PromptContext): string {
+  const readDiscipline = buildReadDisciplineSection(false);
   const writeLocation = `Write the spec to \`spec.md\` in the \`.adhd/\` directory (${ctx.workDir}/.adhd/spec.md).`;
 
   const projectContext = ctx.isGreenfield
@@ -81,7 +130,9 @@ Organize features into sprints (3-6 sprints). Each sprint should:
 - Do NOT specify implementation details like function names, file structure, or API routes. The generator decides those.
 - Examine the existing project structure. If source and test directories already exist, document them in the spec. If the project is empty or has no established convention, use these defaults: source code in \`${ctx.sourceDir ?? "src"}\`, tests in \`${ctx.testDir ?? "tests"}\`.
 - Do NOT write any code. Only write the spec.
-- ${writeLocation}`;
+- ${writeLocation}
+
+${readDiscipline}`;
 
   return appendSkills(prompt, ctx.skills);
 }
@@ -89,6 +140,7 @@ Organize features into sprints (3-6 sprints). Each sprint should:
 export function buildGeneratorPrompt(ctx: PromptContext): string {
   const sourceDir = ctx.sourceDir ?? "src";
   const testDir = ctx.testDir ?? "tests";
+  const readDiscipline = buildReadDisciplineSection(true);
 
   const workingDir = ctx.isGreenfield
     ? `All code goes in the \`app/\` subdirectory of your working directory. Initialize the project there if it doesn't exist.`
@@ -124,7 +176,9 @@ When evaluation feedback is provided in your prompt:
 - Address every specific issue mentioned
 - Pay attention to file paths and line numbers in the feedback
 - Re-run and verify each fix before committing
-- Do not skip or dismiss any feedback item`;
+- Do not skip or dismiss any feedback item
+
+${readDiscipline}`;
 
   return appendSkills(prompt, ctx.skills);
 }
@@ -132,6 +186,7 @@ When evaluation feedback is provided in your prompt:
 export function buildEvaluatorPrompt(ctx: PromptContext): string {
   const sourceDir = ctx.sourceDir ?? "src";
   const testDir = ctx.testDir ?? "tests";
+  const readDiscipline = buildReadDisciplineSection(true);
   const appLocation = ctx.isGreenfield
     ? `the \`app/\` directory`
     : `the project root directory (source in \`${sourceDir}/\`, tests in \`${testDir}/\`)`;
@@ -207,7 +262,9 @@ Quality criteria (naming conventions, code duplication, error handling patterns,
 
 ## Final Reminder
 
-Your final message is the JSON object, and nothing else. No preamble. No trailing commentary. Wrap it in a \`\`\`json fence and stop.`;
+Your final message is the JSON object, and nothing else. No preamble. No trailing commentary. Wrap it in a \`\`\`json fence and stop.
+
+${readDiscipline}`;
 
   return appendSkills(prompt, ctx.skills);
 }

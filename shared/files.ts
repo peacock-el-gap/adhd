@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { log } from "./logger.ts";
 import { normalizeSurfaces } from "./surfaces.ts";
 import type { EvalResult, HarnessProgress, SprintContract } from "./types.ts";
+import type { VerificationResult } from "./verification.ts";
 
 /** Resolve the .adhd metadata directory for a given project root. */
 export function harnessDir(workDir: string): string {
@@ -220,5 +221,27 @@ export async function readProgress(workDir: string): Promise<HarnessProgress> {
     return JSON.parse(raw) as HarnessProgress;
   } catch {
     throw new Error(`Invalid JSON in progress file: ${join(harnessDir(workDir), "progress.json")}`);
+  }
+}
+
+/**
+ * Persist a pre-Generator verification baseline for a sprint as run metadata
+ * under `.adhd/`. This file is not committed to the project repository by
+ * default — it is harness-internal metadata consumed by later stages (e.g.
+ * Sprint 3 injection). Overwrites any existing baseline for the same sprint.
+ *
+ * Never throws; a write failure is silently swallowed so the sprint attempt
+ * can continue (the baseline is advisory metadata, not load-bearing state).
+ */
+export async function writeBaselineVerification(
+  workDir: string,
+  sprintNumber: number,
+  baseline: VerificationResult,
+): Promise<void> {
+  try {
+    const path = join(harnessDir(workDir), `baseline-verification-sprint-${sprintNumber}.json`);
+    await writeFile(path, JSON.stringify(baseline, null, 2), "utf-8");
+  } catch {
+    // Non-fatal: baseline storage is metadata only; proceed without it.
   }
 }

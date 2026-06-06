@@ -21,7 +21,45 @@ export const DEFAULT_CONFIG: Omit<HarnessConfig, "userPrompt" | "workDir"> = {
   maxSurfaces: 2,
 };
 
+/** @deprecated Use the per-agent defaults (DEFAULT_MAX_TURNS_*) and resolvedMaxTurns* fields. */
 export const CLAUDE_MAX_TURNS = 50;
+
+// Per-agent turn cap defaults — all set to 50 to preserve the prior single-ceiling behavior.
+/** Default turn cap for the Planner agent. */
+export const DEFAULT_MAX_TURNS_PLANNER = 50;
+/** Default turn cap for the Generator agent. Must stay 50 to preserve prior behavior. */
+export const DEFAULT_MAX_TURNS_GENERATOR = 50;
+/** Default turn cap for the Evaluator agent. */
+export const DEFAULT_MAX_TURNS_EVALUATOR = 50;
+/** Default turn cap for the Documenter agent. */
+export const DEFAULT_MAX_TURNS_DOCUMENTER = 50;
+
+/**
+ * Resolve a per-agent turn cap from a raw value (CLI number or env-var string),
+ * degrading gracefully to `defaultCap` when the value is absent or invalid.
+ * A valid cap is a finite integer ≥ 1. Never throws — invalid values degrade to
+ * the default and emit a one-line warning naming the flag/env var and fallback,
+ * mirroring the safeCap style in shared/contract-limits.ts.
+ *
+ * @param raw       Raw value from CLI (number) or env var (string).
+ * @param defaultCap Fallback when raw is absent or invalid.
+ * @param flagLabel Human-readable identifier for the source, e.g.
+ *                  "--generator-max-turns / GENERATOR_MAX_TURNS". When
+ *                  provided, an invalid value emits a console warning.
+ */
+export function resolveAgentCap(raw: number | string | undefined, defaultCap: number, flagLabel?: string): number {
+  if (raw === undefined) return defaultCap;
+  const n = typeof raw === "string" ? parseInt(raw, 10) : raw;
+  if (!Number.isInteger(n) || n < 1) {
+    if (flagLabel !== undefined) {
+      console.warn(
+        `[HARNESS] ${flagLabel}: "${String(raw)}" is not a valid turn cap (must be a positive integer); using default ${defaultCap}`,
+      );
+    }
+    return defaultCap;
+  }
+  return n;
+}
 
 // --- CLI Help Text ---
 
@@ -59,6 +97,8 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--no-tdd": "Disable TDD instructions in prompts",
   "--no-docs": "Skip post-run documentation generation",
   "--lint-gate": "Hard gate: lint/typecheck failure skips evaluator and counts as failed attempt",
+  "--test-gate":
+    "Hard gate: newly-introduced test failures skip evaluator and count as failed attempt (env: TEST_GATE)",
   "--sprint N": "Run a specific sprint only (requires existing spec)",
   "--refine-spec": "Enable progressive spec refinement after passing sprints",
   "--notify": "Send desktop notifications at HITL gates and errors",
@@ -66,6 +106,20 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--commit-adhd-logs": "Commit .adhd/ metadata + logs after each sprint (implies --commit-adhd)",
   "--allow-main":
     "Allow running on the default branch (main/master); by default the harness refuses, since it commits to the checked-out branch",
+  "--planner-max-turns":
+    "Maximum turns for the Planner agent (env: PLANNER_MAX_TURNS; default: 50); invalid values degrade to default",
+  "--generator-max-turns":
+    "Maximum turns for the Generator agent (env: GENERATOR_MAX_TURNS; default: 50); invalid values degrade to default",
+  "--evaluator-max-turns":
+    "Maximum turns for the Evaluator agent (env: EVALUATOR_MAX_TURNS; default: 50); invalid values degrade to default",
+  "--documenter-max-turns":
+    "Maximum turns for the Documenter agent (env: DOCUMENTER_MAX_TURNS; default: 50); invalid values degrade to default",
+  "--disable-mcp":
+    "Disable MCP servers for all agents, including coding agents (env: DISABLE_MCP). Non-coding agents already receive no MCP by default.",
+  "--mcp-servers":
+    'JSON object of MCP server configs to inject into coding agents, e.g. \'{"my-server":{"command":"node","args":["server.js"]}}\' (env: MCP_SERVERS). Ignored when --disable-mcp is set.',
+  "--sprint-token-budget":
+    "Optional per-sprint token ceiling (input+output tokens). Soft warn at 80%; pause (interactive) or log (non-interactive) at 100% (env: SPRINT_TOKEN_BUDGET). Inert when not set.",
 };
 
 /**
@@ -125,12 +179,20 @@ interface ParsedCli {
   modelDocumenter?: string;
   modelContract?: string;
   lintGate?: boolean;
+  testGate?: boolean;
   sprint?: number;
   refineSpec?: boolean;
   notify?: boolean;
   commitAdhd?: boolean;
   commitAdhdLogs?: boolean;
   allowMain?: boolean;
+  plannerMaxTurns?: number;
+  generatorMaxTurns?: number;
+  evaluatorMaxTurns?: number;
+  documenterMaxTurns?: number;
+  disableMcp?: boolean;
+  mcpServers?: string;
+  sprintTokenBudget?: number;
   help?: boolean;
 }
 
@@ -176,12 +238,20 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
       "model-documenter": { type: "string" },
       "model-contract": { type: "string" },
       "lint-gate": { type: "boolean", default: false },
+      "test-gate": { type: "boolean", default: false },
       sprint: { type: "string" },
       "refine-spec": { type: "boolean", default: false },
       notify: { type: "boolean", default: false },
       "commit-adhd": { type: "boolean", default: false },
       "commit-adhd-logs": { type: "boolean", default: false },
       "allow-main": { type: "boolean", default: false },
+      "planner-max-turns": { type: "string" },
+      "generator-max-turns": { type: "string" },
+      "evaluator-max-turns": { type: "string" },
+      "documenter-max-turns": { type: "string" },
+      "disable-mcp": { type: "boolean", default: false },
+      "mcp-servers": { type: "string" },
+      "sprint-token-budget": { type: "string" },
     },
     allowPositionals: true,
     strict: true,
@@ -220,12 +290,28 @@ export function parseCli(argv: string[] = process.argv.slice(2)): ParsedCli {
     modelDocumenter: values["model-documenter"] as string | undefined,
     modelContract: values["model-contract"] as string | undefined,
     lintGate: values["lint-gate"] as boolean,
+    testGate: values["test-gate"] as boolean,
     sprint: values.sprint ? parseInt(values.sprint as string, 10) : undefined,
     refineSpec: values["refine-spec"] as boolean,
     notify: values.notify as boolean,
     commitAdhd: values["commit-adhd"] as boolean,
     commitAdhdLogs: values["commit-adhd-logs"] as boolean,
     allowMain: values["allow-main"] as boolean,
+    plannerMaxTurns: values["planner-max-turns"] ? parseInt(values["planner-max-turns"] as string, 10) : undefined,
+    generatorMaxTurns: values["generator-max-turns"]
+      ? parseInt(values["generator-max-turns"] as string, 10)
+      : undefined,
+    evaluatorMaxTurns: values["evaluator-max-turns"]
+      ? parseInt(values["evaluator-max-turns"] as string, 10)
+      : undefined,
+    documenterMaxTurns: values["documenter-max-turns"]
+      ? parseInt(values["documenter-max-turns"] as string, 10)
+      : undefined,
+    disableMcp: values["disable-mcp"] as boolean,
+    mcpServers: values["mcp-servers"] as string | undefined,
+    sprintTokenBudget: values["sprint-token-budget"]
+      ? parseInt(values["sprint-token-budget"] as string, 10)
+      : undefined,
     help: values.help as boolean,
   };
 }
@@ -363,6 +449,74 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
   const langfuseSecretKey = process.env.LANGFUSE_SECRET_KEY || undefined;
   const langfuseBaseUrl = process.env.LANGFUSE_BASE_URL || undefined;
 
+  // Per-agent turn caps: CLI flag > env var > default.
+  // Invalid values (non-numeric, zero, negative) degrade to the agent's default
+  // without throwing — mirroring the safeCap style in shared/contract-limits.ts.
+  // Resolution: prefer the CLI numeric value when valid, then the env-var string,
+  // then the hardcoded default.
+  const resolvedMaxTurnsPlanner = resolveAgentCap(
+    cli.plannerMaxTurns !== undefined && !Number.isNaN(cli.plannerMaxTurns)
+      ? cli.plannerMaxTurns
+      : process.env.PLANNER_MAX_TURNS,
+    DEFAULT_MAX_TURNS_PLANNER,
+    "--planner-max-turns / PLANNER_MAX_TURNS",
+  );
+  const resolvedMaxTurnsGenerator = resolveAgentCap(
+    cli.generatorMaxTurns !== undefined && !Number.isNaN(cli.generatorMaxTurns)
+      ? cli.generatorMaxTurns
+      : process.env.GENERATOR_MAX_TURNS,
+    DEFAULT_MAX_TURNS_GENERATOR,
+    "--generator-max-turns / GENERATOR_MAX_TURNS",
+  );
+  const resolvedMaxTurnsEvaluator = resolveAgentCap(
+    cli.evaluatorMaxTurns !== undefined && !Number.isNaN(cli.evaluatorMaxTurns)
+      ? cli.evaluatorMaxTurns
+      : process.env.EVALUATOR_MAX_TURNS,
+    DEFAULT_MAX_TURNS_EVALUATOR,
+    "--evaluator-max-turns / EVALUATOR_MAX_TURNS",
+  );
+  const resolvedMaxTurnsDocumenter = resolveAgentCap(
+    cli.documenterMaxTurns !== undefined && !Number.isNaN(cli.documenterMaxTurns)
+      ? cli.documenterMaxTurns
+      : process.env.DOCUMENTER_MAX_TURNS,
+    DEFAULT_MAX_TURNS_DOCUMENTER,
+    "--documenter-max-turns / DOCUMENTER_MAX_TURNS",
+  );
+
+  // Tool/MCP governance (F11): CLI flag > env var > .adhd/.env > default.
+  const disableMcp = cli.disableMcp || isTruthy(process.env.DISABLE_MCP) || false;
+
+  // Parse addMcpServers from JSON (--mcp-servers / MCP_SERVERS).
+  // Invalid JSON degrades to empty (no servers) — never throws.
+  let addMcpServers: Record<string, Record<string, unknown>> = {};
+  const rawMcpServers = cli.mcpServers ?? process.env.MCP_SERVERS;
+  if (rawMcpServers) {
+    try {
+      const parsed = JSON.parse(rawMcpServers);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        addMcpServers = parsed as Record<string, Record<string, unknown>>;
+      } else {
+        console.warn("[HARNESS] --mcp-servers / MCP_SERVERS: expected a JSON object; ignoring.");
+      }
+    } catch {
+      console.warn("[HARNESS] --mcp-servers / MCP_SERVERS: invalid JSON; ignoring.");
+    }
+  }
+
+  // Per-sprint token budget (F12): CLI flag > env var > .adhd/.env > default.
+  // Invalid values degrade to undefined (inert).
+  let sprintTokenBudget: number | undefined;
+  const rawBudget =
+    cli.sprintTokenBudget ??
+    (process.env.SPRINT_TOKEN_BUDGET ? parseInt(process.env.SPRINT_TOKEN_BUDGET, 10) : undefined);
+  if (rawBudget !== undefined && Number.isInteger(rawBudget) && rawBudget > 0) {
+    sprintTokenBudget = rawBudget;
+  } else if (rawBudget !== undefined) {
+    console.warn(
+      `[HARNESS] --sprint-token-budget / SPRINT_TOKEN_BUDGET: "${String(rawBudget)}" is not a valid positive integer; budget enforcement disabled.`,
+    );
+  }
+
   // Per-agent overrides: CLI flag > env var. Blank values degrade to undefined
   // so they fall through to the uniform model / matrix default cleanly.
   const modelPlanner = blankToUndefined(cli.modelPlanner ?? process.env.MODEL_PLANNER);
@@ -395,6 +549,7 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     noTdd: cli.noTdd || false,
     noDocs: cli.noDocs || isTruthy(process.env.ADHD_NO_DOCS),
     lintGate: cli.lintGate || false,
+    testGate: cli.testGate || isTruthy(process.env.TEST_GATE) || false,
     refineSpec: cli.refineSpec || false,
     // Per-agent resolved models. Precedence per agent:
     //   explicit per-agent override > explicit uniform model > per-agent tier default.
@@ -403,6 +558,11 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     resolvedModelGenerator: resolveAgentModel(modelGenerator, userUniformModel, DEFAULT_MODEL_GENERATOR),
     resolvedModelEvaluator: resolveAgentModel(modelEvaluator, userUniformModel, DEFAULT_MODEL_EVALUATOR),
     resolvedModelDocumenter: resolveAgentModel(modelDocumenter, userUniformModel, DEFAULT_MODEL_DOCUMENTER),
+    // Per-agent resolved turn caps. Invalid values degrade to defaults; never throw.
+    resolvedMaxTurnsPlanner,
+    resolvedMaxTurnsGenerator,
+    resolvedMaxTurnsEvaluator,
+    resolvedMaxTurnsDocumenter,
     // Genuinely optional
     tzDisplay,
     langfusePublicKey,
@@ -422,6 +582,10 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
     commitAdhd: cli.commitAdhd || cli.commitAdhdLogs || false,
     commitAdhdLogs: cli.commitAdhdLogs || false,
     allowMain: cli.allowMain || false,
+    disableMcp,
+    addMcpServers,
+    uniformModelOverride: userUniformModel,
+    sprintTokenBudget,
   };
 
   // Validate

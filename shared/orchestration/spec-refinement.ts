@@ -1,7 +1,8 @@
 import { readFile as readFileRaw, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { makeIdentity, timedName } from "../agent-identity.ts";
-import { harnessDir, writeSpec } from "../files.ts";
+import { buildCodebaseMap } from "../codebase-map.ts";
+import { gitDir, harnessDir, writeSpec } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { log, logDivider } from "../logger.ts";
 import {
@@ -9,7 +10,7 @@ import {
   computeSpecDiff,
   countSprints,
   extractCompletedSprintSections,
-  freezeCompletedSprints,
+  spliceRefinementSections,
 } from "../refinement.ts";
 import type { AgentSkills } from "../skills.ts";
 import type { Span } from "../tracing.ts";
@@ -66,6 +67,18 @@ export async function performSpecRefinement(
   const remainingSprintNumbers: number[] = [];
   for (let i = completedSprint + 1; i <= currentTotalSprints; i++) remainingSprintNumbers.push(i);
 
+  // Build a codebase map to inject into the refinement planner so it does not
+  // re-explore the project structure from scratch. Graceful degradation: a map
+  // build failure (empty string) is simply omitted from the context.
+  let refinementMapContext: string | undefined;
+  try {
+    const gDir = gitDir(config.workDir, config.isGreenfield);
+    const mapRaw = buildCodebaseMap(gDir);
+    refinementMapContext = mapRaw || undefined;
+  } catch {
+    // Never-throwing — empty map is fine
+  }
+
   let proposedSpec: string;
   try {
     const refinementIdentity = makeIdentity({ role: "planner", variant: "refinement" });
@@ -77,6 +90,7 @@ export async function performSpecRefinement(
         config: { ...config, userPrompt: refinementPrompt },
         identity: refinementIdentity,
         skills: plannerSkills,
+        supplementaryContext: refinementMapContext,
       }),
     );
     if (refinementResult.sdkResult) {
@@ -100,21 +114,11 @@ export async function performSpecRefinement(
     return { specChanged: false, spec: originalSpec, newSprintCount: currentTotalSprints };
   }
 
-  // Freeze completed sprint sections — programmatic enforcement
-  proposedSpec = freezeCompletedSprints(proposedSpec, completedSections);
-
-  // Verify completed sections are preserved
-  const newCompletedSections = extractCompletedSprintSections(proposedSpec, completedSprint);
-  for (const [sprintNum, originalSection] of completedSections) {
-    const newSection = newCompletedSections.get(sprintNum);
-    if (newSection !== originalSection) {
-      log("HARNESS", `Warning: Completed sprint ${sprintNum} section was modified. Repairing...`);
-      // Force-repair by replacing
-      if (newSection) {
-        proposedSpec = proposedSpec.replace(newSection, originalSection);
-      }
-    }
-  }
+  // Sprint 7: patch-based assembly — splice the Planner's remaining sections
+  // (proposedSpec) after the verbatim completed sections from the original spec.
+  // spliceRefinementSections is never-throwing; on any unresolvable input it
+  // returns originalSpec unchanged (diff will be null → "no changes" path below).
+  proposedSpec = spliceRefinementSections(originalSpec, completedSections, proposedSpec, completedSprint);
 
   // Compute and display diff
   const diff = computeSpecDiff(originalSpec, proposedSpec);

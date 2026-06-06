@@ -3,6 +3,12 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { makeIdentity, timedName } from "../agent-identity.ts";
 import {
+  DEFAULT_MAX_TURNS_DOCUMENTER,
+  DEFAULT_MAX_TURNS_EVALUATOR,
+  DEFAULT_MAX_TURNS_GENERATOR,
+  DEFAULT_MAX_TURNS_PLANNER,
+} from "../config.ts";
+import {
   gitDir,
   harnessDir,
   initWorkspace,
@@ -15,7 +21,7 @@ import {
 } from "../files.ts";
 import { promptGate } from "../interaction.ts";
 import { fileTimestamp, log, logDebug, logDivider, logError, setDisplayTimezone } from "../logger.ts";
-import { describeAgentModels, evaluatorInvariantWarning } from "../models.ts";
+import { describeAgentCaps, describeAgentModels, evaluatorInvariantWarning } from "../models.ts";
 import { notify } from "../notifications.ts";
 import { resolveAllAgentSkills } from "../skills.ts";
 import { countSprintHeadings } from "../sprint-count.ts";
@@ -50,6 +56,17 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
   for (const line of describeAgentModels(config)) {
     log("HARNESS", line);
   }
+  // Print any per-agent turn caps that differ from the defaults so the operator
+  // can see what's in effect without having to read the full config.
+  const defaultCaps = {
+    resolvedMaxTurnsPlanner: DEFAULT_MAX_TURNS_PLANNER,
+    resolvedMaxTurnsGenerator: DEFAULT_MAX_TURNS_GENERATOR,
+    resolvedMaxTurnsEvaluator: DEFAULT_MAX_TURNS_EVALUATOR,
+    resolvedMaxTurnsDocumenter: DEFAULT_MAX_TURNS_DOCUMENTER,
+  };
+  for (const line of describeAgentCaps(config, defaultCaps)) {
+    log("HARNESS", line);
+  }
   // Advisory check: warn (don't stop) when the judge is a weaker tier than the producer.
   const invariantWarning = evaluatorInvariantWarning(config.resolvedModelEvaluator, config.resolvedModelGenerator);
   if (invariantWarning) {
@@ -59,6 +76,19 @@ export async function runHarness(config: ResolvedConfig, agents: AgentRunners): 
     "HARNESS",
     `Max sprints: ${config.maxSprints} | Max retries: ${config.maxRetriesPerSprint} | Threshold: ${config.passThreshold}/10`,
   );
+  // Show active gate flags so the operator knows what cost-saving gates are on.
+  const activeGates: string[] = [];
+  if (config.lintGate) activeGates.push("lint-gate");
+  if (config.testGate) activeGates.push("test-gate");
+  if (activeGates.length > 0) {
+    log("HARNESS", `Active gates: ${activeGates.join(", ")}`);
+  }
+
+  // Run-on-main guard: ADHD commits to the checked-out branch, so refuse to run
+  // on the default branch (main/master) unless --allow-main. Throws before any
+  // commit happens, and applies to every non-greenfield path (resume, sprint
+  // selection, and fresh runs alike). Greenfield uses its own app/ repo.
+  assertBranchAllowed(config);
 
   // Run-on-main guard: ADHD commits to the checked-out branch, so refuse to run
   // on the default branch (main/master) unless --allow-main. Throws before any

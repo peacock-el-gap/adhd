@@ -53,7 +53,11 @@ After `bun link`, you can run `adhd` from any directory -- it operates on the cu
 | [Run non-interactively](#configuration) | `adhd --no-interactive --file spec.md` |
 | [Skip all interactive gates](#configuration) | `adhd --gate-timeout 0 --file spec.md` |
 | [Enable lint hard gate](#static-analysis--lint-gate) | `adhd --lint-gate "Add auth"` |
+| [Enable test hard gate](#test-gate) | `adhd --test-gate "Add auth"` |
 | [Enable spec refinement](#progressive-spec-refinement) | `adhd --refine-spec "Build a dashboard"` |
+| [Limit an agent's turns](#per-agent-turn-caps) | `adhd --generator-max-turns 30 "Add auth"` |
+| [Set a cost ceiling per sprint](#cost-tracking--guardrails) | `adhd --sprint-token-budget 100000 "Add auth"` |
+| [Disable MCP servers](#tool--mcp-governance) | `adhd --disable-mcp "Add auth"` |
 
 All commands below assume you're in the project directory. Use `--project <path>` to target a different directory without cd-ing.
 
@@ -156,6 +160,72 @@ adhd --refine-spec "Build a dashboard with analytics"
 ```
 
 In interactive mode, you review a diff of proposed changes and can accept or reject them. Completed sprint sections are frozen and cannot be modified. Combined with `--no-interactive`, refinements are auto-accepted (but the diff is still logged).
+
+The harness generates a codebase map of the project structure and injects it into the refinement planner's context so it doesn't need to re-explore the codebase. The planner emits only the revised remaining-sprint sections (not the entire spec), and the harness splices them around the frozen completed sections.
+
+### Test Hard Gate
+
+By default, test results are injected into the evaluator's context as soft feedback (failures don't prevent evaluation). Enable a hard test gate to skip evaluation when the generator introduces new test failures:
+
+```bash
+adhd --test-gate "Add auth with JWT"
+```
+
+The harness captures which tests were failing before the generator ran (the "known-failing baseline"), then compares post-generation results against it. Only newly-introduced failures trigger the gate. This saves evaluator cost when the generator makes obvious mistakes with tests.
+
+### Per-Agent Turn Caps
+
+Control how many turns (back-and-forth interactions) each agent is allowed:
+
+```bash
+# Limit the Generator to 25 turns (default: 50)
+adhd --generator-max-turns 25 "Add auth"
+
+# Limit each agent independently
+adhd --planner-max-turns 40 --generator-max-turns 25 --evaluator-max-turns 40 "Add auth"
+```
+
+Available flags: `--planner-max-turns`, `--generator-max-turns`, `--evaluator-max-turns`, `--documenter-max-turns`. All default to 50 (preserving prior behavior). Invalid values degrade to defaults with a warning.
+
+Precedence: CLI flag > `{AGENT}_MAX_TURNS` env var > default.
+
+### Tool & MCP Governance
+
+By default, coding agents (Generator, Evaluator, Documenter) receive full MCP and tool access. Non-coding agents (Planner, contract negotiation) receive only essential tools and no MCP.
+
+Disable MCP entirely (useful for testing or sandboxing):
+
+```bash
+adhd --disable-mcp "Add auth"
+```
+
+Or inject specific MCP servers into coding agents (as a JSON object):
+
+```bash
+adhd --mcp-servers '{"filesystem":{"command":"node","args":["fs-server.js"]}}' "Add auth"
+```
+
+Precedence: `--disable-mcp` flag > `--mcp-servers` flag > `DISABLE_MCP` env var / `MCP_SERVERS` env var > default.
+
+### Cost Tracking & Guardrails
+
+The harness prints a per-stage cost summary after each run, and saves cumulative usage to `.adhd/usage.json`. This tracks input/output tokens and USD cost per model and per agent, enabling per-model attribution. The summary includes both a per-stage breakdown and a per-model rollup sorted by total USD.
+
+Optionally set a per-sprint token ceiling to prevent runaway cost:
+
+```bash
+# Warn at 80% of budget; pause (interactive) or log warning (non-interactive) at 100%
+adhd --sprint-token-budget 100000 "Add auth"
+```
+
+When a budget is set:
+- **At 80%**: A soft warning is logged, but the run continues.
+- **At 100% (interactive)**: The harness pauses and asks you to extend the budget or abort the sprint.
+- **At 100% (non-interactive)**: A warning is logged and the run auto-continues.
+
+If a uniform model override puts agents above the cost-optimised per-agent matrix tiers, an advisory warning is printed at startup alongside the model information.
+
+Precedence: `--sprint-token-budget` flag > `SPRINT_TOKEN_BUDGET` env var > no budget (inert).
 
 ## What to Expect
 
@@ -326,10 +396,19 @@ Precedence: **CLI flag > env var > `.adhd/.env` > default**.
 | Disable TDD | `--no-tdd` | -- | TDD enabled |
 | Skip docs | `--no-docs` | `ADHD_NO_DOCS` | docs enabled |
 | Lint hard gate | `--lint-gate` | -- | off (soft gate) |
+| Test hard gate | `--test-gate` | `TEST_GATE` | off (soft gate) |
 | Spec refinement | `--refine-spec` | -- | off |
+| Planner max turns | `--planner-max-turns <n>` | `PLANNER_MAX_TURNS` | `50` |
+| Generator max turns | `--generator-max-turns <n>` | `GENERATOR_MAX_TURNS` | `50` |
+| Evaluator max turns | `--evaluator-max-turns <n>` | `EVALUATOR_MAX_TURNS` | `50` |
+| Documenter max turns | `--documenter-max-turns <n>` | `DOCUMENTER_MAX_TURNS` | `50` |
+| Disable MCP | `--disable-mcp` | `DISABLE_MCP` | MCP enabled (coding agents) |
+| MCP servers | `--mcp-servers <json>` | `MCP_SERVERS` | project/user/machine defaults |
+| Sprint token budget | `--sprint-token-budget <n>` | `SPRINT_TOKEN_BUDGET` | no budget (inert) |
 | Notifications | `--notify` | -- | off (terminal bell only) |
 | Commit .adhd/ metadata | `--commit-adhd` | -- | off (no metadata commits) |
 | Commit .adhd/ + logs | `--commit-adhd-logs` | -- | off (implies `--commit-adhd`) |
+| Allow main branch | `--allow-main` | -- | off (refuse main/master) |
 | Source directory | `--source-dir <dir>` | `SOURCE_DIR` | `src` |
 | Test directory | `--test-dir <dir>` | `TEST_DIR` | `tests` |
 | Langfuse tracing | -- | `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY` | disabled |
@@ -499,12 +578,25 @@ Key data flow:
 - Checkpoint/resume across interruptions
 - Interactive gates at key decision points
 
-### Evaluation Quality (Phase 1 Deepen)
+### Phase 1: Evaluation Quality (Deepen)
 - **BDD Regression Accumulation** -- Behavioral criteria from passing sprints accumulate and are re-checked on subsequent sprints, catching cross-sprint regressions
 - **Static Analysis Soft Gate** -- Auto-detects and runs lint/typecheck, injecting results into evaluator context
 - **Lint Hard Gate** (`--lint-gate`) -- Lint/typecheck failures skip evaluation and count as failed attempts
 - **Diff-Aware Retries** -- On retry attempts, the evaluator sees a git diff of what changed, enabling sharper feedback
 - **Quality Criteria in Contracts** -- Contracts include code quality criteria (naming, duplication, error handling) alongside functional criteria
+
+### Phase 2: Cost & Efficiency
+- **Harness-owned verification** -- Project tests run once per attempt, centrally, with results injected into both Generator (as baseline) and Evaluator (as authority); both agents are instructed not to re-run the full suite, and an optional hard test gate (`--test-gate`) skips evaluation on newly-introduced failures
+- **Known-failing baseline** -- The harness captures which tests were failing before work started, so agents don't waste turns distinguishing pre-existing failures from regressions
+- **Read discipline** -- Agent system prompts include durable rules to locate before reading, never re-read files already in-session, and run only scoped tests, reducing per-turn context and the cache-read multiplier
+- **Per-agent turn caps** (`--planner-max-turns`, `--generator-max-turns`, `--evaluator-max-turns`, `--documenter-max-turns`) -- Set different turn ceilings for each agent (all default to 50 for backward compatibility)
+- **Harness-generated codebase map** -- The harness builds a deterministic, body-free map of the project structure and exports once per run, injected into both the Generator and Planner/refinement so they don't re-explore from scratch
+- **Patch-based spec refinement** (`--refine-spec`) -- After each passing sprint, the Planner emits only the revised remaining-sprint sections rather than re-writing the entire spec, with the harness splicing them around the frozen completed sections
+- **Structured contract reviewer envelope** -- Contract reviewers emit a compact `{ verdict, changes, contract? }` envelope instead of re-stating the full contract, reducing contract-review cost while making revisions visible
+- **Regression criterion retirement** -- Intentionally-changed or dropped behaviors can be marked `retire:` in contracts; retired criteria leave the persisted suite and won't penalize correct new work or be resurrected by later same-named criteria
+- **Regression suite tiering & relevance filter** -- Criteria tagged as `core` always run; `optional` criteria run only when their declared surfaces overlap with the current sprint's surfaces, keeping large suites bounded
+- **Tool & MCP governance** -- Non-coding agents (Planner, refinement, contract negotiation) receive only their necessary built-in tools and no MCP servers; coding agents (Generator, Evaluator, Documenter) retain their full working set; overridable via `--disable-mcp` or `--mcp-servers`
+- **Cost guardrails** -- At startup, a warning appears if a uniform model override defeats the cost-optimized per-agent matrix; optional per-sprint token budget (`--sprint-token-budget`) with soft warn at 80% and interactive/non-interactive pause at 100%
 
 ### Developer Experience
 - **Sprint Selection** (`--sprint N`) -- Re-run a specific sprint without running all previous sprints

@@ -127,3 +127,74 @@ export function evaluatorInvariantWarning(evaluatorModel: string, generatorModel
   if (!evaluatorWeakerThanGenerator(evaluatorModel, generatorModel)) return null;
   return `Evaluator model (${evaluatorModel}) is a weaker tier than the Generator model (${generatorModel}). The judge should never be weaker than the producer — keep the Evaluator tier at or above the Generator tier. Continuing anyway.`;
 }
+
+/**
+ * Advisory warning when a uniform `--model`/`CLAUDE_MODEL` override puts any
+ * agent above its cost-optimised default matrix tier (i.e. spend is higher
+ * than the recommended configuration). Returns null when everything is within
+ * budget, when the uniform model matches a known tier ≤ the relevant defaults,
+ * or when the uniform model is unrecognised. Never throws.
+ *
+ * Only triggered by an explicit uniform override, NOT by individual per-agent
+ * overrides (which are deliberate per-agent choices, not a global override).
+ *
+ * @param uniformModel  The uniform model string passed via `--model`/`CLAUDE_MODEL`,
+ *                      or undefined when no uniform override was set.
+ */
+export function modelOverspendWarning(uniformModel: string | undefined): string | null {
+  if (!uniformModel) return null;
+  const uniformT = modelTier(uniformModel);
+  if (uniformT === "unknown") return null; // can't rank custom IDs
+
+  const defaultMatrix: Array<{ role: string; defaultModel: string }> = [
+    { role: "Planner", defaultModel: DEFAULT_MODEL_PLANNER },
+    { role: "Generator", defaultModel: DEFAULT_MODEL_GENERATOR },
+    { role: "Evaluator", defaultModel: DEFAULT_MODEL_EVALUATOR },
+    { role: "Documenter", defaultModel: DEFAULT_MODEL_DOCUMENTER },
+  ];
+
+  const overspending: string[] = [];
+  for (const { role, defaultModel } of defaultMatrix) {
+    const defaultT = modelTier(defaultModel);
+    if (defaultT === "unknown") continue;
+    if (TIER_RANK[uniformT] > TIER_RANK[defaultT]) {
+      overspending.push(`${role} (default: ${defaultT}, override: ${uniformT})`);
+    }
+  }
+
+  if (overspending.length === 0) return null;
+  return (
+    `Uniform model override "${uniformModel}" (${uniformT} tier) exceeds the cost-optimised default for: ` +
+    `${overspending.join("; ")}. Run cost will be higher than the recommended matrix. Continuing anyway.`
+  );
+}
+
+/** The four resolved per-agent turn caps. */
+export interface ResolvedAgentCaps {
+  resolvedMaxTurnsPlanner: number;
+  resolvedMaxTurnsGenerator: number;
+  resolvedMaxTurnsEvaluator: number;
+  resolvedMaxTurnsDocumenter: number;
+}
+
+/**
+ * Build per-agent startup log lines for any cap that differs from its default.
+ * Returns an empty array when all caps are at their defaults (nothing unusual to report).
+ * Mirrors the shape of `describeAgentModels` — one line per changed agent.
+ */
+export function describeAgentCaps(caps: ResolvedAgentCaps, defaults: ResolvedAgentCaps): string[] {
+  const lines: string[] = [];
+  if (caps.resolvedMaxTurnsPlanner !== defaults.resolvedMaxTurnsPlanner) {
+    lines.push(`Planner max-turns: ${caps.resolvedMaxTurnsPlanner}`);
+  }
+  if (caps.resolvedMaxTurnsGenerator !== defaults.resolvedMaxTurnsGenerator) {
+    lines.push(`Generator max-turns: ${caps.resolvedMaxTurnsGenerator}`);
+  }
+  if (caps.resolvedMaxTurnsEvaluator !== defaults.resolvedMaxTurnsEvaluator) {
+    lines.push(`Evaluator max-turns: ${caps.resolvedMaxTurnsEvaluator}`);
+  }
+  if (caps.resolvedMaxTurnsDocumenter !== defaults.resolvedMaxTurnsDocumenter) {
+    lines.push(`Documenter max-turns: ${caps.resolvedMaxTurnsDocumenter}`);
+  }
+  return lines;
+}
