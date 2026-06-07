@@ -226,13 +226,12 @@ preserved).
   only the durable assets survive on `main`, since today a forgotten clause fails silently.
 - For a **target** project, `.adhd/policy.json` is just a normal committed file in *their*
   repo; the durable-asset concern is specific to ADHD-developing-itself.
-- **Coordinate with OPP-54 (`.adhd/` commit governance).** That work edits the *same*
-  durable-asset incantation (`docs/RELEASING.md` / `CLAUDE.md`): it folds `regression.json`
-  into the commit allow-list so the documented `{usage.json, regression.json}` pair is
-  actually committed. If both land, the final durable-asset set should be
-  `{usage.json, regression.json, policy.json}`, and the strip-guard proposed here (§11
-  sprint 6) should cover all three. Sequence the two so neither overwrites the other's edit
-  to that prose.
+- **Coordinate with OPP-54 (`.adhd/` commit governance) — SHIPPED v0.10.0.** The durable
+  `.adhd` asset set committed to `main` is now `{usage.json, regression.json}`. If OPP-55
+  adds a committed `.adhd/policy.json`, it becomes the **third** durable asset →
+  `{usage.json, regression.json, policy.json}`; update the strip incantation in
+  `docs/RELEASING.md` / `CLAUDE.md` to keep it, and the strip-guard proposed here (§11
+  sprint 6) should cover all three.
 
 ---
 
