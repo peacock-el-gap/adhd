@@ -4,6 +4,11 @@ All notable changes to this project are documented here, from the point of view 
 
 ## [Unreleased]
 
+## [v0.11.0] - 2026-06-07
+
+### Added
+- **A Claude Code skill for driving the harness.** A new `adhd-harness` skill ships in the repo (under `.claude/skills/`). When you ask Claude Code to run, configure, or troubleshoot the `adhd` command in one of your projects, it now works from an accurate reference — the available flags, the run lifecycle, cost and model guidance, and common pitfalls — instead of guessing. A bundled helper script keeps the flag reference in sync with `adhd --help`.
+
 ## [v0.10.0] - 2026-06-07
 
 Predictable, default-off handling of the harness's own metadata. **Breaking behavioural change** — see Changed.
