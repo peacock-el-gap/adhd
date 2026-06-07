@@ -26,7 +26,7 @@ import { createConversationLog } from "../shared/conversation-logger.ts";
 import { loadExistingContract, writeContract, writeProgress } from "../shared/files.ts";
 import { fileTimestamp } from "../shared/logger.ts";
 import { notify } from "../shared/notifications.ts";
-import { commitAdhdArtifacts, commitAdhdMetadata, revertToCheckpoint } from "../shared/orchestration/git-ops.ts";
+import { commitAdhdMetadata, revertToCheckpoint } from "../shared/orchestration/git-ops.ts";
 import { countSprintHeadings } from "../shared/sprint-count.ts";
 import type { HarnessProgress, SprintContract } from "../shared/types.ts";
 import { parseContract } from "../harness-claude/contract.ts";
@@ -628,54 +628,15 @@ describe("e2e_commit_adhd_flags", () => {
 });
 
 // =====================================================
-// 8. clean_working_tree_before_generator
+// 8. clean_working_tree_before_generator (OPP-54: hygiene commit removed)
 // =====================================================
 describe("clean_working_tree_before_generator", () => {
-	test("commitAdhdArtifacts creates [adhd] commit for .adhd/ files", () => {
-		const dir = makeTmpDir();
-		initGitRepo(dir);
-		setupAdhdDir(dir);
-		writeFileSync(join(dir, ".adhd", "contracts", "sprint-2.json"), '{"sprintNumber": 2}');
-		writeFileSync(join(dir, ".adhd", "progress.json"), '{"status":"building"}');
-
-		commitAdhdArtifacts(dir, dir, 2);
-
-		// Verify .adhd/ files are committed
-		const status = execSync("git status --porcelain -- .adhd/", { cwd: dir, encoding: "utf-8" }).trim();
-		expect(status).toBe("");
-
-		// Verify commit message has [adhd] prefix
-		const msg = getCommitMessage(dir);
-		expect(msg).toMatch(/^\[adhd\]/);
-		expect(msg).toContain("Sprint 2");
-		rmSync(dir, { recursive: true, force: true });
-	});
-
-	test("commitAdhdArtifacts is no-op with no .adhd/ changes", () => {
-		const dir = makeTmpDir();
-		initGitRepo(dir);
-
-		const beforeSha = getHeadSha(dir);
-		commitAdhdArtifacts(dir, dir, 1);
-		const afterSha = getHeadSha(dir);
-
-		expect(afterSha).toBe(beforeSha);
-		rmSync(dir, { recursive: true, force: true });
-	});
-
-	test("multiple .adhd/ files committed in single commit", () => {
-		const dir = makeTmpDir();
-		initGitRepo(dir);
-		setupAdhdDir(dir);
-		writeFileSync(join(dir, ".adhd", "progress.json"), '{"status": "building"}');
-		writeFileSync(join(dir, ".adhd", "contracts", "sprint-3.json"), '{"sprintNumber": 3}');
-		writeFileSync(join(dir, ".adhd", "feedback", "sprint-2-round-0.json"), '{}');
-
-		commitAdhdArtifacts(dir, dir, 3);
-
-		const status = execSync("git status --porcelain -- .adhd/", { cwd: dir, encoding: "utf-8" }).trim();
-		expect(status).toBe("");
-		rmSync(dir, { recursive: true, force: true });
+	test("commitAdhdArtifacts has been removed — the ungated hygiene commit no longer exists", () => {
+		// OPP-54 Sprint 2: the commitAdhdArtifacts function was deleted because
+		// .adhd/ is now excluded from generator-output detection via pathspec,
+		// making the pre-generator hygiene commit unnecessary.
+		const gitOps = require("../shared/orchestration/git-ops.ts");
+		expect(gitOps.commitAdhdArtifacts).toBeUndefined();
 	});
 });
 
@@ -833,7 +794,6 @@ describe("consistent_naming_conventions", () => {
 		expect(typeof countSprintHeadings).toBe("function");
 		expect(typeof fileTimestamp).toBe("function");
 		expect(typeof loadExistingContract).toBe("function");
-		expect(typeof commitAdhdArtifacts).toBe("function");
 		expect(typeof commitAdhdMetadata).toBe("function");
 		expect(typeof revertToCheckpoint).toBe("function");
 		expect(typeof parseContract).toBe("function");
@@ -869,9 +829,7 @@ describe("no_code_duplication_across_features", () => {
 		expect(ts).toMatch(/^\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}$/);
 	});
 
-	test("commitAdhdArtifacts and commitAdhdMetadata share git-ops module", () => {
-		// Both are exported from the same module
-		expect(typeof commitAdhdArtifacts).toBe("function");
+	test("commitAdhdMetadata is exported from git-ops module", () => {
 		expect(typeof commitAdhdMetadata).toBe("function");
 	});
 

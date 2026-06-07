@@ -365,60 +365,6 @@ Code style is inherently project-specific. Python FastAPI conventions are nothin
 - **Effort**: Medium.
 - **Tag**: **[harness-implementable]**.
 
-> **OPP-54 below** was surfaced by a governance investigation (2026-06-07) into
-> which of the harness's own `.adhd/` artifacts should be committed to git. It is a
-> pre-1.0 surface decision (commit flags + default behaviour) that also closes a
-> latent clean-tree coupling defect, so it is sequenced in **Phase 1 (1.D)**.
-
-### OPP-54: `.adhd/` Commit Governance — Default-Off, Tiered, `.gitignore`-Supreme
-
-**Problem**: The harness runs against arbitrary repos, so any rule about what it
-commits must live in code, not in ADHD's own `.gitignore`. Today the behaviour does
-not match a clean "default off" model. `.adhd/` is committed on **every** Generator
-attempt by an *ungated* hygiene commit (`commitAdhdArtifacts`, a bare `git add .adhd/`),
-whenever `.adhd/` is not gitignored — the `--commit-adhd` flag only governs a
-separate curated *metadata* commit. The hygiene commit exists solely to keep the
-working tree clean for generator-output detection, yet three whole-tree
-`git status --porcelain` checks (`ensureAgentCommit` ×2, `checkDirtyTree`) and the
-fallback `git add -A` do not exclude `.adhd/`. The result is a latent defect: an
-artifact written *during* the Generator stage (e.g. the Generator's own conversation
-log, flushed when the agent finishes) can be folded into the **product** commit by
-the fallback. Two documentation/behaviour mismatches compound it: `regression.json`
-is named a durable asset kept on `main` but is absent from the commit allow-list, and
-`runs/` / `baseline-*` are documented "not committed" yet are swept by the bare add.
-
-**Opportunity**: Make the project's `.gitignore` an enforced invariant, and separate
-*persistence* (governed by flags, default off) from *hygiene* (governed by path
-exclusion, not by committing). Removing the hygiene commit and excluding `.adhd/` from
-the working-tree checks makes "default off" genuinely mean "the harness never touches
-git with `.adhd/`," while flags opt specific tiers in.
-
-- **Option A — Decouple hygiene from persistence (tiered flags).** Drop the ungated
-  pre-Generator commit; make the three working-tree checks and the fallback exclude
-  `.adhd/` (the committed-diff side already filters it). Persistence stays flag-gated
-  in two purpose-based tiers: `--commit-adhd` commits the structured audit record
-  (contracts, feedback, progress, spec, usage, **regression**, reviews, scout-digest,
-  baseline), `--commit-adhd-logs` adds raw conversation logs; `runs/`/`skills/` are
-  always local-only. Allow-list, so new families default to not-committed. Fixes both
-  mismatches.
-- **Option B — Additive only.** Keep the hygiene commit (commits by default); layer
-  governance on top. No behaviour change, but "default off" is never achieved and the
-  coupling defect and mismatches remain.
-- **Option C — Minimal coupling fix.** Only exclude the uncommitted subset from the
-  dirty checks so the fallback-pollution bug cannot bite; defer the flag redesign.
-
-- **Recommended**: **Option A.** It realises the intended two-layer model
-  (`.gitignore` supreme; flags opt in; default off) and closes the defect in one
-  coherent change. The detection edits are the load-bearing risk — land them
-  test-first (stray-`.adhd/` cases for `ensureAgentCommit`; product-only fallback;
-  a no-`-f`/`--force` guard test). User-visible default change → `feat!` /
-  `BREAKING CHANGE:` (precedent: §1.35). Greenfield is unaffected.
-- **Interaction**: refines the `--commit-adhd` / `--commit-adhd-logs` surface
-  (§1.13, §1.34) and the run-history/local-only intent (§1.37); pairs with the
-  release-time strip rule (`RELEASING.md`), which it simplifies.
-- **Effort**: Medium.
-- **Tag**: **[human-led]** — core-loop generator-output detection + 1.0 commit surface.
-
 > **OPP-55 below** was surfaced by the Phase-1 self-development post-mortem
 > (2026-06-07): the harness completed nine roadmap items but updated
 > `docs/ROADMAP.md` on none of them, despite the rule being present in the project
@@ -554,8 +500,6 @@ Each item is tagged **[harness-implementable]** (safe for the harness to build a
 | OPP-45 | Phantom flag; bound ambient settings inheritance | S–M | **[human-led]** | `--reviewer-max-turns` advertised but unimplemented (crashes on use); coding agents inherit user/project/local `.claude/` with no flag to bound it. Confirms seed #4/#1. |
 | OPP-46 | Guard against re-adding the phantom `--reviewer-max-turns` flag | S | **[harness-implementable]** | The reference shipped (§1.40); add a regression test asserting the phantom flag stays absent from `CLI_FLAG_HELP` and is rejected by the parser. |
 | OPP-47 | Lift Claude-specific vocabulary behind harness seams | S–M | **[human-led]** | Hardcoded Claude model IDs, cost zeroing for non-USD providers, `settingSources` literals — all latent friction for a `harness-gemini`. Cheap live-value items now; defer the rest. |
-| OPP-54 | `.adhd/` commit governance (default-off, tiered) | M | **[human-led]** | An ungated hygiene commit puts `.adhd/` in git by default; the fallback `git add -A` can fold a mid-Generator artifact into the product commit. Decouple hygiene (path exclusion) from persistence (tiered flags); fixes the `regression.json`/`runs/` mismatches. Test-first detection edits. Breaking default change. |
-
 **Rationale**: A deep review found that the harness's recent growth (the Phase 2 wave) outpaced its test net and surfaced a cluster of silent correctness and safety gaps. 1.A is the floor — defects that can produce a wrong PASS, an unsafe commit, or a corrupted run, each small and test-first. 1.B builds the characterization net the larger refactors require and opens the only sanctioned path to the judge tier without ever downgrading it. 1.C banks the recoverable cost levers and the cheap hygiene wins. 1.D states the trust boundary and settles the surface questions that would hurt to freeze at 1.0. The harness can implement most of 1.A/1.C/1.D against itself; the judge-adjacent, core-loop, and 1.0-surface items are human-led.
 
 ---
@@ -621,7 +565,7 @@ The first Phase 2 wave shipped as §1.32–§1.38 (contract-parse separation, pe
 | **Phase 1**<br/>*Harden (HIGH — leads)*<br/>from the deep review | 1.A | Correctness & safety | OPP-29, 31 | Branch safety; reject empty/partial evaluator feedback (vacuous PASS) |
 | | 1.B | Judge integrity & test foundations | OPP-32,35,36,37,38 | Honest gate, orchestration test net, judge-replay, core refactors |
 | | 1.C | Cost, hygiene & observability | OPP-33, 34, 41, 56, 58, 60 | Lint-gate dogfooding note, refinement cost, dead-helper removal, mid-run editor guard, refinement teardown, `--project=` parsing |
-| | 1.D | Docs, security & 1.0 surface | OPP-44, 45, 46, 47, 54 | Security tightening, phantom flag + settings governance, phantom-flag guard, second-harness vocabulary, `.adhd/` commit governance |
+| | 1.D | Docs, security & 1.0 surface | OPP-44, 45, 46, 47 | Security tightening, phantom flag + settings governance, phantom-flag guard, second-harness vocabulary |
 | --- | --- | --- | --- | --- |
 | **Phase 2**<br/>*Extend (MEDIUM)*<br/>§1.32–§1.38 shipped | 2.A | Live observability & liveness | OPP-27,48,49,50,51 | "Is it stuck?": error/limit visibility, incremental logs, thinking activity, `adhd status`, stream watchdog |
 | | 2.B | Forensics & debugging | OPP-53,52,28 | Self-contained session bundle, `contract-diff`, cost persistence |

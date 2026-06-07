@@ -20,12 +20,18 @@ const CONTRACT: SprintContract = {
   criteria: [{ name: "auth_works", description: "Auth works", threshold: 7 }],
 };
 
-/** Configure execSync responses for a sequence of calls */
-function setupExecSync(responses: string[]) {
-  let callIndex = 0;
-  execSyncMock.mockImplementation(() => {
-    if (callIndex < responses.length) {
-      return responses[callIndex++];
+/**
+ * Set up the mock to return specific responses based on command patterns.
+ * The fallback path in ensureAgentCommit now issues separate commands
+ * (add, diff --cached --quiet, commit) so pattern-based matching is
+ * more resilient than positional indexing.
+ */
+function setupExecByCommand(handlers: Record<string, string | (() => string)>) {
+  execSyncMock.mockImplementation((cmd: string) => {
+    for (const [pattern, response] of Object.entries(handlers)) {
+      if (cmd.includes(pattern)) {
+        return typeof response === "function" ? response() : response;
+      }
     }
     return "";
   });
@@ -49,8 +55,10 @@ afterEach(() => {
 
 describe("ensureGeneratorCommit", () => {
   test("returns 'agent' when HEAD moved and tree is clean", async () => {
-    // git rev-parse HEAD → new SHA, git status --porcelain → empty
-    setupExecSync(["def456\n", ""]);
+    setupExecByCommand({
+      "rev-parse HEAD": "def456\n",
+      "git status --porcelain": "",
+    });
 
     const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
@@ -59,8 +67,10 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("returns 'none' when HEAD unchanged and tree is clean", async () => {
-    // git rev-parse HEAD → same SHA, git status --porcelain → empty
-    setupExecSync(["abc123\n", ""]);
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": "",
+    });
 
     const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
@@ -69,9 +79,14 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("returns 'resume' when agent commits after resume prompt", async () => {
-    // Initial check: HEAD same, dirty tree
-    // After resume: clean tree
-    setupExecSync(["abc123\n", "M file.ts\n", ""]);
+    let statusCallCount = 0;
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": () => {
+        statusCallCount++;
+        return statusCallCount === 1 ? "M file.ts\n" : "";
+      },
+    });
     emptyQueryResult();
 
     const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
@@ -81,9 +96,14 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("returns 'resume' when HEAD moved but dirty tree, then resume cleans it", async () => {
-    // Initial check: HEAD moved, dirty tree (partial commit)
-    // After resume: clean tree
-    setupExecSync(["def456\n", "M leftover.ts\n", ""]);
+    let statusCallCount = 0;
+    setupExecByCommand({
+      "rev-parse HEAD": "def456\n",
+      "git status --porcelain": () => {
+        statusCallCount++;
+        return statusCallCount === 1 ? "M leftover.ts\n" : "";
+      },
+    });
     emptyQueryResult();
 
     const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
@@ -93,47 +113,75 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("returns 'fallback' when resume fails to commit", async () => {
-    // Initial check: HEAD same, dirty tree
-    // After resume: still dirty
-    // Fallback: git add + commit
-    setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": "M file.ts\n",
+      "git add -A": "",
+      "diff --cached --quiet": () => {
+        throw new Error("exit 1");
+      },
+      "git commit": "",
+    });
     emptyQueryResult();
 
     const result = await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
     expect(result).toBe("fallback");
-    // Last execSync call should be the fallback git add + commit
-    const lastCall = execSyncMock.mock.calls.at(-1);
-    expect(lastCall?.[0]).toContain("git add -A && git commit");
-    expect(lastCall?.[0]).toContain("[auto-commit] Sprint 2");
-    expect(lastCall?.[0]).toContain("JWT auth");
+    // The commit command should contain the fallback message
+    const commitCall = execSyncMock.mock.calls.find((c: unknown[]) => (c[0] as string).includes("git commit"));
+    expect(commitCall).toBeDefined();
+    expect((commitCall![0] as string)).toContain("[auto-commit] Sprint 2");
+    expect((commitCall![0] as string)).toContain("JWT auth");
   });
 
   test("fallback message uses 'fixes for' on retry", async () => {
-    setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": "M file.ts\n",
+      "git add -A": "",
+      "diff --cached --quiet": () => {
+        throw new Error("exit 1");
+      },
+      "git commit": "",
+    });
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: true, model: "test-model" }, deps);
 
-    const lastCall = execSyncMock.mock.calls.at(-1);
-    expect(lastCall?.[0]).toContain("fixes for");
+    const commitCall = execSyncMock.mock.calls.find((c: unknown[]) => (c[0] as string).includes("git commit"));
+    expect(commitCall).toBeDefined();
+    expect((commitCall![0] as string)).toContain("fixes for");
   });
 
   test("fallback message uses 'work on' on initial attempt", async () => {
-    setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": "M file.ts\n",
+      "git add -A": "",
+      "diff --cached --quiet": () => {
+        throw new Error("exit 1");
+      },
+      "git commit": "",
+    });
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
-    const lastCall = execSyncMock.mock.calls.at(-1);
-    expect(lastCall?.[0]).toContain("work on");
+    const commitCall = execSyncMock.mock.calls.find((c: unknown[]) => (c[0] as string).includes("git commit"));
+    expect(commitCall).toBeDefined();
+    expect((commitCall![0] as string)).toContain("work on");
   });
 
   test("returns 'fallback' when resume query throws", async () => {
-    // Initial check: dirty tree
-    // Resume throws
-    // Post-resume check: still dirty (needs fallback)
-    setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": "M file.ts\n",
+      "git add -A": "",
+      "diff --cached --quiet": () => {
+        throw new Error("exit 1");
+      },
+      "git commit": "",
+    });
     queryMock.mockReturnValue(
       (async function* () {
         throw new Error("SDK connection failed");
@@ -146,9 +194,14 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("passes resume (not sessionId) to query options when available", async () => {
-    // Per sdk.d.ts:1161 `resume` loads history; `sessionId` assigns a new UUID.
-    // This test locks in the fix: the resume tier must use `resume`.
-    setupExecSync(["abc123\n", "M file.ts\n", ""]);
+    let statusCallCount = 0;
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": () => {
+        statusCallCount++;
+        return statusCallCount === 1 ? "M file.ts\n" : "";
+      },
+    });
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-42", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
@@ -160,7 +213,15 @@ describe("ensureGeneratorCommit", () => {
 
   test("skips resume query entirely when sessionId is undefined", async () => {
     // Without a session to resume, we jump straight to fallback.
-    setupExecSync(["abc123\n", "M file.ts\n", ""]);
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": "M file.ts\n",
+      "git add -A": "",
+      "diff --cached --quiet": () => {
+        throw new Error("exit 1");
+      },
+      "git commit": "",
+    });
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: undefined, contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
@@ -169,7 +230,14 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("resume query uses Bash-only tools with maxTurns 3", async () => {
-    setupExecSync(["abc123\n", "M file.ts\n", ""]);
+    let statusCallCount = 0;
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": () => {
+        statusCallCount++;
+        return statusCallCount === 1 ? "M file.ts\n" : "";
+      },
+    });
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
@@ -180,7 +248,14 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("uses retry-specific prompt when isRetry is true", async () => {
-    setupExecSync(["abc123\n", "M file.ts\n", ""]);
+    let statusCallCount = 0;
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": () => {
+        statusCallCount++;
+        return statusCallCount === 1 ? "M file.ts\n" : "";
+      },
+    });
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: true, model: "test-model" }, deps);
@@ -190,7 +265,14 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("uses initial prompt when isRetry is false", async () => {
-    setupExecSync(["abc123\n", "M file.ts\n", ""]);
+    let statusCallCount = 0;
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": () => {
+        statusCallCount++;
+        return statusCallCount === 1 ? "M file.ts\n" : "";
+      },
+    });
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
@@ -200,12 +282,21 @@ describe("ensureGeneratorCommit", () => {
   });
 
   test("fallback message includes all feature names", async () => {
-    setupExecSync(["abc123\n", "M file.ts\n", "M file.ts\n", ""]);
+    setupExecByCommand({
+      "rev-parse HEAD": "abc123\n",
+      "git status --porcelain": "M file.ts\n",
+      "git add -A": "",
+      "diff --cached --quiet": () => {
+        throw new Error("exit 1");
+      },
+      "git commit": "",
+    });
     emptyQueryResult();
 
     await ensureGeneratorCommit({ workDir: "/work", gitDir: "/work", beforeSha: "abc123", sessionId: "sess-1", contract: CONTRACT, isRetry: false, model: "test-model" }, deps);
 
-    const lastCall = execSyncMock.mock.calls.at(-1);
-    expect(lastCall?.[0]).toContain("JWT auth, user profile endpoint");
+    const commitCall = execSyncMock.mock.calls.find((c: unknown[]) => (c[0] as string).includes("git commit"));
+    expect(commitCall).toBeDefined();
+    expect((commitCall![0] as string)).toContain("JWT auth, user profile endpoint");
   });
 });

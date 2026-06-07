@@ -4,6 +4,17 @@ All notable changes to this project are documented here, from the point of view 
 
 ## [Unreleased]
 
+## [v0.10.0] - 2026-06-07
+
+Predictable, default-off handling of the harness's own metadata. **Breaking behavioural change** — see Changed.
+
+### Changed
+- **The harness no longer commits its `.adhd/` metadata to your repository by default.** Previously it committed its own working files (contracts, feedback, logs, and so on) on every attempt unless they were gitignored. Now nothing under `.adhd/` is written to git unless you opt in: `--commit-adhd` commits a structured audit record, and `--commit-adhd-logs` commits that record plus the raw conversation logs. Run snapshots under `.adhd/runs/` are never committed. **If you relied on the old behaviour, add `--commit-adhd` to your runs.**
+- **`--commit-adhd` now captures the complete audit record** — in addition to the contracts, feedback, spec, progress, and cost ledger it already committed, it now also commits the behavioural regression suite, the reviewer reports, the codebase scout digest, and the per-sprint verification baselines.
+
+### Fixed
+- **Harness bookkeeping can no longer leak into your product commits.** A file the harness wrote while the code generator was running could previously be folded into the generated code's commit by the safety-net auto-commit. The harness now stages only product changes for that commit and always respects your `.gitignore` — it never force-adds an ignored path.
+
 ## [v0.9.0] - 2026-06-07
 
 Correctness, safety, and documentation hardening.

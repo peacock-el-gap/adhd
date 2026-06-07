@@ -249,21 +249,25 @@ The Reviewer's report is persisted per sprint to `.adhd/reviews/sprint-{n}.json`
 
 ### Commit Harness Metadata (Phase 2)
 
-Record the harness's own working files (contracts, feedback, progress, cost ledger) into git as it goes:
+By default, the harness does not commit any `.adhd/` files to the target repository's git history — all metadata stays as uncommitted working files on disk. To opt in to a structured audit trail in git:
 
 ```bash
-# Commit metadata after each sprint
+# Commit the structured audit record after each sprint (Tier A)
 adhd --commit-adhd "Add auth"
 
-# Also commit logs (implies --commit-adhd)
+# Also commit conversation logs (Tier B = Tier A + logs; implies --commit-adhd)
 adhd --commit-adhd-logs "Add auth"
 ```
 
-Without these flags, metadata stays as uncommitted `.adhd/` files. A final end-of-run metadata commit captures the completed checkpoint and final cost ledger when `--commit-adhd` is set.
+**Tier A** (`--commit-adhd`) commits the structured audit record: `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md`, `.adhd/usage.json`, `.adhd/regression.json`, `.adhd/reviews/`, `.adhd/scout-digest.json`, and `.adhd/baseline-verification-*.json`. A final end-of-run commit captures the completed checkpoint and final cost ledger.
+
+**Tier B** (`--commit-adhd-logs`) commits everything in Tier A **plus** `.adhd/logs/`.
+
+**Never committed** under any flag: `.adhd/runs/` (local-only run snapshots), `.adhd/skills/`, and `.adhd/.env`. The harness never force-stages a path your `.gitignore` excludes — your ignore rules are absolute.
 
 ### Run History & Comparison (Phase 2)
 
-The harness preserves each run's terminal state (cost and progress) under `.adhd/runs/<session-stamp>/` for later comparison:
+The harness preserves each run's terminal state (cost and progress) under `.adhd/runs/<session-stamp>/` for later comparison. These snapshots are local-only — never committed to git by the harness under any flag:
 
 ```bash
 # List all preserved runs (newest first)
@@ -394,7 +398,7 @@ Variables can be set in your shell environment or in a `.adhd/.env` file in the 
 
 **Cost:** Planner and Evaluator default to Opus tier; Generator defaults to Sonnet. A full run with multiple sprints can consume significant API credits. Use `--model claude-sonnet-4-6` to override all agents to Sonnet, or `--max-sprints` to limit scope.
 
-**What happens to your files:** In existing-project mode, the generator makes changes directly and creates git commits. In greenfield mode, all code goes into `app/`. The `.adhd/` directory stores metadata and logs — add it to your `.gitignore`.
+**What happens to your files:** In existing-project mode, the generator makes changes directly and creates git commits. In greenfield mode, all code goes into `app/`. The `.adhd/` directory stores metadata and logs. By default, no `.adhd/` files are committed to git — use `--commit-adhd` to opt in to a structured audit trail, or add `.adhd/` to your `.gitignore` for an extra layer of protection.
 
 **Interactive gates:** Pauses at key decision points with countdown timers. Skip with `--no-interactive` or `--gate-timeout 0`.
 

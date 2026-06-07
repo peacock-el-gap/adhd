@@ -49,7 +49,9 @@ export interface EnsureAgentCommitOptions {
  *
  * 1. Agent committed and tree is clean → "agent".
  * 2. Tree dirty → invoke runResume, re-check tree. Clean → "resume".
- * 3. Still dirty → harness-level fallback auto-commit with fallbackMessage → "fallback".
+ * 3. Still dirty → harness-level fallback. Stage product paths only (exclude
+ *    .adhd/); if anything staged, commit it → "fallback"; if nothing staged
+ *    after the exclusion, or the commit itself fails → "none".
  * 4. HEAD unchanged and tree clean → "none" (agent produced no output).
  */
 export async function ensureAgentCommit(opts: EnsureAgentCommitOptions): Promise<CommitSource> {
@@ -57,7 +59,11 @@ export async function ensureAgentCommit(opts: EnsureAgentCommitOptions): Promise
   const exec = opts.exec ?? execSync;
 
   const currentSha = exec("git rev-parse HEAD", { cwd: gDir, encoding: "utf-8" }).toString().trim();
-  const dirty = exec("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).toString().trim();
+  // Exclude .adhd/ from dirty detection so harness bookkeeping never registers
+  // as product changes. Uses a git magic exclude pathspec.
+  const dirty = exec("git status --porcelain -- . ':(exclude).adhd'", { cwd: gDir, encoding: "utf-8" })
+    .toString()
+    .trim();
 
   if (currentSha !== beforeSha && !dirty) {
     return "agent";
@@ -85,46 +91,54 @@ export async function ensureAgentCommit(opts: EnsureAgentCommitOptions): Promise
       log("HARNESS", `WARNING: Resume session for ${agentLabel} commit failed: ${detail}`);
     }
 
-    const postResumeDirty = exec("git status --porcelain", { cwd: gDir, encoding: "utf-8" }).toString().trim();
+    // Post-resume check also excludes .adhd/ — same invariant as the pre-check.
+    const postResumeDirty = exec("git status --porcelain -- . ':(exclude).adhd'", { cwd: gDir, encoding: "utf-8" })
+      .toString()
+      .trim();
     if (!postResumeDirty) {
       log("HARNESS", `${agentLabel} committed via session resume`);
       return "resume";
     }
   }
 
+  // Fallback: stage product paths only (exclude .adhd/), then commit only if
+  // something was actually staged. The add tolerates a non-zero exit: when .adhd/
+  // is gitignored, the `.` pathspec names an ignored directory, so git emits an
+  // ignored-path diagnostic and exits non-zero even though the product files
+  // staged correctly. Never uses -f / --force — Layer-1 invariant.
   log("HARNESS", `WARNING: ${agentLabel} still did not commit — harness fallback auto-commit`);
-  exec(`git add -A && git commit -m ${JSON.stringify(fallbackMessage)}`, { cwd: gDir, stdio: "pipe" });
-  return "fallback";
-}
-
-/**
- * Commit all pending .adhd/ files (contracts, progress, feedback, etc.)
- * with a descriptive [adhd] prefix commit message.
- *
- * No-op if there are no .adhd/ changes to commit (avoids empty commits).
- */
-export function commitAdhdArtifacts(workDir: string, gDir: string, sprint: number): void {
   try {
-    // Check if .adhd/ has any pending changes (staged, modified, or untracked)
-    const adhdPath = join(workDir, ".adhd");
-    if (!existsSync(adhdPath)) return;
-
-    // Stage all .adhd/ files
-    execSync("git add .adhd/", { cwd: gDir, stdio: "pipe" });
-
-    // Check if there's anything staged for .adhd/
-    const stagedResult = execSync("git diff --cached --name-only -- .adhd/", { cwd: gDir, encoding: "utf-8" });
-    const staged = (stagedResult ?? "").toString().trim();
-    if (!staged) {
-      return;
-    }
-
-    execSync(`git commit -m "[adhd] Sprint ${sprint}: artifacts"`, { cwd: gDir, stdio: "pipe" });
-    log("HARNESS", `Committed .adhd/ artifacts for sprint ${sprint}`);
+    exec("git add -A -- . ':(exclude).adhd'", { cwd: gDir, stdio: "pipe" });
   } catch (err) {
-    // If commit fails (e.g., nothing to commit), log and continue
-    logError("HARNESS", `Failed to commit .adhd/ artifacts: ${err instanceof Error ? err.message : String(err)}`);
+    log(
+      "HARNESS",
+      `WARNING: Fallback staging returned non-zero (may be harmless): ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
+
+  // Commit only if something is actually staged — avoids empty commits.
+  try {
+    exec("git diff --cached --quiet", { cwd: gDir, stdio: "pipe" });
+    // Exit 0 means nothing staged. The pre-check saw product changes, but none
+    // remained to stage here (e.g. already committed by another path, or only
+    // un-stageable changes), so there is nothing to commit — effectively "none".
+    log("HARNESS", `No product changes to commit after excluding .adhd/ — skipping fallback commit`);
+    return "none";
+  } catch {
+    // Exit non-zero means there ARE staged changes — commit them.
+  }
+
+  try {
+    exec(`git commit -m ${JSON.stringify(fallbackMessage)}`, { cwd: gDir, stdio: "pipe" });
+  } catch (err) {
+    // A genuine failure to persist the agent's product changes — surface at error
+    // severity and report "none" (nothing was committed) rather than a misleading
+    // "fallback". The caller re-derives the diff from beforeSha..HEAD, which is now
+    // empty, so the sprint correctly sees no committed output.
+    logError("HARNESS", `Fallback commit failed: ${err instanceof Error ? err.message : String(err)}`);
+    return "none";
+  }
+  return "fallback";
 }
 
 /**
@@ -138,11 +152,24 @@ const ADHD_METADATA_PATHS = [
   ".adhd/progress.json",
   ".adhd/spec.md",
   USAGE_FILE,
+  ".adhd/regression.json",
+  ".adhd/reviews/",
+  ".adhd/scout-digest.json",
+  ".adhd/baseline-verification-*.json",
 ] as const;
 
 /**
  * Stage all canonical .adhd/ metadata paths (plus optionally .adhd/logs/) and
  * return true if anything ended up staged, false if the working tree is clean.
+ *
+ * Tier-A paths (always staged when the flag is set):
+ *   .adhd/contracts/, .adhd/feedback/, .adhd/progress.json, .adhd/spec.md,
+ *   .adhd/usage.json, .adhd/regression.json, .adhd/reviews/,
+ *   .adhd/scout-digest.json, .adhd/baseline-verification-*.json.
+ *
+ * Tier-B (--commit-adhd-logs) adds .adhd/logs/ on top of Tier A.
+ *
+ * Never staged under any flag: .adhd/runs/, .adhd/skills/, .adhd/.env.
  *
  * This is the shared staging primitive called by both commitAdhdMetadata and
  * commitFinalMetadata — the path set and add loop live here and nowhere else.
@@ -169,8 +196,10 @@ function stageAdhdMetadataPaths(gDir: string, includeLogs: boolean): boolean {
  * Commit .adhd/ metadata after a sprint passes evaluation.
  * Only invoked when --commit-adhd or --commit-adhd-logs is set.
  *
- * Commits .adhd/contracts/, .adhd/feedback/, .adhd/progress.json, .adhd/spec.md,
- * and .adhd/usage.json. When includeLogs is true, also commits .adhd/logs/.
+ * Commits the full Tier-A set: .adhd/contracts/, .adhd/feedback/,
+ * .adhd/progress.json, .adhd/spec.md, .adhd/usage.json, .adhd/regression.json,
+ * .adhd/reviews/, .adhd/scout-digest.json, and .adhd/baseline-verification-*.json.
+ * When includeLogs is true (Tier B), also commits .adhd/logs/.
  *
  * @param workDir - Project root directory
  * @param gDir - Git working directory
@@ -195,8 +224,9 @@ export function commitAdhdMetadata(workDir: string, gDir: string, sprint: number
  * Commit .adhd/ metadata after the entire run completes (final end-of-run checkpoint).
  * Only invoked when --commit-adhd or --commit-adhd-logs is set.
  *
- * Captures the terminal progress.json (status complete/failed, docs-generated flag)
- * and the final usage.json alongside the standard metadata paths. Uses a distinct
+ * Commits the full Tier-A set (contracts, feedback, progress, spec, usage,
+ * regression, reviews, scout-digest, baseline-verification snapshots) and the
+ * final usage.json. Uses a distinct
  * "[adhd] Run complete: final metadata" commit message so the end-of-run checkpoint
  * is clearly distinguishable from per-sprint metadata commits.
  *
@@ -425,7 +455,12 @@ export function ensureTopicBranch(opts: EnsureTopicBranchOptions): void {
 export async function checkDirtyTree(config: ResolvedConfig): Promise<void> {
   let status: string;
   try {
-    status = execSync("git status --porcelain", { cwd: config.workDir, encoding: "utf-8" }).trim();
+    // Exclude .adhd/ so leftover harness bookkeeping from a prior run does not
+    // trigger a spurious dirty-tree gate. Same exclude pathspec as ensureAgentCommit.
+    status = execSync("git status --porcelain -- . ':(exclude).adhd'", {
+      cwd: config.workDir,
+      encoding: "utf-8",
+    }).trim();
   } catch {
     // Not a git repo — nothing to check
     return;

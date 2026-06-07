@@ -2348,7 +2348,22 @@
         }
       ],
       "totalCostUsd": 17.558548949999995
+    },
+    {
+      "startedAt": "2026-06-07T15:02:42.849Z",
+      "stages": [
+        {
+          "stage": "planner",
+          "model": "claude-opus-4-8",
+          "inputTokens": 10,
+          "outputTokens": 10247,
+          "cacheReadTokens": 321182,
+          "costUsd": 3.074898,
+          "durationMs": 129854
+        }
+      ],
+      "totalCostUsd": 3.074898
     }
   ],
-  "runTotalCostUsd": 395.11870884999996
+  "runTotalCostUsd": 398.19360685
 }

@@ -83,7 +83,7 @@ Safety net ensuring every agent run that produces changes also produces a git co
 
 1. **Check** — Did the agent commit on its own? (Compare HEAD before/after)
 2. **Resume** — If uncommitted changes exist, resume the agent's SDK session with a commit-only prompt (max 3 turns, Bash-only) using the SDK's `resume` field to load the original conversation history
-3. **Fallback** — Harness runs `git add -A && git commit` with a contextual message referencing the sprint and features (tagged `[auto-commit]` for the Generator, `[docs]` for the Documenter)
+3. **Fallback** — Harness stages product changes only (excluding `.adhd/`) and commits with a contextual message referencing the sprint and features (tagged `[auto-commit]` for the Generator, `[docs]` for the Documenter); harness bookkeeping is never folded into the product commit
 
 `commitSource` field ("agent" | "resume" | "fallback" | "none") tracked in each SprintResult for compliance monitoring.
 
@@ -153,8 +153,7 @@ Key properties:
 | **Planner HITL** (`AskUserQuestion`) | Planner can ask clarifying questions mid-planning (60s timeout) |
 | **Timezone display** (`TZ_DISPLAY`) | Configurable terminal timestamp timezone |
 | **HITL notifications** | Terminal bell (`\x07`) on every HITL gate. `--notify` flag adds desktop notifications via `notify-send` (Linux) / `osascript` (macOS) for backgrounded terminals. |
-| **Opt-in artifact commits** (`--commit-adhd`, `--commit-adhd-logs`) | Harness-level git commits for `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md` (and optionally `.adhd/logs/`) after each sprint, tagged `[adhd]`. Provides structured audit trail without polluting project history by default. |
-| **Pre-Generator artifact commit** | Before invoking the Generator, the harness commits `.adhd/` artifacts with an `[adhd]` message so the Generator starts with a clean working tree and rollbacks remain deterministic. |
+| **Opt-in artifact commits** (`--commit-adhd`, `--commit-adhd-logs`) | When opted in, harness-level git commits for the Tier-A metadata set (contracts, feedback, progress, spec, usage, regression, reviews, scout-digest, baseline-verification snapshots) after each sprint and at end-of-run, tagged `[adhd]`. Tier B adds `.adhd/logs/`. **Default off** — without these flags, no `.adhd/` files are committed. `.adhd/runs/` and `.adhd/skills/` are never committed under any flag. See §1.43. |
 | **Real-time `"documenting"` progress status** | `progress.json` sets `status: "documenting"` while the Documenter runs, distinct from `"complete"`, so external monitors reflect actual state. |
 | **Strict numeric configuration validation** | Non-numeric or NaN values for numeric settings (`--threshold`, `--max-sprints`, `--max-retries` and their environment-variable equivalents) are rejected with a flag-named error at configuration resolution rather than silently proceeding with corrupted state; legitimate `0` values and the gate-timeout sentinel are preserved. |
 
@@ -288,7 +287,7 @@ Each run's conversation logs are grouped under `.adhd/logs/<YYYY.MM.DD-HH.MM.SS>
 
 ### 1.34 Complete `--commit-adhd` Metadata Set
 
-Two data-loss gaps closed: (1) `.adhd/usage.json` (the cost ledger) is now included in the per-sprint `commitAdhdMetadata()` staging alongside contracts, feedback, and progress; (2) a final end-of-run metadata commit is written after the Documenter, capturing the terminal `progress.json` (status `"complete"`) and final `usage.json`. Both commits degrade to no-ops when nothing has changed, avoiding spurious empty commits. Without `--commit-adhd`, behaviour is unchanged.
+The `--commit-adhd` flag commits the full structured audit record (Tier A): `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md`, `.adhd/usage.json`, `.adhd/regression.json`, `.adhd/reviews/`, `.adhd/scout-digest.json`, and `.adhd/baseline-verification-*.json`. A final end-of-run metadata commit is written after the Documenter, capturing the terminal `progress.json` (status `"complete"`) and final `usage.json`. Both commits degrade to no-ops when nothing has changed, avoiding spurious empty commits. `--commit-adhd-logs` (Tier B) adds `.adhd/logs/` on top of Tier A. Without either flag, no `.adhd/` files are committed by the harness; `.adhd/runs/` and `.adhd/skills/` are never committed under any flag. See §1.43 for the full governance model.
 
 ### 1.35 Default Topic-Branch Creation
 
@@ -300,7 +299,7 @@ A new read-only agent (`--scout`) that runs **once before the sprint loop** on e
 
 ### 1.37 Run History & Comparison
 
-Each run's terminal state (cost and progress) is **snapshot under `.adhd/runs/<session-stamp>/`** at end-of-run, regardless of `--commit-adhd`. The live `.adhd/usage.json` and `.adhd/progress.json` semantics are unchanged; preservation adds keyed snapshot copies without touching the live files. `adhd compare <run-a> <run-b>` prints a structured report of sprint pass/fail delta, cost delta (per-stage and per-model), and criteria score trends. With no run arguments it lists available runs newest first. Comparison logic is pure and never throws; degradations — missing records, malformed JSON — surface as warnings.
+Each run's terminal state (cost and progress) is **snapshot under `.adhd/runs/<session-stamp>/`** at end-of-run, regardless of `--commit-adhd`. These snapshots are local-only — never committed to git by the harness under any flag (see §1.43). The live `.adhd/usage.json` and `.adhd/progress.json` semantics are unchanged; preservation adds keyed snapshot copies without touching the live files. `adhd compare <run-a> <run-b>` prints a structured report of sprint pass/fail delta, cost delta (per-stage and per-model), and criteria score trends. With no run arguments it lists available runs newest first. Comparison logic is pure and never throws; degradations — missing records, malformed JSON — surface as warnings.
 
 ### 1.38 Reviewer Agent (Code-Craft Review)
 
@@ -321,3 +320,17 @@ A model-free test (`tests/static-export-check.test.ts`) asserts that no symbol i
 ### 1.42 Deterministic Generator Self-Check (Pre-Evaluation)
 
 The Generator's self-check guidance prepends an auto-fix → lint → type-check → test sequence (`shared/prompts.ts`), so mechanically-detectable problems are resolved before the Evaluator is invoked. This is additive guidance only: it adds no default flag and does not change the gate verdict — it spends cheap deterministic effort before the expensive model evaluation, complementing the lint and test hard gates (§1.15, §1.25).
+
+### 1.43 `.adhd/` Commit Governance (Default-Off, Tiered)
+
+The harness separates **persistence** (what survives in git) from **hygiene** (the clean working tree the generator's diff-isolation needs), so by default no `.adhd/` file is written to the target repository's git history. Two layers enforce this:
+
+1. **Layer 1 — `.gitignore` is absolute.** The harness never force-stages a gitignored path. No `git add -f` / `--force` appears anywhere in the codebase, and a source-level guard test (`tests/force-stage-guard.test.ts`) locks this invariant against regression.
+
+2. **Layer 2 — flags opt specific tiers in; the default is off.** Without `--commit-adhd` or `--commit-adhd-logs`, the harness performs no git operation that writes `.adhd/` to the target's history. Generator-output detection (`ensureAgentCommit`, `checkDirtyTree`) and the harness fallback commit all exclude `.adhd/` via a git pathspec (`:(exclude).adhd`), so harness bookkeeping written during a sprint can never be folded into a product commit — even when the fallback runs against a repository that gitignores `.adhd/`. The checkpoint revert preserves uncommitted `.adhd/` too.
+
+**Tier A** (`--commit-adhd`): `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md`, `.adhd/usage.json`, `.adhd/regression.json`, `.adhd/reviews/`, `.adhd/scout-digest.json`, `.adhd/baseline-verification-*.json`.
+
+**Tier B** (`--commit-adhd-logs`): Tier A plus `.adhd/logs/`.
+
+**Never committed** under any flag: `.adhd/runs/` (local-only run snapshots), `.adhd/skills/`, `.adhd/.env`. The allow-list is defined once and shared by the per-sprint and end-of-run metadata commits — a new `.adhd/` family is not committed until explicitly added to the list.

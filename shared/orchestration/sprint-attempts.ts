@@ -13,7 +13,6 @@ import { checkSurfaceCoverage, normalizeSurfaces } from "../surfaces.ts";
 import type { CommitSource, EvalResult } from "../types.ts";
 import { buildBaselineVerificationSection, buildPostVerificationSection, classifyFailures } from "../verification.ts";
 import { handleFatalError, UserAbortError, withTransientRetry } from "./error-handling.ts";
-import { commitAdhdArtifacts } from "./git-ops.ts";
 import { runStaticAnalysis } from "./static-analysis-runner.ts";
 import type { SprintAttemptContext, SprintAttemptResult } from "./types.ts";
 import { createVerificationRunner } from "./verification-runner.ts";
@@ -132,9 +131,6 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
     progress.status = "building";
     progress.retryCount = retry;
     await writeProgress(config.workDir, progress);
-
-    // Commit .adhd/ artifacts before Generator invocation for clean working tree
-    commitAdhdArtifacts(config.workDir, gDir, sprint);
 
     // Build the Generator's supplementary context: compose the pre-sprint
     // baseline (which tests were already failing) with the harness-generated

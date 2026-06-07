@@ -1142,12 +1142,11 @@
     },
     {
       "name": "suite_stays_green",
-      "description": "The full `bun test` suite passes after this sprint's changes; `bun run typecheck` and `bun run lint` also exit clean",
+      "description": "Running `bun run typecheck`, `bun run lint`, and `bun run test` all pass after the change.",
       "threshold": 10,
       "sprintNumber": 1,
       "tier": "core",
       "surfaces": [
-        "backend",
         "tests"
       ]
     },
@@ -2832,6 +2831,319 @@
       "surfaces": [
         "backend",
         "docs"
+      ]
+    },
+    {
+      "name": "guard_passes_clean_tree",
+      "description": "The guard test passes against the current source tree because no `git add -f` or `git add --force` invocation exists in any `.ts` file under `shared/` or `harness-claude/`.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "tests"
+      ]
+    },
+    {
+      "name": "guard_catches_force_flag_short",
+      "description": "If a source file in `shared/` contains a `git add -f` invocation, the guard test fails with a message naming the offending file and explaining the Layer-1 invariant.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "tests"
+      ]
+    },
+    {
+      "name": "guard_catches_force_flag_long",
+      "description": "If a source file in `harness-claude/` contains a `git add --force` invocation, the guard test fails with a message naming the offending file and explaining the Layer-1 invariant.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "tests"
+      ]
+    },
+    {
+      "name": "no_git_repo_dependency",
+      "description": "The guard test is a pure source-file scan (reads `.ts` files from disk) and does not shell out to git, create a temp repo, or depend on the test runner being inside a git repository.",
+      "threshold": 9,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "tests"
+      ]
+    },
+    {
+      "name": "scans_both_directories",
+      "description": "The guard explicitly scans both `shared/` and `harness-claude/` directories, not just one of them.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "tests"
+      ]
+    },
+    {
+      "name": "ignores_unrelated_force_flags",
+      "description": "The guard does not false-positive on unrelated uses of `-f` or `--force` that are not arguments to `git add` (e.g., `rm -f`, `git push --force`, or string literals in comments/tests describing the invariant itself).",
+      "threshold": 8,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "tests"
+      ]
+    },
+    {
+      "name": "dirty_check_excludes_adhd_precheck",
+      "description": "The pre-check git status call inside ensureAgentCommit uses a pathspec that excludes .adhd/ (e.g. ':(exclude).adhd'), so .adhd/-only changes do not register as dirty",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "dirty_check_excludes_adhd_post_resume",
+      "description": "The post-resume dirty check inside ensureAgentCommit also excludes .adhd/ via the same pathspec pattern",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "agent_committed_with_adhd_only_stray",
+      "description": "When the generator already committed product work and only .adhd/ files remain uncommitted, ensureAgentCommit returns 'agent' and creates no fallback commit",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "none_result_with_adhd_only_stray",
+      "description": "When HEAD did not move and only .adhd/ files are present in the working tree, ensureAgentCommit returns 'none' and makes no commit",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "fallback_commits_product_only",
+      "description": "When real product changes are uncommitted alongside .adhd/ files and no resume path exists, the fallback creates a commit containing only product paths — no .adhd/ path appears in the committed tree",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "no_force_flag_in_fallback",
+      "description": "The rewritten fallback staging never uses git add -f or --force; it uses path-scoped staging with exclude pathspecs",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "hygiene_commit_removed",
+      "description": "The commitAdhdArtifacts function is deleted from git-ops.ts, its import is removed from sprint-attempts.ts, and its call site (the pre-generator hygiene commit) no longer exists",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "no_dangling_references",
+      "description": "No remaining references to commitAdhdArtifacts exist in source or test files; bun run typecheck passes with zero errors and bun run test passes",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "existing_tests_green",
+      "description": "All pre-existing tests in the suite continue to pass, including git-ops.test.ts and phase-1-5-integration.test.ts, confirming no regressions",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "dirty_tree_ignores_adhd_only",
+      "description": "When the working tree is clean except for uncommitted .adhd/ files (modified or untracked), checkDirtyTree treats the tree as clean and presents no gate to the user.",
+      "threshold": 7,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "dirty_tree_surfaces_product_changes",
+      "description": "When the working tree has uncommitted product changes (with or without .adhd/ files alongside), checkDirtyTree still surfaces the dirty-tree warning and its modified/untracked/other summary counts reflect only the product changes — .adhd/ files are not counted.",
+      "threshold": 7,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "dirty_tree_non_git_silent_return",
+      "description": "When checkDirtyTree runs in a non-git directory, it returns silently without error, matching the existing behaviour (no regression).",
+      "threshold": 7,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "revert_preserves_uncommitted_adhd",
+      "description": "Given a checkpoint SHA, a later product commit, and uncommitted .adhd/ files on disk, when revertToCheckpoint resets to the checkpoint, HEAD returns to the checkpoint SHA, the post-checkpoint product file is gone, and the uncommitted .adhd/ files still exist on disk.",
+      "threshold": 7,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "revert_noop_preserves_adhd",
+      "description": "When HEAD already equals the checkpoint SHA, revertToCheckpoint is a no-op and any .adhd/ files on disk are untouched.",
+      "threshold": 7,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "suite_green_typecheck_passes",
+      "description": "After all changes, `bun run typecheck`, `bun run lint`, and `bun run test` all pass with zero failures.",
+      "threshold": 9,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "tier_a_includes_regression_json",
+      "description": "When --commit-adhd is set and .adhd/regression.json exists, the metadata commit stages and commits regression.json alongside contracts, feedback, progress, spec, and usage",
+      "threshold": 7,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "tier_a_includes_reviews",
+      "description": "When --commit-adhd is set and .adhd/reviews/ contains files, the metadata commit stages and commits the reviews directory",
+      "threshold": 7,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "runs_never_committed",
+      "description": "When --commit-adhd or --commit-adhd-logs is set, .adhd/runs/ is never staged or committed by the metadata commit helpers",
+      "threshold": 8,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "skills_never_committed",
+      "description": "When --commit-adhd or --commit-adhd-logs is set, .adhd/skills/ is never staged or committed by the metadata commit helpers",
+      "threshold": 8,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "env_never_committed",
+      "description": "When --commit-adhd or --commit-adhd-logs is set, .adhd/.env (or any .env) is never staged or committed by the metadata commit helpers, even when present on disk",
+      "threshold": 8,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "tier_b_adds_logs_only",
+      "description": "When --commit-adhd-logs is set, the metadata commit includes the full Tier-A set plus .adhd/logs/ and nothing else beyond those paths",
+      "threshold": 7,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "missing_path_skipped_silently",
+      "description": "When any of the new Tier-A paths (regression.json, reviews/, scout-digest.json, baseline-verification-*.json) does not exist on disk, staging skips it without error and the commit succeeds with whatever other paths are present",
+      "threshold": 7,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "no_flags_no_adhd_commits",
+      "description": "When neither --commit-adhd nor --commit-adhd-logs is set, the harness creates no commit containing any .adhd/ path across the entire run lifecycle",
+      "threshold": 8,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
       ]
     }
   ],
