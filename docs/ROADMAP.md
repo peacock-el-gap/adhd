@@ -442,7 +442,7 @@ git with `.adhd/`," while flags opt specific tiers in.
 - **Precedence**: a committed/shared rule is a floor; a personal/git-ignored layer may *add* rules but cannot *silently* cancel a committed one — cancelling requires an explicit, visible waiver. (The governing principle is "no silent override," not "personal beats shared.")
 - **Verification**: AI judgement by default, plus an optional per-rule command whose exit status is the authoritative verdict (its output is shown as evidence but does not get reinterpreted).
 
-**Interaction**: Reuses the *patterns* of the regression suite (§1.14, §1.29) — a durable `.adhd/*.json` store and a "build a section → inject into the prompt" step — but not its type or accumulation plumbing (regression criteria are auto-harvested from passed sprints, Evaluator-only, and carry no applicability guard or check command). It is the *enforced* counterpart to OPP-07's *advisory* policy skills, and relates to OPP-45 (settings governance). The applicability guard is what makes one rule safe to ship to many projects. For the *roadmap-upkeep* case specifically, **OPP-57 (roadmap drift-detector)** is the cheap near-term check this engine generalises and eventually subsumes.
+**Interaction**: Reuses the *patterns* of the regression suite (§1.14, §1.29) — a durable `.adhd/*.json` store and a "build a section → inject into the prompt" step — but not its type or accumulation plumbing (regression criteria are auto-harvested from passed sprints, Evaluator-only, and carry no applicability guard or check command). It is the *enforced* counterpart to OPP-07's *advisory* policy skills, and relates to OPP-45 (settings governance). The applicability guard is what makes one rule safe to ship to many projects. The *roadmap-upkeep* rule is this engine's flagship first slice: a cheap deterministic text-check for it was attempted (formerly OPP-57) and proved unworkable — the user-facing CHANGELOG never carries opportunity ids by convention, so there is nothing to match against the roadmap. That confirms the case needs agent judgement, not string matching (see the post-mortem in the design doc).
 
 **Effort**: Medium–Large.
 
@@ -450,10 +450,11 @@ git with `.adhd/`," while flags opt specific tiers in.
 
 **Design**: a detailed design and sprint plan is recorded in [`docs/planning/standing-requirements-design.md`](planning/standing-requirements-design.md).
 
-> **OPP-56 – OPP-58 below** were split out from the Phase 1 hardening follow-up
-> (2026-06-07): residual fixes carved off the shipped items F2 (empty-spec
-> refinement) and F5 (interactive gates), plus the cheap roadmap-tidy check. They
-> are sequenced in **Phase 1** (1.C and 1.D).
+> **OPP-56 and OPP-58 below** were split out from the Phase 1 hardening follow-up
+> (2026-06-07): residual fixes carved off the shipped items F5 (interactive gates)
+> and F2 (empty-spec refinement). They are sequenced in **Phase 1** (1.C). (A third
+> split-out — the cheap roadmap-tidy check, formerly OPP-57 — was built, reviewed,
+> and abandoned: its premise was unworkable. Its intent folds into OPP-55.)
 
 ### OPP-56: Mid-Run Steering Gate Editor Guard
 
@@ -464,21 +465,20 @@ git with `.adhd/`," while flags opt specific tiers in.
 - **Effort**: Small.
 - **Tag**: **[harness-implementable]**.
 
-### OPP-57: Roadmap Drift-Detector
-
-**Problem**: Nothing mechanically catches the roadmap drifting out of sync with what has shipped. The Phase-1 self-development run completed nine items and removed none from the roadmap; the gap stays invisible until someone reads both files side by side.
-
-**Opportunity**: Add a deterministic check (a test or a small tool) that flags any OPP id appearing in **both** the CHANGELOG `[Unreleased]` section **and** `docs/ROADMAP.md`. After the Part 1 extraction, the roadmap holds only opportunities, so "a shipped id still in the roadmap" is the whole signal — the check is trivial. Keep the logic in `shared/` (no SDK import).
-
-- **Note**: This is the cheap near-term check. The general "declare a rule once, enforce it every sprint" engine it points toward is OPP-55 (standing requirements), which eventually subsumes it.
-- **Effort**: Small.
-- **Tag**: **[harness-implementable]**.
-
 ### OPP-58: Centralise Refinement Teardown
 
 **Problem**: In `performSpecRefinement` (`shared/orchestration/spec-refinement.ts`), the `writeSpec + restoreRegressionData + return` teardown is hand-copied across six exit branches. The empty-spec divergence defect (the shipped F2 fix) was exactly one branch missing its `writeSpec`; the underlying fragility — six copies of the same teardown — was left in place (the F2 Option B not taken).
 
 **Opportunity**: Centralise the teardown into one path so the disk/memory invariant is structural rather than re-asserted by hand in every branch.
+
+- **Effort**: Small.
+- **Tag**: **[harness-implementable]**.
+
+### OPP-60: `--project=<dir>` Ignored by Subcommands
+
+**Problem**: `extractProjectDir` (`harness-claude/index.ts`) locates the target directory with `args.indexOf("--project")`, which matches only the space-separated `--project <dir>` form and silently ignores the `--project=<dir>` equals form — falling back to the current directory. The main run path and `extractPositionals` both accept `=`, so the behaviour is inconsistent and surprising; the affected subcommands (`compare`, and any future read-only subcommand) then operate on the wrong directory with no error. Found 2026-06-07 during the OPP-57 review.
+
+**Opportunity**: Make `extractProjectDir` recognise the `--project=` form too (or route it through the shared argument parser), so subcommands honour the documented flag in both forms.
 
 - **Effort**: Small.
 - **Tag**: **[harness-implementable]**.
@@ -544,6 +544,7 @@ Each item is tagged **[harness-implementable]** (safe for the harness to build a
 | OPP-41 | Remove the redundant `freezeCompletedSprints` helper | S | **[harness-implementable]** | Production-dead since the patch-based splice (§1.27) protects completed sprints structurally. The static one-export guard already shipped (§1.41) and `assertBranchAllowed` is retained under OPP-29 — delete only the dead helper. |
 | OPP-56 | Mid-run steering gate editor guard | S | **[harness-implementable]** | The mid-run steering gate launches the editor via an unwrapped `execSync` — the same crash class the spec-approval gate already fixed. Wrap it in `tryExecEditor`. |
 | OPP-58 | Centralise refinement teardown | S | **[harness-implementable]** | The `writeSpec + restoreRegressionData + return` teardown is hand-copied across six exit branches of `performSpecRefinement`; centralise it so the disk/memory invariant is structural. |
+| OPP-60 | `--project=<dir>` ignored by subcommands | S | **[harness-implementable]** | `extractProjectDir` matches only the space-separated `--project <dir>` form, silently ignoring `--project=<dir>` and falling back to cwd; affects `compare` (and any read-only subcommand). Recognise the `=` form. |
 
 #### 1.D — Docs, Security & 1.0 Surface (pre-1.0)
 
@@ -554,7 +555,6 @@ Each item is tagged **[harness-implementable]** (safe for the harness to build a
 | OPP-46 | Guard against re-adding the phantom `--reviewer-max-turns` flag | S | **[harness-implementable]** | The reference shipped (§1.40); add a regression test asserting the phantom flag stays absent from `CLI_FLAG_HELP` and is rejected by the parser. |
 | OPP-47 | Lift Claude-specific vocabulary behind harness seams | S–M | **[human-led]** | Hardcoded Claude model IDs, cost zeroing for non-USD providers, `settingSources` literals — all latent friction for a `harness-gemini`. Cheap live-value items now; defer the rest. |
 | OPP-54 | `.adhd/` commit governance (default-off, tiered) | M | **[human-led]** | An ungated hygiene commit puts `.adhd/` in git by default; the fallback `git add -A` can fold a mid-Generator artifact into the product commit. Decouple hygiene (path exclusion) from persistence (tiered flags); fixes the `regression.json`/`runs/` mismatches. Test-first detection edits. Breaking default change. |
-| OPP-57 | Roadmap drift-detector | S | **[harness-implementable]** | A deterministic check flagging any OPP id present in both the CHANGELOG `[Unreleased]` section and `docs/ROADMAP.md`. The cheap near-term roadmap-upkeep check; the general enforcement engine is OPP-55. |
 
 **Rationale**: A deep review found that the harness's recent growth (the Phase 2 wave) outpaced its test net and surfaced a cluster of silent correctness and safety gaps. 1.A is the floor — defects that can produce a wrong PASS, an unsafe commit, or a corrupted run, each small and test-first. 1.B builds the characterization net the larger refactors require and opens the only sanctioned path to the judge tier without ever downgrading it. 1.C banks the recoverable cost levers and the cheap hygiene wins. 1.D states the trust boundary and settles the surface questions that would hurt to freeze at 1.0. The harness can implement most of 1.A/1.C/1.D against itself; the judge-adjacent, core-loop, and 1.0-surface items are human-led.
 
@@ -594,7 +594,7 @@ The first Phase 2 wave shipped as §1.32–§1.38 (contract-parse separation, pe
 
 | OPP | Feature | Effort | Tag | Justification |
 |-----|---------|--------|-----|---------------|
-| OPP-55 | Standing (cross-cutting) requirements enforced every sprint | M–L | **[human-led]** | A cross-cutting rule (e.g. "remove a completed item from `docs/ROADMAP.md`") reaches the agents as context but never becomes an operative, owned, enforced obligation, so it is silently skipped — the same invisible-to-the-green-gate family as OPP-41. Declare once; inject as a Generator directive **and** an Evaluator criterion, with an optional authoritative command and an applicability guard so one rule is safe across many projects. Pure policy core in `shared/`, NL extraction behind a `harness-claude/` adapter. Pre-1.0 format-sensitive; the enforced counterpart to OPP-07's advisory skills. The cheap near-term check for the roadmap-upkeep case specifically is OPP-57 (roadmap drift-detector). |
+| OPP-55 | Standing (cross-cutting) requirements enforced every sprint | M–L | **[human-led]** | A cross-cutting rule (e.g. "remove a completed item from `docs/ROADMAP.md`") reaches the agents as context but never becomes an operative, owned, enforced obligation, so it is silently skipped — the same invisible-to-the-green-gate family as OPP-41. Declare once; inject as a Generator directive **and** an Evaluator criterion, with an optional authoritative command and an applicability guard so one rule is safe across many projects. Pure policy core in `shared/`, NL extraction behind a `harness-claude/` adapter. Pre-1.0 format-sensitive; the enforced counterpart to OPP-07's advisory skills. Its flagship first slice is the roadmap-upkeep rule (the cheap text-check formerly OPP-57 proved unworkable — see the design doc). |
 
 **Rationale**: The trust/observability/safety wave (§1.32–§1.38) is complete, and the deep-review hardening (Phase 1) now leads engineering. Within Extend, the **"is it stuck?" cluster (2.A)** rises to the top: long unattended runs surfaced a real operability gap — no way to tell a reasoning model from a hung process, or to follow a run live. These are mostly small, low-risk wins (incremental logs, error/limit visibility, thinking activity), with the read-only `adhd status` next and the process-killing watchdog last (largest, riskiest, human-led). **2.B** adds after-the-fact forensics — a self-contained session bundle and contract-version diffing — plus the cost-durability gap. **2.C** holds the previously-planned reach and ecosystem items, now ranked below live observability. **2.D** opens a governance band: declaring a cross-cutting "standing" requirement once and enforcing it on every applicable sprint, closing the silent-skip gap a self-development run exposed.
 
@@ -620,8 +620,8 @@ The first Phase 2 wave shipped as §1.32–§1.38 (contract-parse separation, pe
 | --- | --- | --- | --- | --- |
 | **Phase 1**<br/>*Harden (HIGH — leads)*<br/>from the deep review | 1.A | Correctness & safety | OPP-29, 31 | Branch safety; reject empty/partial evaluator feedback (vacuous PASS) |
 | | 1.B | Judge integrity & test foundations | OPP-32,35,36,37,38 | Honest gate, orchestration test net, judge-replay, core refactors |
-| | 1.C | Cost, hygiene & observability | OPP-33, 34, 41, 56, 58 | Lint-gate dogfooding note, refinement cost, dead-helper removal, mid-run editor guard, refinement teardown |
-| | 1.D | Docs, security & 1.0 surface | OPP-44, 45, 46, 47, 54, 57 | Security tightening, phantom flag + settings governance, phantom-flag guard, second-harness vocabulary, `.adhd/` commit governance, roadmap drift-detector |
+| | 1.C | Cost, hygiene & observability | OPP-33, 34, 41, 56, 58, 60 | Lint-gate dogfooding note, refinement cost, dead-helper removal, mid-run editor guard, refinement teardown, `--project=` parsing |
+| | 1.D | Docs, security & 1.0 surface | OPP-44, 45, 46, 47, 54 | Security tightening, phantom flag + settings governance, phantom-flag guard, second-harness vocabulary, `.adhd/` commit governance |
 | --- | --- | --- | --- | --- |
 | **Phase 2**<br/>*Extend (MEDIUM)*<br/>§1.32–§1.38 shipped | 2.A | Live observability & liveness | OPP-27,48,49,50,51 | "Is it stuck?": error/limit visibility, incremental logs, thinking activity, `adhd status`, stream watchdog |
 | | 2.B | Forensics & debugging | OPP-53,52,28 | Self-contained session bundle, `contract-diff`, cost persistence |

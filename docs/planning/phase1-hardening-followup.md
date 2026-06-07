@@ -138,6 +138,16 @@ in *both* the CHANGELOG `[Unreleased]` block *and* ROADMAP Part 2. The Part 1
 extraction (§3.4) makes this even simpler: after the split, ROADMAP contains *only*
 opportunities, so "shipped id still in ROADMAP" is the entire signal.
 
+> **Superseded 2026-06-07.** The cheap drift-detector (which became OPP-57) was built
+> with the harness and reviewed — and the premise above is **wrong**: this project's
+> CHANGELOG is user-facing and, by convention, carries **no** `OPP-NN` ids (verified zero
+> across v0.6.0–v0.9.0). So "any OPP id in *both* the CHANGELOG `[Unreleased]` block and the
+> roadmap" has an always-empty left side — the check can never fire. There is also no other
+> durable machine-readable "shipped OPP" signal on `main` (`CAPABILITIES.md` carries no OPP
+> ids either). The roadmap-upkeep case therefore needs **agent judgement**, not a text
+> match: it folds into **OPP-55** as its flagship first slice (post-mortem + refined design:
+> `docs/planning/standing-requirements-design.md` §14). OPP-57 is removed from the roadmap.
+
 ### 3.4 Extract Part 1 into its own document
 
 `docs/ROADMAP.md` Part 1 (§1.1–§1.40, the implemented-capability inventory) is a

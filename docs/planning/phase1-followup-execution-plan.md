@@ -6,6 +6,23 @@ points to the detailed docs for specifics. **Archive this file once Phase 1 has 
 and OPP-54–59 are resolved** (per the Planning → archives lifecycle).
 **Date:** 2026-06-07.
 
+> **Update 2026-06-07 (progress) — read this first.**
+> - **S1** (roadmap → `CAPABILITIES.md` restructure) and **S2** (Phase 1 shipped as
+>   **v0.9.0**) are **done and on `main`.** Ignore the "Start at S1 / where things stand"
+>   framing below — it predates the release.
+> - **S3 is resolved by abandonment.** OPP-57 (cheap roadmap drift-detector) was built with
+>   the harness (3/3 sprints, all gates green) and reviewed — then found **unworkable**: the
+>   user-facing CHANGELOG never carries `OPP-NN` ids by convention, so the detector's
+>   intersection is always empty and it can never fire (full post-mortem +
+>   refined design: `standing-requirements-design.md` **§14**). Its intent **folds into
+>   OPP-55**. The OPP-57 roadmap entry is removed; a newly-found bug **OPP-60**
+>   (`--project=` ignored by subcommands) was added. The abandoned build is preserved at the
+>   local tag `archive/feat/opp-57-roadmap-drift-detector`.
+> - **Remaining work:** **S4** (OPP-56 + OPP-58; OPP-59 dropped) · **S5** (OPP-54) · **S6**
+>   (OPP-55 — now sharpened by §14) · plus the small **OPP-60** fix. Where the body below
+>   says "build OPP-57," that step is superseded; the `adhd`-invocation guidance in §5/§6
+>   still applies to S4/S5.
+
 **Read these for the detail behind each step:**
 - `docs/ROADMAP.md` — the live opportunity list (already contains OPP-54 and OPP-55).
 - `docs/planning/phase1-hardening-followup.md` — the umbrella plan; **§4 is the detailed
@@ -65,9 +82,12 @@ hazard that would normally make those changes risky to automate simply isn't pre
   (the "write-a-rule-once" engine) · 56 mid-run gate editor guard · 57 roadmap drift-detector
   (the cheap roadmap-tidy check) · 58 centralise refinement teardown · 59 strict numeric
   env-var parsing.
-- **Roadmap-tidy: cheap first.** Build the cheap warning check (**OPP-57**) now; the full
-  enforcement engine (**OPP-55**) is planned for **later**, not now. The cheap check covers
-  us in the meantime.
+- **Roadmap-tidy: cheap first.** ~~Build the cheap warning check (**OPP-57**) now; the full
+  enforcement engine (**OPP-55**) is planned for **later**, not now.~~ **SUPERSEDED
+  2026-06-07** (see top banner): the cheap deterministic check proved unworkable — the
+  user-facing CHANGELOG carries no OPP ids to match. The roadmap-upkeep case needs agent
+  judgement, so it folds into **OPP-55** as its flagship first slice (design:
+  `standing-requirements-design.md` §14). There is no cheap interim check.
 - **Sequencing (Option A):** do the roadmap restructure on the consolidation branch, then
   release Phase 1 as **one** merge (Phase-1 code + consolidation docs + restructure ship
   together).
@@ -125,9 +145,12 @@ your "go" (or pre-authorise). Then Claude archives + deletes the now-redundant
 the Phase 1 code, the consolidated planning docs, `CAPABILITIES.md`, and a clean roadmap with
 OPP-54–59.
 
-**S3 — OPP-57 cheap roadmap check (`adhd` harness).** From the repo root, Claude runs `adhd`
-(see §5). Claude reviews the harness's branch, then releases it (its own squash-merge + tag)
-per `docs/RELEASING.md`, archives the branch. You only approve the publish.
+**S3 — OPP-57 cheap roadmap check (`adhd` harness). [RESOLVED 2026-06-07 — abandoned; see
+top banner.]** Built and reviewed; the cheap deterministic premise is unworkable, so it was
+**not** released. The work is archived (`archive/feat/opp-57-roadmap-drift-detector`) and its
+intent folded into OPP-55 (`standing-requirements-design.md` §14). The original step text:
+*from the repo root, Claude runs `adhd` (see §5), reviews the harness's branch, then releases
+it per `docs/RELEASING.md`, archives the branch; you only approve the publish.*
 
 **S4 — OPP-56, 58, 59 small fixes (`adhd` harness).** One harness run can cover all three
 (small Phase-1 residuals). Claude reviews → releases → archives.
@@ -174,7 +197,10 @@ drives the harness from a non-interactive shell**, so the interactive gates must
 
 **Per-item tuning:**
 - **OPP-57** (small, alone): `--max-sprints 4 --max-features 1`; planning doc
-  `docs/planning/phase1-hardening-followup.md`.
+  `docs/planning/phase1-hardening-followup.md`. **[OPP-57 abandoned — see top banner; this
+  line is kept only as a sizing template. Note: when the planner emits a multi-feature
+  sprint, `--max-features 1` *drops* the extra features — set `--max-features` to cover the
+  largest sprint, as the OPP-57 run did with `--max-features 3`.]**
 - **OPP-56/58/59** (small batch): `--max-sprints 8 --max-features 3 --refine-spec`.
 - **OPP-54 / OPP-55** (delicate/large): add `--model-generator opus` (sharper edits to
   load-bearing code; the Evaluator stays Opus by default — **never downgrade the judge**),

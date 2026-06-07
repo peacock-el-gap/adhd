@@ -1,10 +1,13 @@
 # Standing (Cross-Cutting) Requirements — Design & Implementation Reference
 
-**Status:** design accepted 2026-06-07 (Peg + Claude).
+**Status:** design accepted 2026-06-07 (Peg + Claude); **refined 2026-06-07** after the
+OPP-57 attempt — see **§14**.
 **Companion to:** `docs/ROADMAP.md` → OPP-55.
-**Relates to:** OPP-57 (roadmap drift-detector, in `docs/planning/phase1-hardening-followup.md`)
-is the cheap near-term check for the *roadmap-upkeep* case specifically; this engine is the
-general mechanism that subsumes it (roadmap-upkeep is just its flagship example).
+**Relates to:** the *roadmap-upkeep* rule is this engine's **flagship first slice**. A cheap
+deterministic text-check for it (formerly OPP-57) was built, reviewed, and **abandoned as
+unworkable** on 2026-06-07; that attempt produced the refinement in §14 (owner + trigger,
+documenter-executed completion reconciliation, delivery guarantee). Read §14 alongside §2/§6 —
+where they differ for the roadmap-upkeep case, §14 governs.
 **Audience:** an ADHD harness run (or a developer) implementing OPP-55. When you run the
 harness on this feature, point it at OPP-55 in the roadmap and, optionally, at this file
 as reference context (`--context docs/planning/standing-requirements-design.md`).
@@ -304,3 +307,97 @@ Run the harness on its own repo with the roadmap-upkeep rule as a standing requi
   guard risks silent loss or leakage; add the guard.
 - **Don't lean on regression's dead paths** — the optional-tier/surface filter and
   `contract.retire` are wired-but-inert; reuse patterns, not that machinery.
+
+---
+
+## 14. Refinement from the OPP-57 attempt (2026-06-07)
+
+The cheap, near-term roadmap-tidy check (formerly its own roadmap item, OPP-57) was built
+with the harness and reviewed. It **failed by design**, and the failure sharpened this
+engine's design in three ways. This section governs the *roadmap-upkeep* case where it
+differs from §2/§6.
+
+### 14.1 What was tried, and why it failed (post-mortem, verified)
+
+- **The attempt.** A deterministic check: flag any `OPP-NN` id appearing in **both** the
+  CHANGELOG `[Unreleased]` section **and** `docs/ROADMAP.md`. Built via a 3-sprint harness
+  run — all sprints passed on the first attempt, all gates green, 1522 tests passing, clean
+  SDK boundary. The code itself was good.
+- **The defect.** Adversarial multi-agent review, independently reproduced, proved the check
+  **vacuous**: run on this very repo it reported *"No roadmap drift detected"* while OPP-57
+  was shipped on the branch **and** still present in `docs/ROADMAP.md` — the exact drift it
+  exists to catch.
+- **Root cause (a convention conflict, not a bug).** The project's **user-facing-CHANGELOG
+  rule** (`docs/RELEASING.md`: never put internal symbol/`OPP-NN` ids in the changelog)
+  means the CHANGELOG **structurally never carries OPP ids** — verified zero across
+  v0.6.0–v0.9.0 and the current file. So the left side of the intersection is *always
+  empty*; the detector can essentially never fire. The OPP-57 premise (that `[Unreleased]`
+  carries OPP ids) contradicted an established convention.
+- **No durable signal exists for the cheap path.** There is **no machine-readable record of
+  "this OPP shipped"** anywhere on `main`: `docs/CAPABILITIES.md` carries zero OPP ids,
+  feature commit subjects are user-facing. OPP ids live durably only in the roadmap
+  (planned) and planning docs. So no deterministic *text-match* can detect roadmap drift —
+  the case **requires agent judgement**.
+- **The deeper lesson.** This is the same "invisible to the green gate" family as §1: the
+  green gate certified a tool that cannot guard the thing it names. Confirms D1 — passive
+  correctness (it compiles, it's tested) is not the same as *operative* correctness (it
+  detects the real condition).
+
+### 14.2 The refined design for the roadmap-upkeep rule (Peg + Claude)
+
+Roadmap-upkeep is **not** a per-sprint Generator directive (the §2/§6 default). It is an
+**end-of-run, completion-triggered, Documenter-executed, Evaluator-judged** obligation. Four
+roles, divided by stakes:
+
+- **Generator — stays out of the roadmap.** It builds the feature; it does **not** edit
+  `ROADMAP.md`/`CAPABILITIES.md`. Mid-run roadmap surgery is premature (an item often spans
+  several sprints) and dilutes the generator's focus.
+- **Evaluator — makes the authoritative completion judgement.** At **item** granularity: was
+  the *roadmap item's intent* fully delivered — not merely "all sprints passed" (which would
+  miss planner under-scoping)? It is handed the roadmap item's own text plus the accumulated
+  record of what was built, and returns *fully done → move* / *partial → what remains* /
+  *not done*. **Start binary** (fully done → move; otherwise leave untouched); defer the
+  partial-rewrite case. This puts the riskiest decision (when to remove from the roadmap) on
+  the strongest judge (Opus).
+- **Harness — accumulates the evidence.** Across the run it collects a structured
+  "what was built and verified" digest (same pattern as BDD-regression accumulation) and
+  feeds it to the documenter at completion.
+- **Documenter — executes the edit.** At end of run, with full-run context, it moves the
+  completed item out of `ROADMAP.md` and into `CAPABILITIES.md`, keeping both consistent.
+  This is mechanical (the *decision* was already made by the evaluator), so it can stay on
+  the cheap tier.
+
+**Verification of the documenter's edit** keeps a deterministic role — not for detecting
+drift (that failed), but for **validating the edit is structurally sound**: did the
+roadmap's item count drop by exactly what was moved, is the roadmap still well-formed across
+its **three** locations (the `### OPP-NN` body, the priority-table row, the Summary View
+entry)? Plus the release-time human/Claude review as backstop.
+
+### 14.3 The general lesson for the engine — owner + trigger + delivery guarantee
+
+The attempt generalises the normalised model (§3) in three ways:
+
+1. **A rule declares an OWNER agent and a TRIGGER**, not only `instruction`+`check`. The §3
+   default (Generator directive + Evaluator check, per sprint) stays the common case;
+   roadmap-upkeep is the first rule that binds the **documenter** and fires **on run
+   completion**. Add `owner: "generator"|"evaluator"|"documenter"` and
+   `trigger: "per-sprint"|"on-completion"` to `StandingRequirement`.
+2. **A delivery guarantee** answers the failure that started all of this — a rule written in
+   the prompt/CLAUDE.md that is *silently dropped*. Two levels: **prove delivery**
+   (a deterministic assertion that the rule text was actually injected into its owner
+   agent's prompt, recorded in the per-run effective-policy audit, §5) **and prove action**
+   (the judgement/command check). Delivery without action is the silent-ignore failure;
+   action-check without delivery is the silent-drop failure — guard both.
+3. **Don't over-inject.** Keep rules few, owned, and scoped (the §7 applicability guard), or
+   they dilute back into the ambient-context noise this engine exists to escape.
+
+### 14.4 Impact on the sprint plan (§11) and acceptance (§12)
+
+- Re-express the roadmap-upkeep acceptance (§12) against the owner/trigger model: the
+  **documenter** performs the move at completion; the **evaluator** judges item completion;
+  a **structural check** validates the edit. (The "a sprint that leaves a completed OPP in
+  the roadmap must FAIL" criterion still holds — it now fails at the end-of-run check rather
+  than per-sprint.)
+- **Nothing is carried forward from the abandoned OPP-57 build.** Its pure id/section
+  string-extraction is not what this design needs; the code lives only in the local archive
+  tag `archive/feat/opp-57-roadmap-drift-detector`, should it ever be wanted.
