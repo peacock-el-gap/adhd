@@ -4,7 +4,7 @@ import { log } from "./logger.ts";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type AgentRole = "planner" | "generator" | "evaluator" | "documenter" | "reviewer";
+type AgentRole = "planner" | "generator" | "evaluator" | "documenter" | "reviewer";
 export type SkillTier = "inject" | "reference" | "exclude";
 export type SkillSource = "harness" | "user" | "project-installed" | "project-local";
 

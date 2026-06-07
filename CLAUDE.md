@@ -70,8 +70,8 @@ Harness directories use `harness-{provider}` format (e.g., `harness-claude`, `ha
 ### docs/ROADMAP.md
 
 The roadmap is a living forward-looking document. When a roadmap item is completed:
-- **Remove it** from Part 2 (opportunities) and Part 3 (roadmap tables)
-- If the completed work introduces a new capability, **describe it in Part 1** (inventory)
+- **Remove it** from Part 1 (opportunities) and Part 2 (roadmap tables)
+- If the completed work introduces a new capability, **describe it in `docs/CAPABILITIES.md`**
 - Do **not** mark items as "done", use strikethrough, or add implementation details — the roadmap should only contain planned work
 
 ## Development

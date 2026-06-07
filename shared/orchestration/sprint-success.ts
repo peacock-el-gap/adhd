@@ -62,7 +62,7 @@ export async function handleSprintSuccess(ctx: SprintSuccessContext): Promise<Sp
         skills: skills?.reviewer,
       });
       if (reviewerResult.sdkResult) {
-        usage.recordStage("reviewer", config.resolvedModelReviewer, reviewerResult.sdkResult);
+        usage.recordStage(`reviewer-sprint-${sprint}`, config.resolvedModelReviewer, reviewerResult.sdkResult);
       }
     } catch (err) {
       logWarn(
@@ -167,10 +167,12 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
           sessionId: docResult.sessionId,
           sprintResults: results,
           model: documenterModel,
+          // F7: pass the usage tracker so any commit-resume token spend is recorded
+          usage,
         });
         log("HARNESS", `Documenter commit source: ${source}`);
       } catch (err) {
-        log("HARNESS", `WARNING: Documenter commit enforcement failed: ${err}`);
+        logWarn("HARNESS", `Documenter commit enforcement failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
@@ -184,9 +186,9 @@ export async function runDocumenterPhase(ctx: DocumenterPhaseContext): Promise<v
     documenterSpan.end();
   } catch (err) {
     documenterSpan.end({ error: String(err) });
-    log(
+    logWarn(
       "HARNESS",
-      `WARNING: Documenter failed: ${err instanceof Error ? err.message : String(err)}. Documentation generation skipped.`,
+      `Documenter failed: ${err instanceof Error ? err.message : String(err)}. Documentation generation skipped.`,
     );
     // docsGenerated remains false/undefined so resume can re-attempt
   }

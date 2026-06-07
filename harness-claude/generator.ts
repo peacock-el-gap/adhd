@@ -121,7 +121,7 @@ export async function ensureGeneratorCommit(
 
   const runResume = sessionId
     ? async () => {
-        await resumeAgent({
+        const resumeResult = await resumeAgent({
           workDir,
           sessionId,
           prompt: resumePrompt,
@@ -133,6 +133,12 @@ export async function ensureGeneratorCommit(
           onToolUse: (name) => log("HARNESS", `  Commit resume tool: ${name}`),
           queryFn: deps?.queryFn,
         });
+        // F7: record the commit-resume token spend as its own additive ledger stage
+        // so the cost is never silently dropped when a resume was needed.
+        if (opts.usage && resumeResult.sdkResult) {
+          const stageLabel = `sprint-${sprint}-generator-commit-resume`;
+          opts.usage.recordStage(stageLabel, model, resumeResult.sdkResult);
+        }
       }
     : undefined;
 

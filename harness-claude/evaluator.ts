@@ -10,7 +10,9 @@ import { resumeAgent, runAgent } from "./run-agent.ts";
 
 export type { RunEvaluatorOptions };
 
-export async function runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }> {
+export async function runEvaluator(
+  opts: RunEvaluatorOptions,
+): Promise<EvalResult & { sdkResult?: SDKResultFields; resumeSdkResult?: SDKResultFields }> {
   const { config, identity, contract, skills, supplementaryContext } = opts;
   const { workDir, isGreenfield, noBdd, sourceDir, testDir, passThreshold } = config;
   const model = config.resolvedModelEvaluator;
@@ -58,6 +60,9 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
   });
 
   let parsed = tryParseEvalResult(streamResult.response, contract, passThreshold);
+  // F7: captured when the max-tokens retry fires so it can be recorded as an
+  // additive ledger stage by the caller (sprint-attempts.ts).
+  let resumeSdkResult: SDKResultFields | undefined;
 
   // Retry gate: if parsing failed AND the SDK stopped at max_tokens, the JSON
   // was almost certainly truncated mid-output. One short follow-up asking for
@@ -80,14 +85,20 @@ Examine the application in ${isGreenfield ? "the `app/` directory" : "the projec
       if (parsed) {
         log("EVALUATOR", "Retry recovered valid JSON verdict");
       }
+      // Capture the retry's cost regardless of whether parsing succeeded —
+      // the tokens were spent either way.
+      resumeSdkResult = retry.sdkResult;
     } catch (err) {
       log("EVALUATOR", `WARNING: Evaluator retry failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  const evalResult: EvalResult & { sdkResult?: SDKResultFields } =
+  const evalResult: EvalResult & { sdkResult?: SDKResultFields; resumeSdkResult?: SDKResultFields } =
     parsed ?? buildZeroedFallback(streamResult.response, contract);
   evalResult.sdkResult = streamResult.sdkResult;
+  // F7: surface the retry's sdkResult so the orchestrator (sprint-attempts.ts)
+  // can record it as its own additive stage in the cost ledger.
+  evalResult.resumeSdkResult = resumeSdkResult;
 
   if (shouldLog("normal", level)) {
     const passedCount = evalResult.feedback.filter((f) => f.score >= passThreshold).length;

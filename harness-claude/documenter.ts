@@ -81,7 +81,7 @@ export async function ensureDocumenterCommit(opts: EnsureDocumenterCommitOptions
 
   const runResume = sessionId
     ? async () => {
-        await resumeAgent({
+        const resumeResult = await resumeAgent({
           workDir,
           sessionId,
           prompt: resumePrompt,
@@ -92,6 +92,11 @@ export async function ensureDocumenterCommit(opts: EnsureDocumenterCommitOptions
           maxTurns: 3,
           onToolUse: (name) => log("HARNESS", `  Commit resume tool: ${name}`),
         });
+        // F7: record the documenter commit-resume token spend as its own additive
+        // ledger stage so the cost is never silently dropped when a resume was needed.
+        if (opts.usage && resumeResult.sdkResult) {
+          opts.usage.recordStage("documenter-commit-resume", model, resumeResult.sdkResult);
+        }
       }
     : undefined;
 

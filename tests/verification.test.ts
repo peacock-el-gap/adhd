@@ -5,10 +5,9 @@ import {
   VERIFICATION_NO_OP,
   buildErrorVerificationResult,
   buildVerificationResult,
-  detectTestCommand,
   parseTestOutput,
 } from "../shared/verification.ts";
-import { detectStaticAnalysisCommands } from "../shared/static-analysis.ts";
+import { detectStaticAnalysisCommands, detectTestCommand } from "../shared/static-analysis.ts";
 
 const TMP_DIR = join(import.meta.dir, "__tmp_verification_test__");
 

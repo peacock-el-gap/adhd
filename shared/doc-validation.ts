@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { log } from "./logger.ts";
+import { logWarn } from "./logger.ts";
 
 export const MIN_README_LENGTH = 200;
 
@@ -14,15 +14,15 @@ export function validateDocumentation(docDir: string): void {
   if (existsSync(readmePath)) {
     const content = readFileSync(readmePath, "utf-8");
     if (content.length < MIN_README_LENGTH) {
-      log("HARNESS", "WARNING: Documentation may be incomplete: README.md is very short.");
+      logWarn("HARNESS", "Documentation may be incomplete: README.md is very short.");
     }
   } else {
-    log("HARNESS", "WARNING: Documenter did not create README.md.");
+    logWarn("HARNESS", "Documenter did not create README.md.");
   }
 
   // Check CHANGELOG.md
   const changelogPath = join(docDir, "CHANGELOG.md");
   if (!existsSync(changelogPath)) {
-    log("HARNESS", "WARNING: Documenter did not create CHANGELOG.md.");
+    logWarn("HARNESS", "Documenter did not create CHANGELOG.md.");
   }
 }

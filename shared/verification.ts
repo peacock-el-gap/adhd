@@ -1,7 +1,4 @@
-import { detectTestCommand, truncateStaticAnalysisOutput } from "./static-analysis.ts";
-
-// Re-export so callers can reach detectTestCommand from this module.
-export { detectTestCommand };
+import { truncateStaticAnalysisOutput } from "./static-analysis.ts";
 
 /**
  * Compact structured result from a single verification (test) run.

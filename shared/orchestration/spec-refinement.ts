@@ -101,6 +101,11 @@ export async function performSpecRefinement(
 
     if (!proposedSpec || proposedSpec.trim().length === 0) {
       log("HARNESS", "Warning: Planner returned empty spec during refinement. Preserving original.");
+      // Write the original spec back to disk so the on-disk state agrees with
+      // the in-memory value we return. Without this write, the planner's empty
+      // file remains on disk while the in-memory spec is the original — a
+      // divergence that could corrupt a subsequent resume, edit, or commit.
+      await writeSpec(config.workDir, originalSpec);
       await restoreRegressionData(config.workDir, originalRegressionData);
       return { specChanged: false, spec: originalSpec, newSprintCount: currentTotalSprints };
     }

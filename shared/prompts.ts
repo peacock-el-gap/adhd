@@ -137,10 +137,35 @@ ${readDiscipline}`;
   return appendSkills(prompt, ctx.skills);
 }
 
+/**
+ * Build the deterministic self-check section for the Generator system prompt.
+ *
+ * The Generator should run these cheap, mechanically-detectable checks in order
+ * before declaring the sprint complete, so preventable failures are resolved
+ * without spending model-cost evaluation retries.
+ *
+ * Step order is fixed: auto-fix → lint → type-check → test. This matches the
+ * logical progression — fix formatting first, then verify the tree is clean,
+ * then confirm types, then run the suite.
+ */
+export function buildGeneratorSelfCheckSection(): string {
+  return `## Self-Check Before Finishing
+
+Before declaring the sprint complete, run these deterministic checks in order and fix any failures before your final commit:
+
+1. **Auto-fix**: Run the project's auto-fix command (e.g. \`bun run lint:fix\`) to resolve formatting and automatically-fixable lint issues.
+2. **Lint**: Run \`bun run lint\` (or the equivalent) to verify no lint errors remain after the auto-fix pass.
+3. **Type-check**: Run \`bun run typecheck\` (or equivalent) to verify there are no type errors.
+4. **Test**: Run the relevant test file(s) to verify your changes work correctly.
+
+Resolve every failure before committing. The harness will run the full suite after you finish — cheap deterministic failures here are far less costly than a model-evaluation retry.`;
+}
+
 export function buildGeneratorPrompt(ctx: PromptContext): string {
   const sourceDir = ctx.sourceDir ?? "src";
   const testDir = ctx.testDir ?? "tests";
   const readDiscipline = buildReadDisciplineSection(true);
+  const selfCheck = buildGeneratorSelfCheckSection();
 
   const workingDir = ctx.isGreenfield
     ? `All code goes in the \`app/\` subdirectory of your working directory. Initialize the project there if it doesn't exist.`
@@ -177,6 +202,8 @@ When evaluation feedback is provided in your prompt:
 - Pay attention to file paths and line numbers in the feedback
 - Re-run and verify each fix before committing
 - Do not skip or dismiss any feedback item
+
+${selfCheck}
 
 ${readDiscipline}`;
 

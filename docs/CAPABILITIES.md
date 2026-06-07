@@ -1,0 +1,323 @@
+# ADHD Harness — Capabilities
+
+This is the current-system reference: what the harness does today. Every methodical practice the four-agent harness implements is catalogued here, each one fully built and operational. Forward-looking work — open gaps and planned items — lives in [docs/ROADMAP.md](ROADMAP.md); the design reasoning behind these capabilities lives in [docs/INTERNALS.md](INTERNALS.md).
+
+The section numbers (§1.1–§1.42) are stable and are referenced from other documents; keep them when editing and do not renumber.
+
+The harness encodes a rich set of SDLC practices across its four-agent architecture. Each functionality below is fully implemented and operational.
+
+### 1.1 GAN-Inspired Adversarial Architecture
+
+The foundational design pattern: **separate generation from evaluation, then pit them against each other**. Four specialized agents (Planner, Generator, Evaluator, Documenter) communicate through files, not shared conversation history. This prevents **self-evaluation bias** — the quiet killer of single-agent coding tools where the model praises its own mediocre output.
+
+- **Planner**: Creates product specification with sprint decomposition
+- **Generator**: Implements features with full tool access (Read, Write, Edit, Bash, Glob, Grep)
+- **Evaluator**: Tests and scores with read-only tools (Read, Bash, Glob, Grep — no Write/Edit)
+- **Documenter**: Synthesizes codebase + `.adhd/` artifacts into project documentation (README, API docs, CHANGELOG) after all sprints pass
+
+The asymmetry is intentional: the evaluator cannot fix problems, only report them. This forces the generator to produce genuinely working code. The documenter runs post-sprint as a synthesis step, not an adversarial one.
+
+### 1.2 Sprint-Based Decomposition
+
+The Planner decomposes work into 3-6 sequential sprints with independent scope. Each sprint is a self-contained unit of work with its own contract, build-evaluate cycle, and checkpoint. This mirrors Scrum sprint planning but with adversarial validation through contract negotiation.
+
+### 1.3 Contract Negotiation
+
+Before any code is written, the Generator proposes a sprint contract (5-15 testable criteria), then the Evaluator reviews it for specificity, completeness, and measurability. Anti-vagueness rules reject "works well" or "looks good" — only measurable criteria survive.
+
+This is **Definition of Done as a protocol**: machine-readable JSON, not a wiki page nobody reads.
+
+When contract JSON parsing fails, the harness logs a truncated preview to the console and writes the full raw text to `.adhd/logs/sprint-N-contract-parse-error.txt` before falling back to a generic default contract — so parse failures are observable rather than silent.
+
+### 1.4 BDD (Behavior-Driven Development)
+
+When enabled (default), the Planner writes acceptance scenarios in **Given/When/Then** format. These flow into sprint contracts as testable criteria. The Evaluator verifies that tests exist for each scenario and that they pass.
+
+BDD criteria tagged `"type": "behavioral"` during contract negotiation are **accumulated across sprints** as a regression set (see §1.14). This turns BDD scenarios into persistent behavioral invariants — Sprint 3 cannot silently break behavior established in Sprint 1.
+
+Disableable via `--no-bdd`. Also filters community skills tagged `type: methodology-bdd`. Disabling BDD also disables regression accumulation.
+
+### 1.5 TDD (Test-Driven Development)
+
+When enabled (default), the Generator receives explicit Red-Green-Refactor instructions: write failing tests first, implement until tests pass, then refactor. The Evaluator checks that tests exist and are meaningful — but enforcement is pragmatic (spirit over ceremony; commit ordering is not mechanically enforced).
+
+Disableable via `--no-tdd`. Also filters skills tagged `type: methodology-tdd`.
+
+### 1.6 Build-Evaluate Retry Loop (max 3 attempts)
+
+The core adversarial cycle:
+
+```
+For each sprint:
+  For attempt 0..maxRetries:
+    Generator implements (with previous feedback on retry)
+    Commit enforcement (3-tier safety net)
+    Evaluator scores against contract criteria
+    If ALL criteria >= threshold → PASS, break
+    If failed → inject detailed feedback, retry
+```
+
+On retry, the Generator must apply a **REFINE vs PIVOT** decision:
+- **REFINE** if scores are trending upward (incremental improvement)
+- **PIVOT** if scores are flat or declining (fundamental rethink needed)
+
+Evaluator feedback is structured: file paths, line numbers, exact errors, specific criterion scores.
+
+### 1.7 Five Interactive Control Gates
+
+Human-in-the-loop at every critical decision point, implemented via timed single-keypress prompts with countdown bars:
+
+| Gate | When | Default on Timeout | Purpose |
+|------|------|--------------------|---------|
+| **Dirty-tree check** | Before start | Continue | Warn about uncommitted changes |
+| **Spec approval** | After planning | Abort (safe) | Approve / Edit / Revise / Abort |
+| **Contract preview** | Before each sprint | Accept | Review sprint scope |
+| **Evaluator override** | On failed evaluation | Retry | Force PASS on false negatives |
+| **Mid-run steering** | Between sprints | Continue | Continue / Edit spec / Skip / Abort |
+
+All gates support `[w]` to pause the timer. All are skippable via `--gate-timeout 0` or `--no-interactive`.
+
+### 1.8 Three-Tier Commit Enforcement
+
+Safety net ensuring every agent run that produces changes also produces a git commit. Applied uniformly to both the Generator and the Documenter via a shared `ensureAgentCommit` primitive in `shared/orchestration/git-ops.ts`:
+
+1. **Check** — Did the agent commit on its own? (Compare HEAD before/after)
+2. **Resume** — If uncommitted changes exist, resume the agent's SDK session with a commit-only prompt (max 3 turns, Bash-only) using the SDK's `resume` field to load the original conversation history
+3. **Fallback** — Harness runs `git add -A && git commit` with a contextual message referencing the sprint and features (tagged `[auto-commit]` for the Generator, `[docs]` for the Documenter)
+
+`commitSource` field ("agent" | "resume" | "fallback" | "none") tracked in each SprintResult for compliance monitoring.
+
+### 1.9 Checkpoint & Resume
+
+After each passing sprint, a checkpoint is saved to `.adhd/progress.json` with the git commit SHA, all sprint results, and evaluation feedback. On `--resume`:
+- Planning phase is skipped (spec exists)
+- Incomplete sprint commits are reverted to last known good state
+- Sprint loop continues from the next unfinished sprint
+
+Transient errors (HTTP 429, 5xx, network) retried automatically with exponential backoff (30s, 60s, 120s).
+
+Resume is idempotent: if a sprint contract already exists at `.adhd/contracts/sprint-N.json`, contract negotiation is skipped and the existing contract is reused — the same pattern used by `--sprint N`. Checkpoint rollback stashes `.adhd/` files, runs `git reset --hard <checkpoint-sha>`, then unstashes, producing a clean code state with deterministic behavior even when the harness has written uncommitted metadata.
+
+### 1.10 Skills System (Three-Scope, Self-Routing)
+
+A full plugin mechanism for composable guidance:
+
+**Three scopes** (precedence: project > user > harness):
+- `<harness>/shared/skills/` — Built-in (spec-format, contract-structure, evaluation-criteria)
+- `~/.adhd/skills/` — User-wide (reusable across projects)
+- `<project>/.adhd/skills/` — Project-specific (installed or hand-written)
+
+**Per-agent routing** via `skill.yaml` manifests:
+- `inject` — Content embedded in system prompt (high impact, always loaded)
+- `reference` — Listed as available files via `additionalDirectories` (agent reads on demand)
+- `exclude` — Not provided to this agent
+
+**Methodology-aware filtering**: `--no-bdd` removes `type: methodology-bdd` skills, `--no-tdd` removes `type: methodology-tdd`.
+
+### 1.11 Observability Stack
+
+Three layers, all operational:
+
+1. **Conversation logs** — Detailed markdown per agent/sprint/attempt in `.adhd/logs/`. Always written regardless of log level. Tool calls with inputs, results (long outputs collapsed in `<details>`). Filenames are prefixed with a `YYYY.MM.DD-HH.MM.SS` timestamp (e.g., `2026.04.10-05.28.33-sprint-5-attempt-0-generator.md`) so resume/retry never overwrites prior evidence, `ls` sorts chronologically, and Langfuse trace names align.
+2. **Langfuse OTEL tracing** — Optional hierarchical span tree mirroring the harness structure. Fire-and-forget; zero impact on agent behavior.
+3. **Per-stage cost tracking with per-model attribution** — Tokens, USD, duration per SDK call, plus the resolved model that produced each stage. Two terminal summary views: a per-stage breakdown with model column and a per-model rollup sorted by total USD descending. Stage entries carry a `model` field in `.adhd/usage.json`; legacy entries without the field load as `"unknown"` for backward compatibility. Accumulated across resume sessions. Resume calls (for example the evaluator `max_tokens` retry and the generator/documenter commit resumes) are recorded as their own additive ledger stages; the Reviewer stage is tagged per sprint so per-sprint rows never collide; and the turn-limit warning is computed against each agent's real configured cap rather than a deprecated global ceiling.
+
+### 1.12 Post-Run Documentation Generation
+
+After all sprints pass, a dedicated **Documenter** agent synthesizes the codebase and `.adhd/` artifacts (spec, contracts, evaluation feedback, BDD scenarios) into project documentation:
+
+- **README.md** — Overview, setup, usage, architecture, features
+- **CHANGELOG.md** — One section per sprint, derived from contract history
+- **API.md** — Conditional, only if API endpoints exist
+
+The Documenter reads the actual code (not just the spec) and uses an artifact digest (`shared/artifact-digest.ts`) with token-budget enforcement to stay within context limits. Advisory validation (`shared/doc-validation.ts`) warns if README or CHANGELOG are missing or too short.
+
+Key properties:
+- Runs once after all sprints pass (not per-sprint)
+- Disableable via `--no-docs` (or `ADHD_NO_DOCS` env var)
+- Per-agent model override via `--model-documenter`
+- Non-fatal: documentation failure does not fail the run
+- Resume-aware: re-attempts documentation if a previous run failed at this stage
+- Commit enforcement: uses the same three-tier `ensureAgentCommit` primitive as the Generator (§1.8), with `[docs]`-prefixed fallback message referencing the sprints it documented
+
+### 1.13 Additional Operational Features
+
+| Feature | Description |
+|---------|-------------|
+| **Dry-run mode** (`--dry-run`) | Run planner + spec approval only. Zero generation cost. |
+| **Multi-model strategy** | Per-agent model overrides (`--model-planner`, `--model-generator`, `--model-evaluator`, `--model-documenter`, `--model-contract`) layered over a reasoned per-agent default matrix (see §1.23–§1.24) |
+| **Context injection** (`--context <file>`) | Feed API specs, schemas, design docs into planner prompt |
+| **Branch creation** (`--branch <name>`) | Create feature branch before sprint loop |
+| **Greenfield mode** (`--greenfield`) | Scaffold fresh `app/` with git init |
+| **Directory conventions** (`--source-dir`, `--test-dir`) | Control where agents place source and test code |
+| **Planner HITL** (`AskUserQuestion`) | Planner can ask clarifying questions mid-planning (60s timeout) |
+| **Timezone display** (`TZ_DISPLAY`) | Configurable terminal timestamp timezone |
+| **HITL notifications** | Terminal bell (`\x07`) on every HITL gate. `--notify` flag adds desktop notifications via `notify-send` (Linux) / `osascript` (macOS) for backgrounded terminals. |
+| **Opt-in artifact commits** (`--commit-adhd`, `--commit-adhd-logs`) | Harness-level git commits for `.adhd/contracts/`, `.adhd/feedback/`, `.adhd/progress.json`, `.adhd/spec.md` (and optionally `.adhd/logs/`) after each sprint, tagged `[adhd]`. Provides structured audit trail without polluting project history by default. |
+| **Pre-Generator artifact commit** | Before invoking the Generator, the harness commits `.adhd/` artifacts with an `[adhd]` message so the Generator starts with a clean working tree and rollbacks remain deterministic. |
+| **Real-time `"documenting"` progress status** | `progress.json` sets `status: "documenting"` while the Documenter runs, distinct from `"complete"`, so external monitors reflect actual state. |
+| **Strict numeric configuration validation** | Non-numeric or NaN values for numeric settings (`--threshold`, `--max-sprints`, `--max-retries` and their environment-variable equivalents) are rejected with a flag-named error at configuration resolution rather than silently proceeding with corrupted state; legitimate `0` values and the gate-timeout sentinel are preserved. |
+
+### 1.14 BDD Regression Accumulation Across Sprints
+
+After each passing sprint, behavioral contract criteria (those tagged `"type": "behavioral"`) are accumulated into a persistent regression set stored at `.adhd/regression.json`. When evaluating subsequent sprints, the Evaluator receives both the current sprint's contract AND all accumulated behavioral criteria from prior sprints.
+
+- **Criteria classification**: Contract negotiation prompts require every criterion to have a `"type"` field — either `"behavioral"` (observable behavior, API contracts, user-facing functionality) or `"implementation"` (code quality, naming, internal structure). Only behavioral criteria accumulate for regression.
+- **Graceful degradation**: If regression criteria cannot be read, the sprint proceeds without them.
+- **BDD-gated**: Regression accumulation is disabled when `--no-bdd` is set.
+
+### 1.15 Pre-Evaluation Static Analysis Gate
+
+Between Generator output and Evaluator invocation, the harness detects and runs the project's existing lint/typecheck commands (via `package.json` scripts or conventions). Results are injected into the Evaluator's context as supplementary data.
+
+Two modes:
+- **Soft gate** (default): Static analysis output is injected into the Evaluator prompt. No retry consumed; Evaluator decides severity.
+- **Hard gate** (`--lint-gate`): If any lint/typecheck command exits non-zero, the Evaluator is skipped entirely and the attempt counts as failed. Static analysis output is included in the feedback.
+
+Output is auto-truncated to prevent prompt bloat.
+
+### 1.16 Diff-Aware Evaluation on Retries
+
+On retry attempts (attempt > 0), the harness computes `git diff` between the previous attempt's commit and the current one. This diff is injected into the Evaluator's prompt as supplementary context, allowing the Evaluator to focus on what changed while still checking all criteria.
+
+Ordering in the Evaluator prompt: regression criteria → diff → static analysis results.
+
+### 1.17 Sprint Selection (`--sprint N`)
+
+`--sprint N` jumps to sprint N, loading the existing spec and reusing any existing contract for that sprint. If no contract exists, contract negotiation runs for that sprint only. Only the targeted sprint executes — no other sprints run.
+
+- Requires an existing spec (errors if none found)
+- Warns if no checkpoint exists for sprint N-1
+- Mutually exclusive with `--resume`
+- Preserves existing `progress.json` sprint results when available
+
+### 1.18 Quality Criteria in Contracts
+
+Contract negotiation prompts (both Generator proposal and Evaluator review) now require quality-focused criteria alongside behavioral ones. The Generator must include at least one `"implementation"`-type criterion covering code quality aspects: naming conventions, code duplication (DRY), error handling patterns, and maintainability. The Evaluator rejects contracts missing quality criteria.
+
+The Evaluator's system prompt includes a dedicated **Quality Criteria** section mandating that quality criteria are scored with the same rigor and threshold as functional criteria — they are not advisory.
+
+### 1.19 Progressive Spec Refinement
+
+When `--refine-spec` is set, after each passing sprint (except the last), the Planner re-reads the spec plus the actual code state and proposes adjustments to remaining sprints. Completed sprints are frozen — only not-yet-started sprints can be modified.
+
+**Guardrails**:
+1. Completed sprint sections cannot be modified by refinement: the Planner is shown them only as read-only reference and emits just the remaining sections, which the harness splices around the verbatim completed ones (§1.27) — there is nothing to repair because the Planner never supplies a completed section
+2. Accumulated BDD regression criteria are preserved across refinement
+3. A diff of proposed changes is displayed to the user
+4. A HITL gate allows accepting or rejecting the revised spec (auto-accepted in non-interactive mode)
+5. Sprint count is recalculated from the revised spec
+
+### 1.20 Surface-Aware Sprint Contracts
+
+Each sprint contract names the parts of the codebase it intends to change, drawn from a fixed six-value vocabulary defined once in `shared/surfaces.ts`: `backend`, `frontend`, `db`, `tests`, `docs`, `config`. Contract negotiation requires it — the Generator proposes a non-empty `surfaces` array reflecting the sprint's real footprint, and the Evaluator's contract review rejects any contract whose surfaces are missing, empty, or contain a token outside the vocabulary.
+
+Surfaces are normalized on every read and write: unknown and duplicate tokens are dropped, first-seen order is preserved, and malformed stored values degrade to "absent" rather than crashing a run. Contract JSON persists with a stable key order (`sprintNumber`, `features`, `surfaces`, `criteria`); legacy contracts that predate the field round-trip untouched and never gain a spurious empty array.
+
+Declaring surfaces is what makes scope checkable — it is the input both the coverage gate (§1.21) and the size ceiling (§1.22) measure against.
+
+### 1.21 Pre-Evaluation Surface Coverage Gate
+
+A cheap, AI-free check that runs after the Generator commits but before the Evaluator: did the sprint actually touch every surface its contract promised? The harness lists the files the attempt changed with `git diff --name-only` (excluding `.adhd/` metadata so harness bookkeeping never inflates the count) and classifies each path to at most one surface using an ordered pattern table covering common Bun/Node/TS, Python, Go, and Ruby layouts. Test paths take precedence, so a test file with a UI extension (e.g. `Button.test.tsx`) classifies as `tests`, not `frontend`.
+
+If any declared surface was left untouched, the attempt fails immediately with a skipped-Evaluator result and feedback naming the missing surfaces — no Evaluator spend on work that visibly dropped part of its scope. This is the cheaper of the two pre-Evaluator gates and runs before the static-analysis gate (§1.15); whichever fails first short-circuits the attempt.
+
+Like diff-aware evaluation (§1.16), the gate measures against the previous attempt's commit, so it engages on retry attempts. It degrades gracefully: a contract that declares no surfaces, or an attempt whose changed-file list cannot be computed, simply proceeds to the Evaluator as before.
+
+### 1.22 Contract Size Ceiling
+
+Contract negotiation enforces configurable per-sprint size limits to stop scope inflation before any code is generated: at most `maxFeatures` features, `maxCriteria` criteria, and `maxSurfaces` surfaces (defaults 3 / 10 / 2), set via `--max-features` / `--max-criteria` / `--max-surfaces` or the matching `MAX_FEATURES` / `MAX_CRITERIA` / `MAX_SURFACES` env vars, following the standard CLI > env > `.adhd/.env` > default precedence.
+
+The reviewer is told the active caps and must narrow an over-budget proposal rather than approve it. If the negotiated contract still exceeds a limit, the harness runs exactly one additional reviewer narrowing round — never a loop — and, as a final guarantee, applies a pure deterministic trim that keeps the first items within every cap so the Generator is never handed over-budget work. Odd limit values (NaN, negatives, non-numbers) are treated as "no cap" for that dimension, so a misconfiguration disables trimming rather than crashing or emptying a contract. The ceiling logic lives in pure, never-throwing helpers in `shared/contract-limits.ts`; only the single narrowing round touches the SDK.
+
+This is the negotiation-time complement to the coverage gate (§1.21): the ceiling stops a sprint from being defined too large; the gate catches a sprint that silently delivers less than it declared.
+
+### 1.23 Per-Agent Model Defaults & the Evaluator ≥ Generator Invariant
+
+Each of the four agents runs on a tier chosen for its role and blast radius, applied automatically when no model flag is set: **Planner** and **Evaluator** on Opus, **Generator** on Sonnet, **Documenter** on Haiku. The three tier IDs live in one place (`shared/models.ts`) and are referenced by name everywhere else — no model-ID string appears elsewhere in `shared/` or `harness-claude/`.
+
+Per agent, selection follows a fixed precedence: an explicit per-agent flag (`--model-planner` / `--model-generator` / `--model-evaluator` / `--model-documenter`, or the matching `MODEL_*` env var) overrides a uniform `--model` / `CLAUDE_MODEL`, which in turn overrides the agent's tier default; blank values are ignored so they fall through cleanly. At startup the harness prints the resolved model for all four agents (the Documenter included) so the run's configuration is shown honestly.
+
+A governing invariant holds across every profile: **the Evaluator's tier must be at least the Generator's.** The Evaluator is the sole pass/fail gate (§1.1), and a judge weaker than the producer would rubber-stamp code it cannot out-reason — and a false PASS is never re-litigated, whereas a weak Generator is always caught and retried. If a chosen configuration puts the Evaluator below the Generator, the harness logs a one-time advisory warning at startup and continues; it never hard-fails, and it stays silent when either model is an unrecognized ID it cannot rank.
+
+### 1.24 Single-Model Contract Negotiation Override
+
+Contract negotiation normally inherits a split — the Generator's model proposes the contract, and the Evaluator's model reviews it and runs any narrowing round (§1.22). The optional `--model-contract` flag (or `MODEL_CONTRACT` env var) collapses all three negotiation calls onto one model, letting a project decouple negotiation from the Generator/Evaluator picks without disturbing the rest of the matrix. When unset, the inherited propose/review split is used.
+
+### 1.25 Harness-Owned Verification (Single Test Run, Shared Result)
+
+During a sprint the harness runs the project's canonical verification — the test command, plus the lint/typecheck it already ran for the static-analysis gate (§1.15) — **once per attempt**, centrally, and shares the result with the agents instead of letting each agent re-run the full suite repeatedly. The test command is auto-detected from `package.json` scripts (`test`, `test:unit`, `test:run`, in priority order; a no-op when none is found), run through the same cached command-runner and output-truncation path as lint/typecheck, and captured as a compact structured result — pass/fail counts, failing test names, truncated output. That single result is injected into both the Generator (as the starting baseline) and the Evaluator (as the authoritative result), and both are instructed not to re-run the whole suite; a single scoped test file is still allowed when inspecting one failure.
+
+Before the Generator runs, the harness also captures a **known-failing baseline** — which tests were already red before this sprint's changes began — so post-generation failures are classified as pre-existing or newly-introduced, and agents no longer spend turns re-deriving that distinction by stashing and comparing against a clean tree. An optional hard **test gate** (`--test-gate`) skips the Evaluator outright when the Generator introduces new failures, mirroring the lint hard-gate (§1.15) and saving an Evaluator call on a broken build. The detection and classification logic lives in pure, non-throwing helpers in `shared/`; a project with no test command, or a spawn failure, degrades gracefully to the prior behaviour.
+
+### 1.26 Context-Frugal Prompting: Read Discipline, Per-Agent Turn Caps & Codebase Map
+
+Cache-read traffic — the whole agent session re-read from cache on every turn — is the dominant cost in a run, so three mechanisms cut the per-turn context the agents carry:
+
+- **Read-discipline rules** in the Generator and Evaluator system prompts: locate a region first (grep/search) then read a bounded range rather than whole files, never re-read a file already shown in the session, run only scoped tests during work, and end with a short summary rather than a long recap.
+- **Per-agent turn caps** replacing the single global 50-turn ceiling: `--planner-max-turns`, `--generator-max-turns`, `--evaluator-max-turns`, `--documenter-max-turns` (and matching env vars) set each agent's ceiling independently. All default to 50 for backward compatibility, invalid values degrade to the default, and any cap that differs from the default is printed at startup alongside the per-agent models (§1.23). Precedence is the standard CLI > env > default.
+- A **harness-generated codebase map** — a deterministic, body-free digest of the project's structure, key files, and exported signatures — built once per run and injected into both the Generator and the Planner/refinement sessions so they don't re-explore the project from scratch. It is bounded in size and never throws: a partial or empty map is simply omitted. This realises the "Generator Context Priming" idea and generalises it to the planning agents.
+
+### 1.27 Patch-Based Progressive Spec Refinement
+
+Progressive spec refinement (§1.19) emits a **patch rather than a full-document rewrite**. When `--refine-spec` is enabled, the Planner is given the current spec as read-only reference and returns only the revised remaining-sprint sections; the harness splices them around the programmatically frozen completed sections, reusing the existing section-extraction machinery. Refinement is the second-largest cost role in a run and runs on the top model tier, so re-emitting frozen content the harness would overwrite anyway was pure waste — this removes it, along with an earlier failed-write/stub-read/re-write round-trip.
+
+### 1.28 Structured Reviewer Output Envelope
+
+The contract reviewer returns a compact JSON envelope — `{ verdict, changes, contract? }` — instead of re-emitting the entire contract or a bare `APPROVED` string. A revision now carries a short list of what changed and why, with the full revised contract included only when the verdict is `revised`. This makes contract revisions visible and cheaper to produce without changing the single-pass negotiation architecture; the parser still accepts the legacy literal-`APPROVED` and bare-contract forms.
+
+### 1.29 Regression-Suite Tiering & Criterion Retirement
+
+The accumulated behavioural regression suite (§1.14) no longer grows without bound. Criteria carry a tier: **core** criteria are always checked, while **optional** criteria run only when their declared surfaces overlap the current sprint's surfaces (§1.20), so a large suite stops linearly inflating every evaluation; the injected regression section is bounded with a visible truncation marker. Criteria can also be **retired** intentionally — a contract names them in a `retire:` field — so behaviours that were deliberately changed or dropped leave the persisted suite and stop penalising correct new work. Retired names are durable against re-accumulation: a later same-named criterion will not silently resurrect a retired one.
+
+### 1.30 Per-Agent Tool & MCP Governance
+
+The harness sets each agent's tool and MCP exposure deliberately rather than letting agents inherit whatever servers exist in the ambient environment. Non-coding agents (Planner, spec refinement, contract negotiation) receive only the built-in tools they need and **no MCP servers**; coding agents (Generator, Evaluator, Documenter) keep their full working set. The project's settings sources are inherited by default, and operators can override the policy — `--disable-mcp` to turn MCP off entirely, or `--mcp-servers` to add specific servers back — at the existing agent-launch seam. This closes an unbounded tool-access surface (the agents run with permissions bypassed) and stops planning agents wandering into unrelated tools.
+
+### 1.31 Cost Guardrails
+
+Two lightweight controls guard against silent overspend. At startup the harness prints an **advisory warning when a uniform `--model` override lifts agents above the cost-optimised per-agent default matrix** (§1.23) — the override stays in effect, but it becomes a deliberate choice rather than an accident that can triple a run's cost. And an optional **per-sprint token budget** (`--sprint-token-budget`, or `SPRINT_TOKEN_BUDGET`) sets a spend ceiling per sprint: a soft warning is logged once at 80%, and at 100% an interactive run pauses to ask whether to extend or abort while a non-interactive run logs and continues. The budget is inert when unset, and budget accounting never fails a run.
+
+### 1.32 Contract-Parse Separation
+
+`parseContractText` is now a **pure, side-effect-free function** that returns a discriminated union: `{ ok: true, contract }` on success, or `{ ok: false, fallback, rawText, preview }` on failure — zero console output, zero disk writes from the decision itself. A thin boundary wrapper (`parseContract`, unchanged signature) handles the boundary concern: on failure it logs a **warning** (amber, not red) with a clear sprint-scoped message and writes the diagnostic file. Parsing unit tests use the pure function and emit nothing; a fully green suite now passes with zero red lines. All code-fenced JSON, balanced-brace, unclosed-fence, and raw-text fallback strategies are exercised by the pure function and work as before.
+
+### 1.33 Per-Session Log Subdirectories
+
+Each run's conversation logs are grouped under `.adhd/logs/<YYYY.MM.DD-HH.MM.SS>/` instead of flat files. A single session-start timestamp is captured at the top of the run and threaded through the conversation logger, the per-session directory name, and run history — one canonical identity per run. When a contract parse fails (§1.3), the diagnostic file lands in the same session folder as that run's logs, never detached. A resume is a separate process invocation and writes into a fresh sibling directory. Legacy flat logs under `.adhd/logs/` are left untouched; `git add .adhd/logs/` (used by `--commit-adhd-logs`) recurses into subdirectories unchanged.
+
+### 1.34 Complete `--commit-adhd` Metadata Set
+
+Two data-loss gaps closed: (1) `.adhd/usage.json` (the cost ledger) is now included in the per-sprint `commitAdhdMetadata()` staging alongside contracts, feedback, and progress; (2) a final end-of-run metadata commit is written after the Documenter, capturing the terminal `progress.json` (status `"complete"`) and final `usage.json`. Both commits degrade to no-ops when nothing has changed, avoiding spurious empty commits. Without `--commit-adhd`, behaviour is unchanged.
+
+### 1.35 Default Topic-Branch Creation
+
+In existing-project mode, the harness now creates and switches to a dedicated topic branch (`adhd/<slug>-<timestamp>`) before the sprint loop. All generator commits land on that branch — never on `main`. The branch name is built by a **pure, never-throwing helper** in `shared/branch-name.ts` from the prompt/spec plus a session timestamp (collision-free by construction), announced in the startup banner, and recorded in `progress.json`. `--allow-main` is redefined to mean "skip auto-branching — run on the current branch" (covering both the old on-`main` case and any other current branch). `--branch <name>` still works as an explicit name override; `--resume` switches back to the recorded branch. Greenfield mode is unaffected. **Breaking change** (`feat!`): `--allow-main`'s meaning changed; no-flag runs now create a branch.
+
+### 1.36 Scout Agent (Semantic Codebase Priming)
+
+A new read-only agent (`--scout`) that runs **once before the sprint loop** on existing projects. It surfaces codebase idioms: naming conventions, error-handling patterns, testing style, and architectural layout — producing a bounded semantic digest that complements the structural codebase map (§1.26) without duplicating its body-free inventory. The digest is injected into the Generator's supplementary context under its own labelled section. Scout is read-only (Read, Bash, Glob, Grep — no Write/Edit), non-fatal (failures log at warning severity and the run proceeds), and skipped for greenfield projects. Cost is recorded as its own stage (`"scout"`) in `.adhd/usage.json`.
+
+### 1.37 Run History & Comparison
+
+Each run's terminal state (cost and progress) is **snapshot under `.adhd/runs/<session-stamp>/`** at end-of-run, regardless of `--commit-adhd`. The live `.adhd/usage.json` and `.adhd/progress.json` semantics are unchanged; preservation adds keyed snapshot copies without touching the live files. `adhd compare <run-a> <run-b>` prints a structured report of sprint pass/fail delta, cost delta (per-stage and per-model), and criteria score trends. With no run arguments it lists available runs newest first. Comparison logic is pure and never throws; degradations — missing records, malformed JSON — surface as warnings.
+
+### 1.38 Reviewer Agent (Code-Craft Review)
+
+A new read-only agent (`--review`) that runs **once per passing sprint**, focused exclusively on code craft: naming, duplication, maintainability, architectural fit, and security patterns. **Advisory only** — it never affects the pass/fail verdict. Reports are persisted per sprint to `.adhd/reviews/sprint-{n}.json` with stable key order and bounded to a character ceiling. Cost is recorded as its own stage (`"reviewer"`) with the Reviewer's resolved model, appearing in both the per-stage breakdown and the per-model rollup. The Reviewer's model defaults to the Evaluator tier and is configurable via `--model-reviewer`. Policy skills (security, accessibility, code-style) route to the Reviewer through the existing per-agent skills system. The Reviewer appears in the Langfuse trace hierarchy as a child span in the sprint-success phase; tracing failure is non-fatal.
+
+### 1.39 Documented Trust Boundary (Security Section)
+
+The README contains a dedicated **Security** section stating the harness's trust boundary: the harness runs unsandboxed, executes the target repository's scripts and configured assets (lint, typecheck, test scripts; MCP server commands), and should be aimed only at repositories you trust. The `.adhd/.env` secret store caveat is included. This is documentation only — environment scrubbing and log redaction remain out of scope.
+
+### 1.40 Complete `--help` and README Reference
+
+Every flag with a backing environment variable now lists that variable in its `--help` description. The Reviewer agent and the `adhd compare` subcommand are listed in the help output. A dedicated env-variable-only section in `--help` covers `LOG_LEVEL`, `TZ_DISPLAY`, and Langfuse tracing keys. The README includes a complete environment-variable table (all 30 accepted variables, flag equivalents, and purposes) and a Security section matching the trust-boundary statement above. The run-duration description scales with sprint count rather than a stale fixed figure. An invalid `LOG_LEVEL` value now emits an amber warning naming the offending value and the fallback applied, rather than being silently ignored. The `--reviewer-max-turns` phantom flag claim (advertised in v0.8.0 but never implemented) is removed from all documentation.
+
+### 1.41 Static One-Export-Per-Symbol Guard
+
+A model-free test (`tests/static-export-check.test.ts`) asserts that no symbol is exported from more than one module across the SDK-independent core, respecting the SDK boundary. It catches duplicate definitions — the kind that hide from the green gate because unused-export linting is off and `tests/` is not linted — at test time, before a second copy of a helper can drift from the first.
+
+### 1.42 Deterministic Generator Self-Check (Pre-Evaluation)
+
+The Generator's self-check guidance prepends an auto-fix → lint → type-check → test sequence (`shared/prompts.ts`), so mechanically-detectable problems are resolved before the Evaluator is invoked. This is additive guidance only: it adds no default flag and does not change the gate verdict — it spends cheap deterministic effort before the expensive model evaluation, complementing the lint and test hard gates (§1.15, §1.25).

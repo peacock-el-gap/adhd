@@ -2316,6 +2316,523 @@
         "backend",
         "tests"
       ]
+    },
+    {
+      "name": "nan_threshold_rejected_at_parse",
+      "description": "When a non-numeric value is passed as the pass-threshold flag or its backing environment variable, configuration resolution throws an error that names the specific flag/variable and does not enter the sprint loop.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "nan_max_sprints_rejected",
+      "description": "When a non-numeric value is passed as the maximum-sprints flag or its backing environment variable, configuration resolution throws a named error and the sprint loop does not start.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "nan_max_retries_rejected",
+      "description": "When a non-numeric value is passed as the maximum-retries flag or its backing environment variable, configuration resolution throws a named error and the sprint loop does not start.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "legitimate_zero_values_accepted",
+      "description": "A retry count of zero, a gate-timeout of zero, and any documented 'no cap' sentinel value are accepted by validation and produce the same behaviour as before this change.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "empty_refinement_leaves_original_spec_on_disk",
+      "description": "When the refinement planner returns an empty spec, the spec file on disk after refinement completes equals the original spec content — it is not blank and does not differ from the value returned in memory.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "all_refinement_exit_paths_agree_disk_and_memory",
+      "description": "For every refinement exit path (no changes, rejected, accepted, failed, empty), the spec file on disk and the spec value returned in memory are identical after the call returns.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "refinement_decision_flow_unchanged",
+      "description": "No change is made to which refinement exit path is taken — only the disk-write step on the empty/failed path is corrected. Existing tests for the refinement decision flow remain green without modification.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "error_messages_name_the_offending_flag",
+      "description": "Every validation error thrown for a malformed numeric value includes the name of the specific flag or environment variable that was invalid, so the developer can identify and correct the exact misconfiguration without reading source code.",
+      "threshold": 9,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "green_gate_maintained",
+      "description": "After all changes, `bun run typecheck`, `bun run lint`, and `bun run test` all exit with code zero. Zero red lines appear in a clean test run attributable to this sprint's changes.",
+      "threshold": 10,
+      "sprintNumber": 1,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "test_gate_carries_last_real_evaluation",
+      "description": "When an attempt is skipped by the test gate and a prior real evaluation exists, the synthesised skipped result's findings equal the prior real evaluation's findings rather than a boilerplate placeholder string",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "test_written_red_before_fix",
+      "description": "The test targeting the test-gate skip branch is committed before the production fix; running the test suite at that earlier commit produces a failure specifically on the test-gate carry-forward assertion, confirming the test is not tautological and that it exercises a path only reachable through the test-gate branch (not the surface or lint gate as a proxy)",
+      "threshold": 9,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "test_gate_skip_with_no_prior_evaluation",
+      "description": "When the test gate fires on the very first attempt (no prior real evaluation exists), the synthesised skipped result is produced without error and its findings fall back to a documented safe default rather than crashing or emitting undefined",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "surface_and_lint_gate_behaviour_unchanged",
+      "description": "All existing tests covering the surface-coverage gate and the lint gate carry-forward paths remain green and their production code is unmodified — this sprint touches only the test-gate branch",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "gate_verdict_and_sprint_loop_untouched",
+      "description": "No gate verdict logic, threshold comparison, or sprint-loop control-flow line is modified; a diff of the orchestration layer shows changes only in the test-gate synthesised-result construction site",
+      "threshold": 10,
+      "sprintNumber": 2,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "full_quality_gate_remains_green",
+      "description": "After all F6 and F7 changes, 'bun run typecheck', 'bun run lint', and 'bun run test' all pass with zero errors and zero new warnings.",
+      "threshold": 10,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "live_branch_helper_preserved",
+      "description": "The topic-branch name helper actually used by the orchestrator remains importable and callable after dead code removal; any test or integration path that exercises it continues to pass.",
+      "threshold": 10,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "unwired_duplicate_removed",
+      "description": "The duplicate branch-name builder that has no production caller is absent from the codebase; a grep or import trace finds only the single live helper.",
+      "threshold": 10,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "unread_option_fields_removed_from_contract",
+      "description": "Unread option fields on the AgentRunners cross-SDK interface are removed; TypeScript compilation passes with no new type errors, confirming no live caller was depending on those fields.",
+      "threshold": 10,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "static_duplicate_export_check_present_and_passing",
+      "description": "A deterministic, model-free check (e.g. a test or script) asserts that no symbol name is exported from more than one module within shared/; the check passes against the post-sprint codebase.",
+      "threshold": 10,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "static_duplicate_export_check_catches_violations",
+      "description": "When a deliberate duplicate export is introduced into shared/ in a test fixture, the static check fails, confirming it is not a vacuous pass.",
+      "threshold": 10,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "sdk_boundary_respected_by_static_check",
+      "description": "The static export check covers only shared/ and does not reach into harness-claude/ or other harness directories, preserving the SDK-independence boundary.",
+      "threshold": 10,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "full_quality_gate_green",
+      "description": "After all removals and additions, bun run typecheck, bun run lint, and bun run test all exit with code 0 and produce zero red lines.",
+      "threshold": 10,
+      "sprintNumber": 3,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "editor_launch_failure_does_not_crash",
+      "description": "When the operator chooses to edit the spec at the approval gate and the editor command fails (e.g. binary not found, non-zero exit), the harness catches the error, prints a clear human-readable message naming what failed, and returns the operator to the approval gate prompt rather than propagating an unhandled exception or exiting the process.",
+      "threshold": 10,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "editor_failure_message_is_self_contained",
+      "description": "The message shown after an editor launch failure names the editor command that was attempted and tells the operator what to do next (e.g. fix the EDITOR environment variable or use a different choice), without using internal symbol names or jargon.",
+      "threshold": 9,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "empty_revise_input_shows_message_and_re_presents_gate",
+      "description": "When the operator selects 'revise' at the approval gate and submits empty text (empty string or whitespace only), the gate shows a clear message explaining that no feedback was provided, then re-presents the gate choices — it does not silently loop, does not proceed as if feedback was given, and does not crash.",
+      "threshold": 10,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "non_empty_revise_input_still_works",
+      "description": "When the operator selects 'revise' and submits non-empty feedback text, the gate processes that feedback exactly as before this sprint — the empty-input guard must not interfere with the normal revise path.",
+      "threshold": 10,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "documenter_degradations_use_warning_channel",
+      "description": "All non-fatal documenter degradation messages (e.g. a documentation step that fails gracefully) are emitted through the harness warning channel (amber / WARN severity) and not via plain console.log or stdout, so severity-based log filters capture them.",
+      "threshold": 10,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "tests_fail_before_fix_pass_after",
+      "description": "Each new test written for the three behaviours (editor crash guard, empty-revise message, documenter warning channel) is confirmed to fail against the pre-fix code and pass once the fix is applied, demonstrating genuine coverage rather than tautological tests.",
+      "threshold": 10,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "all_quality_gates_remain_green",
+      "description": "After all changes in this sprint, `bun run typecheck`, `bun run lint`, and `bun run test` all exit with zero errors and zero failures — no regressions introduced.",
+      "threshold": 10,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "gate_verdict_and_sprint_loop_flow_untouched",
+      "description": "The gate verdict logic, sprint-loop control flow, and any path not directly related to the three features (editor guard, empty-revise, documenter warning routing) are unchanged — inspecting a diff of those paths shows no modifications.",
+      "threshold": 10,
+      "sprintNumber": 4,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "generator_self_check_sequence_order",
+      "description": "The Generator's self-check guidance explicitly directs it to run steps in this order: auto-fix, then lint, then type-check, then test. The sequence must appear as an ordered list in the guidance, not as unordered suggestions.",
+      "threshold": 10,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "reviewer_cost_attributed_per_sprint",
+      "description": "When the Reviewer is enabled across multiple sprints, the cost ledger contains one row per sprint for the Reviewer stage, each tagged with its sprint identifier. No two sprints share the same Reviewer ledger row.",
+      "threshold": 10,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "resume_calls_recorded_in_ledger",
+      "description": "Token-spending resume calls — specifically the max-tokens evaluation retry and the generator/documenter commit resumes — each appear as their own additive stage entry in the cost ledger after a run that triggers them. No resume spend is silently dropped.",
+      "threshold": 10,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "contract_negotiation_cost_rows_present",
+      "description": "When contract negotiation produces usage data, the corresponding cost rows appear in the ledger. A run with contract negotiation produces a non-empty set of contract-negotiation ledger entries; none are silently discarded when usage data is present.",
+      "threshold": 9,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "turn_limit_warning_uses_per_agent_cap",
+      "description": "The turn-limit warning is computed against each agent's actual configured cap, not a deprecated global cap. A unit test confirms that an agent at its own cap triggers the warning, and that a read-only agent at its cap also triggers it.",
+      "threshold": 9,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "ledger_changes_additive_only",
+      "description": "F7 changes add new ledger rows and diagnostics but do not alter gate verdict logic or sprint-loop control flow. A code review check (enforced by a test asserting no modification to gate-verdict or loop-control call sites) confirms the gate and loop files are untouched.",
+      "threshold": 10,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "f6_tests_cover_self_check_guidance",
+      "description": "At least one new test verifies that the Generator's self-check guidance contains the auto-fix → lint → type-check → test sequence in order. The test must be red against the code before F6 lands and green after.",
+      "threshold": 9,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "f7_tests_cover_each_ledger_gap",
+      "description": "Each of the four F7 ledger gaps — Reviewer per-sprint tagging, resume call recording, contract-negotiation row presence, and per-agent turn-cap warning — has at least one dedicated test that is red before the fix and green after.",
+      "threshold": 9,
+      "sprintNumber": 5,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "tests"
+      ]
+    },
+    {
+      "name": "help_env_var_names_present",
+      "description": "Running `adhd --help` (or equivalent) shows the backing environment variable name alongside every flag that has one. No flag with a backing env var omits it from its help description.",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
+    },
+    {
+      "name": "help_reviewer_listed",
+      "description": "The `--help` output lists the Reviewer agent option explicitly, matching the option name accepted by the CLI.",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
+    },
+    {
+      "name": "invalid_log_level_warns",
+      "description": "When the harness is started with an unrecognised log-level value (via flag or environment variable), it emits a warning on the dedicated warning channel (amber/warn severity, not stdout or the error channel) rather than silently ignoring the value. The run still proceeds with the documented fallback level, and the warning names the offending value and the fallback applied.",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
+    },
+    {
+      "name": "invalid_log_level_test",
+      "description": "A test exists that passes an invalid log-level value and asserts a warning is emitted on the warning channel and the fallback level is used. The test fails against the current code (silent ignore) and passes after the fix.",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
+    },
+    {
+      "name": "readme_security_section_present",
+      "description": "The README contains a Security section that states: (1) the harness runs unsandboxed, (2) it executes the target repository's scripts and configured assets, and (3) it should be aimed only at trusted repositories.",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
+    },
+    {
+      "name": "readme_env_var_section_present",
+      "description": "The README contains a dedicated environment-variable section listing every env var accepted by the harness, consistent with what `--help` reports (same names, no extras, none missing).",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
+    },
+    {
+      "name": "no_env_scrubbing_or_redaction_code_added",
+      "description": "A review of the diff confirms that no environment-scrubbing or log-redaction code was introduced in this sprint. F8 is documentation only.",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
+    },
+    {
+      "name": "help_and_readme_consistent",
+      "description": "Every flag listed in `--help` is also described in the README flags reference, and every flag in the README flags reference corresponds to an actually implemented CLI option. No phantom flags appear in either surface — in particular, the unimplemented reviewer turn-cap flag is absent from both `--help` and the README, and the run-comparison subcommand that exists in the implementation is present in both.",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
+    },
+    {
+      "name": "green_gate_remains_green",
+      "description": "After all changes land, `bun run typecheck`, `bun run lint`, and `bun run test` all exit with code 0 with no new red lines in output.",
+      "threshold": 10,
+      "sprintNumber": 6,
+      "tier": "core",
+      "surfaces": [
+        "backend",
+        "docs"
+      ]
     }
   ],
   "retiredNames": []

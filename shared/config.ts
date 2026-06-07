@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { logWarn } from "./logger.ts";
 import {
   blankToUndefined,
   DEFAULT_MODEL,
@@ -71,33 +72,33 @@ export const CLI_FLAG_HELP: Record<string, string> = {
   "--greenfield": "Create a new project in app/ with git init",
   "--resume": "Resume from the last checkpoint",
   "--model": "Uniform model for all four agents (env: CLAUDE_MODEL); overrides the per-agent matrix below",
-  "--max-sprints": "Maximum number of sprints (default: 10)",
-  "--max-retries": "Maximum retries per sprint (default: 3)",
-  "--threshold": "Pass threshold score 1-10 (default: 7)",
-  "--max-features": "Maximum features per sprint contract (default: 3)",
-  "--max-criteria": "Maximum criteria per sprint contract (default: 10)",
-  "--max-surfaces": "Maximum surfaces per sprint contract (default: 2)",
-  "--verbose": "Enable verbose logging",
-  "--quiet": "Suppress non-essential output",
+  "--max-sprints": "Maximum number of sprints (default: 10; env: MAX_SPRINTS)",
+  "--max-retries": "Maximum retries per sprint (default: 3; env: MAX_RETRIES)",
+  "--threshold": "Pass threshold score 1-10 (default: 7; env: PASS_THRESHOLD)",
+  "--max-features": "Maximum features per sprint contract (default: 3; env: MAX_FEATURES)",
+  "--max-criteria": "Maximum criteria per sprint contract (default: 10; env: MAX_CRITERIA)",
+  "--max-surfaces": "Maximum surfaces per sprint contract (default: 2; env: MAX_SURFACES)",
+  "--verbose": "Enable verbose logging (env: LOG_LEVEL=verbose)",
+  "--quiet": "Suppress non-essential output (env: LOG_LEVEL=quiet)",
   "--no-interactive": "Disable interactive gates (auto-accept defaults)",
-  "--debug": "Enable debug-level logging",
-  "--editor": "Editor command for spec editing (e.g., 'code --wait')",
-  "--gate-timeout": "Timeout in seconds for interactive gates (0 = skip all)",
+  "--debug": "Enable debug-level logging (env: LOG_LEVEL=debug)",
+  "--editor": "Editor command for spec editing, e.g. 'code --wait' (env: ADHD_EDITOR; fallback: $EDITOR)",
+  "--gate-timeout": "Timeout in seconds for interactive gates (0 = skip all; env: ADHD_GATE_TIMEOUT)",
   "--dry-run": "Run planner only, show spec, then exit",
   "--context": "Files to inject into the planner prompt (repeatable)",
-  "--model-planner": "Model override for the Planner agent (default tier: Opus)",
-  "--model-generator": "Model override for the Generator agent (default tier: Sonnet)",
-  "--model-evaluator": "Model override for the Evaluator agent (default tier: Opus)",
-  "--model-documenter": "Model override for the Documenter agent (default tier: Haiku)",
+  "--model-planner": "Model override for the Planner agent (default tier: Opus; env: MODEL_PLANNER)",
+  "--model-generator": "Model override for the Generator agent (default tier: Sonnet; env: MODEL_GENERATOR)",
+  "--model-evaluator": "Model override for the Evaluator agent (default tier: Opus; env: MODEL_EVALUATOR)",
+  "--model-documenter": "Model override for the Documenter agent (default tier: Haiku; env: MODEL_DOCUMENTER)",
   "--model-reviewer": "Model override for the Reviewer agent (default tier: Opus; env: MODEL_REVIEWER)",
   "--model-contract":
     "Single model for all contract-negotiation calls — proposal, review, and narrowing (env: MODEL_CONTRACT)",
   "--branch": "Create a git branch before the sprint loop",
-  "--source-dir": "Source directory convention (default: src)",
-  "--test-dir": "Test directory convention (default: tests)",
+  "--source-dir": "Source directory convention (default: src; env: SOURCE_DIR)",
+  "--test-dir": "Test directory convention (default: tests; env: TEST_DIR)",
   "--no-bdd": "Disable BDD regression accumulation across sprints",
   "--no-tdd": "Disable TDD instructions in prompts",
-  "--no-docs": "Skip post-run documentation generation",
+  "--no-docs": "Skip post-run documentation generation (env: ADHD_NO_DOCS)",
   "--lint-gate": "Hard gate: lint/typecheck failure skips evaluator and counts as failed attempt",
   "--test-gate":
     "Hard gate: newly-introduced test failures skip evaluator and count as failed attempt (env: TEST_GATE)",
@@ -134,7 +135,9 @@ export const CLI_FLAG_HELP: Record<string, string> = {
  */
 export function printHelp(): void {
   console.log("ADHD Harness — GAN-inspired adversarial coding tool\n");
-  console.log("Usage: bun run harness-claude/index.ts [options] [prompt]\n");
+  console.log("Usage: adhd [options] [prompt]");
+  console.log("       adhd --file <spec.md>");
+  console.log("       adhd compare <run-a> <run-b>  # compare two preserved run records\n");
   console.log("Options:\n");
   const maxKeyLen = Math.max(...Object.keys(CLI_FLAG_HELP).map((k) => k.length));
   for (const [flag, desc] of Object.entries(CLI_FLAG_HELP)) {
@@ -146,9 +149,21 @@ export function printHelp(): void {
   console.log(`  Generator   ${DEFAULT_MODEL_GENERATOR}    (Sonnet tier — cost-dominant; mistakes are recoverable)`);
   console.log(`  Evaluator   ${DEFAULT_MODEL_EVALUATOR}    (Opus tier — the sole gate; must out-judge the Generator)`);
   console.log(`  Documenter  ${DEFAULT_MODEL_DOCUMENTER}    (Haiku tier — lowest stakes; advisory output)`);
+  console.log(
+    `  Reviewer    ${DEFAULT_MODEL_REVIEWER}    (Opus tier — advisory code-craft review; enable with --review)`,
+  );
   console.log("");
   console.log("Invariant: keep the Evaluator tier at or above the Generator tier — the judge must");
   console.log("never be weaker than the producer. A weaker Evaluator only triggers a warning, not a stop.");
+  console.log("");
+  console.log("Environment-variable-only settings (no corresponding flag):");
+  console.log(
+    "  LOG_LEVEL          Log level when no --verbose/--quiet/--debug flag is set (quiet|normal|verbose|debug; default: normal)",
+  );
+  console.log("  TZ_DISPLAY         IANA timezone name for terminal timestamps (e.g. America/New_York)");
+  console.log("  LANGFUSE_PUBLIC_KEY  Langfuse tracing public key");
+  console.log("  LANGFUSE_SECRET_KEY  Langfuse tracing secret key");
+  console.log("  LANGFUSE_BASE_URL    Langfuse tracing base URL");
   console.log("");
 }
 
@@ -405,19 +420,22 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
   // back to the base default tier when the user supplied no uniform model.
   const model = userUniformModel ?? DEFAULT_MODEL;
 
+  // Each of these uses parseNumericFlag so a malformed value (NaN, float, or
+  // a non-numeric string from an env var) throws immediately at the parse
+  // boundary with a message that names the specific flag/env-var pair.
   const maxSprints =
-    cli.maxSprints ??
-    (process.env.MAX_SPRINTS ? parseInt(process.env.MAX_SPRINTS, 10) : undefined) ??
+    parseNumericFlag(cli.maxSprints, "--max-sprints / MAX_SPRINTS") ??
+    parseNumericFlag(process.env.MAX_SPRINTS, "--max-sprints / MAX_SPRINTS") ??
     DEFAULT_CONFIG.maxSprints;
 
   const maxRetriesPerSprint =
-    cli.maxRetries ??
-    (process.env.MAX_RETRIES ? parseInt(process.env.MAX_RETRIES, 10) : undefined) ??
+    parseNumericFlag(cli.maxRetries, "--max-retries / MAX_RETRIES") ??
+    parseNumericFlag(process.env.MAX_RETRIES, "--max-retries / MAX_RETRIES") ??
     DEFAULT_CONFIG.maxRetriesPerSprint;
 
   const passThreshold =
-    cli.threshold ??
-    (process.env.PASS_THRESHOLD ? parseInt(process.env.PASS_THRESHOLD, 10) : undefined) ??
+    parseNumericFlag(cli.threshold, "--threshold / PASS_THRESHOLD") ??
+    parseNumericFlag(process.env.PASS_THRESHOLD, "--threshold / PASS_THRESHOLD") ??
     DEFAULT_CONFIG.passThreshold;
 
   const maxFeatures =
@@ -443,7 +461,13 @@ export function resolveConfig(cli: ParsedCli): ResolvedConfig {
   else if (process.env.LOG_LEVEL) {
     const envLevel = process.env.LOG_LEVEL.toLowerCase();
     if (envLevel === "quiet" || envLevel === "verbose" || envLevel === "normal" || envLevel === "debug") {
-      logLevel = envLevel;
+      logLevel = envLevel as LogLevel;
+    } else {
+      logWarn(
+        "HARNESS",
+        `LOG_LEVEL: "${process.env.LOG_LEVEL}" is not a recognised log level ` +
+          `(expected: quiet, normal, verbose, debug); using default "normal".`,
+      );
     }
   }
 
@@ -621,20 +645,48 @@ function isTruthy(val: string | undefined): boolean {
 }
 
 /**
+ * Parse and validate a numeric flag or environment variable.
+ *
+ * Returns `undefined` when the value is absent or an empty string.
+ * Throws a named error when the value is present but not a valid integer
+ * (including NaN, Infinity, and fractional values), naming both the flag and
+ * the environment variable so the developer can locate the exact problem.
+ *
+ * @param raw      Raw value: a number already parsed by parseCli, a string
+ *                 from an env var, or undefined when not supplied.
+ * @param flagName Human-readable name used in the error, e.g.
+ *                 "--max-sprints / MAX_SPRINTS".
+ */
+function parseNumericFlag(raw: number | string | undefined, flagName: string): number | undefined {
+  if (raw === undefined || raw === "") return undefined;
+  const n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+  if (!Number.isInteger(n)) {
+    throw new Error(
+      `Invalid ${flagName}: "${String(raw)}" is not a valid integer. ` +
+        `Check the flag or environment variable and supply a whole number.`,
+    );
+  }
+  return n;
+}
+
+/**
  * Validate a HarnessConfig object, throwing on invalid values.
  * Checks that threshold, maxSprints, and maxRetries are within valid ranges.
  * @param config - The harness configuration to validate
  * @throws Error if any configuration value is out of range
  */
 export function validateConfig(config: HarnessConfig): void {
-  if (config.passThreshold < 1 || config.passThreshold > 10) {
-    throw new Error(`Invalid threshold: ${config.passThreshold}. Must be between 1 and 10.`);
+  // Number.isInteger guards act as a backstop against NaN and non-integer values
+  // that can arrive when validateConfig is called directly (bypassing resolveConfig).
+  // They complement the parse-boundary checks in resolveConfig/parseNumericFlag.
+  if (!Number.isInteger(config.passThreshold) || config.passThreshold < 1 || config.passThreshold > 10) {
+    throw new Error(`Invalid threshold: ${config.passThreshold}. Must be an integer between 1 and 10.`);
   }
-  if (config.maxSprints < 1) {
-    throw new Error(`Invalid max-sprints: ${config.maxSprints}. Must be greater than 0.`);
+  if (!Number.isInteger(config.maxSprints) || config.maxSprints < 1) {
+    throw new Error(`Invalid max-sprints: ${config.maxSprints}. Must be a positive integer.`);
   }
-  if (config.maxRetriesPerSprint < 0) {
-    throw new Error(`Invalid max-retries: ${config.maxRetriesPerSprint}. Must be >= 0.`);
+  if (!Number.isInteger(config.maxRetriesPerSprint) || config.maxRetriesPerSprint < 0) {
+    throw new Error(`Invalid max-retries: ${config.maxRetriesPerSprint}. Must be an integer >= 0.`);
   }
   if (!Number.isInteger(config.maxFeatures) || config.maxFeatures < 1) {
     throw new Error(`Invalid max-features: ${config.maxFeatures}. Must be an integer >= 1.`);

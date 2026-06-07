@@ -163,7 +163,6 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
               spec,
               contract,
               previousFeedback: lastEval,
-              attempt: retry,
               skills: skills?.generator,
               supplementaryContext: generatorSupplementaryContext,
             }),
@@ -201,6 +200,8 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
           contract,
           isRetry: retry > 0,
           model: config.resolvedModelGenerator,
+          // F7: pass the usage tracker so any commit-resume token spend is recorded
+          usage,
         });
         log("HARNESS", `Commit source: ${lastCommitSource}`);
       } catch (err) {
@@ -358,6 +359,7 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
         contract,
         `Evaluator skipped due to --test-gate: ${count} newly-introduced test failure(s): ${failingList}.`,
         `Test gate (--test-gate) triggered: ${count} test(s) started failing after the Generator ran: ${failingList}. Fix the failing tests on the next attempt. The Evaluator was skipped to save cost.`,
+        lastRealEval,
       );
       await writeFeedback(config.workDir, sprint, retry, lastEval);
       attemptSpan.end({ passed: false, testGate: true });
@@ -398,7 +400,6 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
               config,
               identity: evaluatorIdentity,
               contract,
-              attempt: retry,
               skills: skills?.evaluator,
               supplementaryContext: supplementaryContext || undefined,
             }),
@@ -407,6 +408,15 @@ export async function runSprintAttempts(ctx: SprintAttemptContext): Promise<Spri
       );
       if (evalWithUsage.sdkResult) {
         usage.recordStage(bareName(evaluatorIdentity), config.resolvedModelEvaluator, evalWithUsage.sdkResult);
+      }
+      // F7: record the evaluator max-tokens retry cost as a separate additive
+      // stage so tokens spent on the JSON-recovery follow-up are not dropped.
+      if (evalWithUsage.resumeSdkResult) {
+        usage.recordStage(
+          `${bareName(evaluatorIdentity)}-resume`,
+          config.resolvedModelEvaluator,
+          evalWithUsage.resumeSdkResult,
+        );
       }
       lastEval = evalWithUsage;
       // Remember this as the last REAL evaluation so a subsequent gate skip can

@@ -1,10 +1,6 @@
+import { detectTestCommand } from "../static-analysis.ts";
 import type { VerificationResult } from "../verification.ts";
-import {
-  buildErrorVerificationResult,
-  buildVerificationResult,
-  detectTestCommand,
-  VERIFICATION_NO_OP,
-} from "../verification.ts";
+import { buildErrorVerificationResult, buildVerificationResult, VERIFICATION_NO_OP } from "../verification.ts";
 
 /**
  * Synchronous command executor signature.

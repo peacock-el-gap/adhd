@@ -337,11 +337,60 @@ adhd --debug "Add auth"
 
 # Run quietly (minimal output)
 adhd --quiet "Add auth"
+
+# Set source/test directory conventions (default: src / tests)
+adhd --source-dir lib --test-dir spec "Add auth"
+
+# Cap total token spend per sprint (soft warn at 80%, pause at 100%)
+adhd --sprint-token-budget 500000 "Add auth"
 ```
+
+## Environment Variables
+
+Every flag that accepts a backing environment variable is documented in `adhd --help`. The table below lists the complete set of accepted variables, including those with no corresponding flag:
+
+| Variable | Flag equivalent | Purpose |
+|---|---|---|
+| `CLAUDE_MODEL` | `--model` | Uniform model for all agents |
+| `MAX_SPRINTS` | `--max-sprints` | Maximum number of sprints |
+| `MAX_RETRIES` | `--max-retries` | Maximum retries per sprint |
+| `PASS_THRESHOLD` | `--threshold` | Pass threshold score 1–10 |
+| `MAX_FEATURES` | `--max-features` | Maximum features per contract |
+| `MAX_CRITERIA` | `--max-criteria` | Maximum criteria per contract |
+| `MAX_SURFACES` | `--max-surfaces` | Maximum surfaces per contract |
+| `ADHD_EDITOR` | `--editor` | Editor command for spec approval |
+| `EDITOR` | `--editor` (fallback) | System default editor |
+| `ADHD_GATE_TIMEOUT` | `--gate-timeout` | Gate timeout in seconds |
+| `SOURCE_DIR` | `--source-dir` | Source directory convention |
+| `TEST_DIR` | `--test-dir` | Test directory convention |
+| `ADHD_NO_DOCS` | `--no-docs` | Skip documentation generation (1/true/yes) |
+| `TEST_GATE` | `--test-gate` | Enable hard test gate (1/true/yes) |
+| `MODEL_PLANNER` | `--model-planner` | Planner model override |
+| `MODEL_GENERATOR` | `--model-generator` | Generator model override |
+| `MODEL_EVALUATOR` | `--model-evaluator` | Evaluator model override |
+| `MODEL_DOCUMENTER` | `--model-documenter` | Documenter model override |
+| `MODEL_REVIEWER` | `--model-reviewer` | Reviewer model override |
+| `MODEL_CONTRACT` | `--model-contract` | Contract-negotiation model override |
+| `PLANNER_MAX_TURNS` | `--planner-max-turns` | Planner turn cap |
+| `GENERATOR_MAX_TURNS` | `--generator-max-turns` | Generator turn cap |
+| `EVALUATOR_MAX_TURNS` | `--evaluator-max-turns` | Evaluator turn cap |
+| `DOCUMENTER_MAX_TURNS` | `--documenter-max-turns` | Documenter turn cap |
+| `DISABLE_MCP` | `--disable-mcp` | Disable all MCP servers (1/true/yes) |
+| `MCP_SERVERS` | `--mcp-servers` | MCP server config JSON |
+| `SPRINT_TOKEN_BUDGET` | `--sprint-token-budget` | Per-sprint token ceiling |
+| `ADHD_SCOUT` | `--scout` | Enable Scout pass (1/true/yes) |
+| `ADHD_REVIEW` | `--review` | Enable Reviewer pass (1/true/yes) |
+| `LOG_LEVEL` | `--verbose`/`--quiet`/`--debug` | Log level: quiet, normal, verbose, debug |
+| `TZ_DISPLAY` | *(none)* | IANA timezone for terminal timestamps |
+| `LANGFUSE_PUBLIC_KEY` | *(none)* | Langfuse tracing public key |
+| `LANGFUSE_SECRET_KEY` | *(none)* | Langfuse tracing secret key |
+| `LANGFUSE_BASE_URL` | *(none)* | Langfuse tracing base URL |
+
+Variables can be set in your shell environment or in a `.adhd/.env` file in the project directory. Shell environment takes precedence over `.adhd/.env`.
 
 ## What to Expect
 
-**Duration:** A typical run takes 10-60 minutes depending on project complexity and number of sprints.
+**Duration:** A single sprint typically takes 5–15 minutes; a full run with the default 10 sprints can take 1–2 hours. Scope with `--max-sprints` to control total time.
 
 **Cost:** Planner and Evaluator default to Opus tier; Generator defaults to Sonnet. A full run with multiple sprints can consume significant API credits. Use `--model claude-sonnet-4-6` to override all agents to Sonnet, or `--max-sprints` to limit scope.
 
@@ -483,6 +532,21 @@ Run `bun test` to execute all tests. The suite passes with zero red error lines 
 - New harness implementations (e.g., `harness-gemini/`) follow the same SDK-independent architecture
 - Follow the existing naming conventions: camelCase functions, PascalCase types, SCREAMING_SNAKE_CASE constants
 - Write tests for new functionality; the suite must remain green and silent (no red output)
+
+## Security
+
+**The harness runs unsandboxed and executes the target repository's scripts and configured assets.**
+
+When you point the harness at a project directory, it:
+- Runs the project's `lint`, `typecheck`, and `test` scripts from `package.json` as part of static analysis and the test gate.
+- Executes any MCP server commands you supply via `--mcp-servers` / `MCP_SERVERS`.
+- Reads and writes files in the project directory, and makes git commits on the current branch.
+
+**Only run the harness against repositories you trust.** Pointing it at an untrusted repository is equivalent to running that repository's scripts as your user — malicious scripts could read environment variables, exfiltrate data, or modify your system.
+
+This applies in both existing-project mode (where the harness modifies the repository in place) and greenfield mode (where the harness writes into an `app/` subdirectory).
+
+Treat `.adhd/.env` as a secret store: it is loaded into `process.env` at startup. Do not commit it, and do not include credentials there that you would not want the target project's scripts to see.
 
 ## License
 

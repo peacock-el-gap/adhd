@@ -71,7 +71,7 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
     toolPolicy: contractToolPolicy,
   });
   if (proposalResult.sdkResult) {
-    usage?.recordStage(`sprint-${sprintNumber}-contract-proposal`, proposalModel, proposalResult.sdkResult);
+    usage.recordStage(`sprint-${sprintNumber}-contract-proposal`, proposalModel, proposalResult.sdkResult);
   }
   const proposalText = proposalResult.response;
 
@@ -90,7 +90,7 @@ export async function negotiateContract(opts: NegotiateContractOptions): Promise
     toolPolicy: contractToolPolicy,
   });
   if (reviewResult.sdkResult) {
-    usage?.recordStage(`sprint-${sprintNumber}-contract-review`, reviewModel, reviewResult.sdkResult);
+    usage.recordStage(`sprint-${sprintNumber}-contract-review`, reviewModel, reviewResult.sdkResult);
   }
   const reviewText = reviewResult.response;
 
@@ -133,7 +133,8 @@ interface CeilingEnforcementContext {
   sprintNumber: number;
   reviewModel: string;
   reviewPrompt: string;
-  usage?: UsageTracker;
+  /** F7: required usage tracker — inherited from the required NegotiateContractOptions.usage. */
+  usage: UsageTracker;
   convLog: ConversationLogger;
   timestamp: string;
   /** Session-start stamp for routing the diagnostic file into the run's log subdirectory. */
@@ -217,7 +218,7 @@ async function runNarrowingRound(contract: SprintContract, ctx: CeilingEnforceme
     inheritConvLog: ctx.convLog,
   });
   if (result.sdkResult) {
-    ctx.usage?.recordStage(`sprint-${ctx.sprintNumber}-contract-narrowing`, ctx.reviewModel, result.sdkResult);
+    ctx.usage.recordStage(`sprint-${ctx.sprintNumber}-contract-narrowing`, ctx.reviewModel, result.sdkResult);
   }
 
   // Parse the narrowing-round response via the envelope parser so both legacy

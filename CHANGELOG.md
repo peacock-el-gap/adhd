@@ -4,6 +4,32 @@ All notable changes to this project are documented here, from the point of view 
 
 ## [Unreleased]
 
+## [v0.9.0] - 2026-06-07
+
+Correctness, safety, and documentation hardening.
+
+### Added
+- **Deterministic self-check sequence in Generator guidance** — the Generator now runs auto-fix, lint, type-check, and test checks before producing its final code, in that sequence, to catch and fix deterministic issues before invoking the costly Evaluator.
+- **Security section in README** — explains the trust boundary clearly: the harness runs unsandboxed, executes the target repository's scripts and configured assets, and should only be pointed at repositories you trust.
+- **Environment-variable reference in README** — a complete table of every accepted environment variable, its flag equivalent, and its purpose, consistent with what `--help` reports.
+- **Environment-variable names in `--help`** — every flag with a backing environment variable now lists it in its help description (previously only some model flags did).
+- **Reviewer and `adhd compare` in `--help`** — the Reviewer agent and the `compare` subcommand are now listed in the help output alongside their descriptions.
+- **Environment-variable-only settings listed in `--help`** — `LOG_LEVEL`, `TZ_DISPLAY`, and Langfuse tracing keys now appear in a dedicated section of the help output.
+- **Invalid log-level warning** — setting `LOG_LEVEL` to an unrecognised value now emits an amber warning naming the offending value and the fallback level applied (`normal`), instead of silently ignoring the setting.
+
+### Changed
+- **Run-duration description** — the README's "10–60 minutes" figure is replaced with a per-sprint breakdown that scales honestly with sprint count.
+- **Cost ledger accuracy improvements** — the Reviewer stage is now tagged per sprint (preventing per-sprint rows from colliding), resume calls are now individually recorded as ledger entries, and the turn-limit warning now uses each agent's actual configured cap rather than a deprecated global cap.
+
+### Fixed
+- **Malformed numeric configuration values are now rejected with clear errors** — non-integer or NaN values passed to `--threshold`, `--max-sprints`, `--max-retries` (or their environment variable equivalents) now throw a named error at configuration resolution rather than silently proceeding with corrupted state.
+- **Empty-spec refinement no longer leaves a blank spec on disk** — when progressive spec refinement produces an empty result, the original spec is now restored on disk to match the in-memory value, preventing later resuming or editing operations from reading an empty document.
+- **Test-gate skip now preserves real evaluator findings** — when the test gate skips the Evaluator, prior real evaluation findings are now carried into the synthesised result instead of boilerplate, closing the feedback ping-pong that could re-occur on test-gate retries.
+- **Interactive gates are now robust to missing or misconfigured editors** — when launching an external editor at the spec-approval gate, a missing or misconfigured editor command no longer crashes the harness; instead a clear message is shown and the operator is returned to the gate prompt.
+- **Empty spec revisions are now caught with a clear message** — choosing to revise the spec but submitting empty feedback no longer silently re-prompts; the gate shows a message explaining that no feedback was provided and re-presents the choices.
+- **Documenter degradations are now routed through the warning channel** — non-fatal documentation failures now emit warnings (amber/WARN) rather than plain output, so severity-based log filters catch them.
+- **Phantom `--reviewer-max-turns` flag removed from documentation** — this flag was advertised in the v0.8.0 changelog but was never implemented. The claim is removed; the Reviewer uses the read-only agent's default turn cap.
+
 ## [v0.8.0] - 2026-06-06
 
 Branch safety by default, two new optional agents, and run-to-run comparison.
@@ -11,7 +37,7 @@ Branch safety by default, two new optional agents, and run-to-run comparison.
 ### Added
 
 - **`--scout` — codebase conventions pass** — A read-only agent that runs once before the sprint loop on existing projects. It surfaces naming conventions, error-handling patterns, testing style, and architectural layout, then injects a summary into the generator's context so it writes more idiomatic code from the start. Skipped for greenfield projects. Cost appears as its own line in `.adhd/usage.json`.
-- **`--review` — code-craft reviewer** — A read-only agent that runs after each passing sprint and reports on naming, duplication, maintainability, and architectural fit. Advisory only — it never affects pass/fail. Reports are saved per sprint to `.adhd/reviews/sprint-{n}.json`. Configurable model via `--model-reviewer` and turn cap via `--reviewer-max-turns`.
+- **`--review` — code-craft reviewer** — A read-only agent that runs after each passing sprint and reports on naming, duplication, maintainability, and architectural fit. Advisory only — it never affects pass/fail. Reports are saved per sprint to `.adhd/reviews/sprint-{n}.json`. Configurable model via `--model-reviewer`.
 - **`adhd compare` — run-to-run comparison** — Each run's cost and progress are now preserved under `.adhd/runs/<timestamp>/`. `adhd compare <run-a> <run-b>` prints a structured diff of sprint pass/fail, cost (per-stage and per-model), and criteria score trends. Running `adhd compare` with no arguments lists available runs newest first.
 - **Per-session log folders** — Each run's conversation logs are now grouped under `.adhd/logs/<timestamp>/` instead of landing flat in `.adhd/logs/`. When a contract parse fails, the diagnostic file lands in the same folder. Resume writes into a new sibling folder.
 - **Complete cost-ledger commits** — When `--commit-adhd` is enabled, the cost ledger (`.adhd/usage.json`) is now included in each per-sprint metadata commit. A final metadata commit is also written after documentation, capturing the completed checkpoint and full cost record. Both degrade to no-ops when nothing changed.

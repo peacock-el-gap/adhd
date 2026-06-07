@@ -89,8 +89,14 @@ export async function processAgentStream(
       const stopReason = msg.stop_reason ?? null;
       const numTurns = msg.num_turns ?? 0;
       const isError = msg.is_error === true;
-      const summary = `SDK result: stop_reason=${stopReason} num_turns=${numTurns}/${CLAUDE_MAX_TURNS} is_error=${isError}`;
-      const nearTurnLimit = numTurns >= CLAUDE_MAX_TURNS - 2;
+      // F7: use the agent's own configured cap (options.maxTurns) rather than the
+      // deprecated global CLAUDE_MAX_TURNS sentinel so the warning fires at the
+      // right threshold for each agent. Single-turn calls (maxTurns ≤ 1) are
+      // exempt from the near-limit warning — reaching turn 1 of 1 is expected
+      // behavior, not a capacity concern.
+      const agentMaxTurns = options.maxTurns ?? CLAUDE_MAX_TURNS;
+      const summary = `SDK result: stop_reason=${stopReason} num_turns=${numTurns}/${agentMaxTurns} is_error=${isError}`;
+      const nearTurnLimit = agentMaxTurns > 1 && numTurns >= agentMaxTurns - 2;
       if (stopReason === "max_tokens" || nearTurnLimit || isError) {
         log(label, `WARNING: ${summary}`);
       } else {

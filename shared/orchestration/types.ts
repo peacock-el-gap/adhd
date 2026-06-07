@@ -43,7 +43,6 @@ export interface RunGeneratorOptions {
   spec: string;
   contract: SprintContract;
   previousFeedback?: EvalResult;
-  attempt?: number;
   skills?: AgentSkills;
   /**
    * Optional supplementary context injected after the sprint contract and
@@ -63,7 +62,6 @@ export interface RunEvaluatorOptions {
   config: ResolvedConfig;
   identity: AgentIdentity;
   contract: SprintContract;
-  attempt?: number;
   skills?: AgentSkills;
   supplementaryContext?: string;
 }
@@ -83,6 +81,12 @@ export interface EnsureCommitOptions {
   contract: SprintContract;
   isRetry: boolean;
   model: string;
+  /**
+   * F7: optional usage tracker for recording commit-resume cost.
+   * When provided, any token spend from the session-resume commit attempt
+   * is recorded as a separate additive stage so the ledger is complete.
+   */
+  usage?: UsageTracker;
 }
 
 export interface EnsureDocumenterCommitOptions {
@@ -92,6 +96,12 @@ export interface EnsureDocumenterCommitOptions {
   sessionId: string | undefined;
   sprintResults: SprintResult[];
   model: string;
+  /**
+   * F7: optional usage tracker for recording documenter commit-resume cost.
+   * When provided, any token spend from the session-resume commit attempt
+   * is recorded as a separate additive stage so the ledger is complete.
+   */
+  usage?: UsageTracker;
 }
 
 // --- AgentRunners: dependency-injected interface for SDK-specific agent implementations ---
@@ -128,7 +138,9 @@ export interface AgentRunners {
   initTracing(config: ResolvedConfig): Tracer;
   runPlanner(opts: RunPlannerOptions): Promise<PlannerResult>;
   runGenerator(opts: RunGeneratorOptions): Promise<GeneratorResult>;
-  runEvaluator(opts: RunEvaluatorOptions): Promise<EvalResult & { sdkResult?: SDKResultFields }>;
+  runEvaluator(
+    opts: RunEvaluatorOptions,
+  ): Promise<EvalResult & { sdkResult?: SDKResultFields; resumeSdkResult?: SDKResultFields }>;
   runDocumenter(opts: RunDocumenterOptions): Promise<{ sdkResult?: SDKResultFields; sessionId?: string }>;
   /**
    * Two-step contract negotiation. Records cost rows internally for both the
@@ -160,7 +172,12 @@ export interface NegotiateContractOptions {
   sprintNumber: number;
   proposalModel: string;
   reviewModel: string;
-  usage?: UsageTracker;
+  /**
+   * F7: Usage tracker for recording contract-negotiation cost rows.
+   * Required (not optional) so callers cannot silently omit it and lose
+   * cost attribution. Every negotiation SDK call records its own stage.
+   */
+  usage: UsageTracker;
   /** Maximum features the finalized contract may declare (F5 ceiling enforcement). */
   maxFeatures: number;
   /** Maximum criteria the finalized contract may declare (F5 ceiling enforcement). */

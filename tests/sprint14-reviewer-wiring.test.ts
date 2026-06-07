@@ -530,7 +530,7 @@ describe("reviewer cost stage", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test("'reviewer' cost stage is recorded when runReviewer returns sdkResult", async () => {
+  test("'reviewer-sprint-N' cost stage is recorded when runReviewer returns sdkResult", async () => {
     const { handleSprintSuccess } = await import("../shared/orchestration/sprint-success.ts");
 
     const config = makeMinimalConfig(tmpDir, { useReview: true });
@@ -558,11 +558,12 @@ describe("reviewer cost stage", () => {
       agents,
     });
 
-    const reviewerStages = usage.rows.filter((r) => r.stage === "reviewer");
+    // F7: reviewer stage is now tagged per-sprint as "reviewer-sprint-N", not bare "reviewer"
+    const reviewerStages = usage.rows.filter((r) => r.stage === "reviewer-sprint-1");
     expect(reviewerStages).toHaveLength(1);
   });
 
-  test("no 'reviewer' stage is recorded when runReviewer returns no sdkResult", async () => {
+  test("no reviewer cost stage is recorded when runReviewer returns no sdkResult", async () => {
     const { handleSprintSuccess } = await import("../shared/orchestration/sprint-success.ts");
 
     const config = makeMinimalConfig(tmpDir, { useReview: true });
@@ -590,7 +591,8 @@ describe("reviewer cost stage", () => {
       agents,
     });
 
-    const reviewerStages = usage.rows.filter((r) => r.stage === "reviewer");
+    // No reviewer stage should be recorded when sdkResult is absent
+    const reviewerStages = usage.rows.filter((r) => r.stage === "reviewer-sprint-1");
     expect(reviewerStages).toHaveLength(0);
   });
 });
